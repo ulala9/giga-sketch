@@ -19,6 +19,10 @@ private Q_SLOTS:
     void testRestingPenCatchesUp();
     void testSharpCornerDoesNotOvershoot();
     void testFastStrokeLagsLessThanSlow();
+    void testSlowStrokeIsActuallySmoothed();
+    void testTailGlidesInWithEaseOut();
+    void testTailCanBeFinishedEarly();
+    void testPendingPathEndsAtPen();
 };
 
 #endif

@@ -227,6 +227,8 @@ void KisToolBrush::slotSetSmoothingType(int index)
         showControl(m_curveSpeedInfluenceRow, curve);
         showControl(m_curvePressureInfluenceRow, curve);
         showControl(m_chkCurveCatchUp, curve);
+        showControl(m_curveCatchUpTimeRow, curve);
+        showControl(m_chkCurveShowLagLine, curve);
         showControl(m_btnResetCurveSmoothing, curve);
     }
     updateSmoothnessDistanceLabel();
@@ -262,6 +264,18 @@ void KisToolBrush::resetCurveSmoothing()
     m_sliderCurveSpeedInfluence->setValue(qRound(KisSmoothingOptions::defaultCurveSpeedInfluence() * 100));
     m_sliderCurvePressureInfluence->setValue(qRound(KisSmoothingOptions::defaultCurvePressureInfluence() * 100));
     m_chkCurveCatchUp->setChecked(KisSmoothingOptions::defaultCurveCatchUp());
+    m_sliderCurveCatchUpTime->setValue(KisSmoothingOptions::defaultCurveCatchUpTime());
+    m_chkCurveShowLagLine->setChecked(KisSmoothingOptions::defaultCurveShowLagLine());
+}
+
+void KisToolBrush::setCurveCatchUpTime(int ms)
+{
+    smoothingOptions()->setCurveCatchUpTime(ms);
+}
+
+void KisToolBrush::setCurveShowLagLine(bool value)
+{
+    smoothingOptions()->setCurveShowLagLine(value);
 }
 
 void KisToolBrush::updateSmoothnessDistanceLabel()
@@ -610,7 +624,7 @@ QWidget * KisToolBrush::createOptionWidget()
         QToolButton *reset = new QToolButton(row);
         reset->setIcon(KisIconUtils::loadIcon("reload-preset-16"));
         reset->setAutoRaise(true);
-        reset->setToolTip(i18nc("@info:tooltip", "Reset to default (%1%)", defaultPercent));
+        reset->setToolTip(i18nc("@info:tooltip", "Reset to default (%1)", slider->prefix() + QString::number(defaultPercent) + slider->suffix()));
         QObject::connect(reset, &QToolButton::clicked, slider, [slider, defaultPercent]() {
             slider->setValue(defaultPercent); // valueChanged updates the setting
         });
@@ -651,6 +665,24 @@ QWidget * KisToolBrush::createOptionWidget()
     m_chkCurveCatchUp->setChecked(smoothingOptions()->curveCatchUp());
     connect(m_chkCurveCatchUp, SIGNAL(toggled(bool)), SLOT(setCurveCatchUp(bool)));
     addOptionWidgetOption(m_chkCurveCatchUp, new QLabel(i18n("Catch Up:"), optionsWidget));
+
+    m_sliderCurveCatchUpTime = new KisSliderSpinBox(optionsWidget);
+    m_sliderCurveCatchUpTime->setRange(0, 400);
+    m_sliderCurveCatchUpTime->setSuffix(i18n(" ms"));
+    m_sliderCurveCatchUpTime->setToolTip(i18nc("@info:tooltip", "How long the line takes to glide into place after the pen lifts. 0 lands instantly."));
+    m_sliderCurveCatchUpTime->setValue(smoothingOptions()->curveCatchUpTime());
+    connect(m_sliderCurveCatchUpTime, SIGNAL(valueChanged(int)), SLOT(setCurveCatchUpTime(int)));
+    m_curveCatchUpTimeRow = makeResettableRow(m_sliderCurveCatchUpTime, KisSmoothingOptions::defaultCurveCatchUpTime());
+    addOptionWidgetOption(m_curveCatchUpTimeRow, new QLabel(i18n("Catch-Up Time:"), optionsWidget));
+    connect(m_chkCurveCatchUp, SIGNAL(toggled(bool)), m_sliderCurveCatchUpTime, SLOT(setEnabled(bool)));
+    m_sliderCurveCatchUpTime->setEnabled(m_chkCurveCatchUp->isChecked());
+
+    m_chkCurveShowLagLine = new QCheckBox(optionsWidget);
+    m_chkCurveShowLagLine->setMinimumHeight(m_cmbSmoothingType->sizeHint().height()-3);
+    m_chkCurveShowLagLine->setToolTip(i18nc("@info:tooltip", "While drawing, show a thin line from the painted stroke to the pen tip."));
+    m_chkCurveShowLagLine->setChecked(smoothingOptions()->curveShowLagLine());
+    connect(m_chkCurveShowLagLine, SIGNAL(toggled(bool)), SLOT(setCurveShowLagLine(bool)));
+    addOptionWidgetOption(m_chkCurveShowLagLine, new QLabel(i18n("Show Lag Line:"), optionsWidget));
 
     m_btnResetCurveSmoothing = new QPushButton(i18n("Reset Smooth Curve"), optionsWidget);
     m_btnResetCurveSmoothing->setIcon(KisIconUtils::loadIcon("reload-preset-16"));

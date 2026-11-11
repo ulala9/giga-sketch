@@ -74,6 +74,8 @@ public:
     static constexpr qreal defaultCurveSpeedInfluence() { return 0.5; }
     static constexpr qreal defaultCurvePressureInfluence() { return 0.0; }
     static constexpr bool defaultCurveCatchUp() { return true; }
+    static constexpr int defaultCurveCatchUpTime() { return 120; }
+    static constexpr bool defaultCurveShowLagLine() { return true; }
 
     /// How much the path is smoothed (0 = barely, 1 = very smooth and laggy).
     qreal curveAmount() const;
@@ -90,6 +92,15 @@ public:
     /// When the pen lifts (or rests), let the line ease into the pen position.
     bool curveCatchUp() const;
     void setCurveCatchUp(bool value);
+
+    /// How long (ms) the line takes to glide into the pen after it lifts.
+    /// 0 = land instantly.
+    int curveCatchUpTime() const;
+    void setCurveCatchUpTime(int ms);
+
+    /// While drawing, show a thin line from the painted line to the pen.
+    bool curveShowLagLine() const;
+    void setCurveShowLagLine(bool value);
 
 Q_SIGNALS:
     void sigSmoothingTypeChanged();

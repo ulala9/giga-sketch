@@ -43,6 +43,12 @@ public Q_SLOTS:
     void activate(const QSet<KoShape*> &shapes) override;
     void deactivate() override;
 
+    // Giga Sketch: when the image asks tools to end or cancel strokes, or
+    // the user undoes, finish a Smooth Curve catch-up tail right away.
+    void requestStrokeEnd() override;
+    void requestStrokeCancellation() override;
+    void requestUndoDuringStroke() override;
+
 protected:
     bool trySampleByPaintOp(KoPointerEvent *event, AlternateAction action);
 

@@ -68,6 +68,14 @@ public:
     void paintEvent(KoPointerEvent *event );
     void endPaint();
 
+    /**
+     * Giga Sketch: with Smooth Curve's animated catch-up, the stroke stays
+     * open for a moment after the pen lifts while the line glides into
+     * place. This finishes that tail immediately and ends the stroke.
+     * Safe to call any time; does nothing if no tail is running.
+     */
+    void finishPendingTail();
+
     KisOptimizedBrushOutline paintOpOutline(const QPointF &savedCursorPos,
                                             const KoPointerEvent *event,
                                             const KisPaintOpSettingsSP globalSettings,
@@ -141,6 +149,7 @@ private:
     void curveStart(const KisPaintInformation &firstPaintInfo);
     void curveEnd();
     void curvePaintSegments(const QVector<KisCurveSmoother::Segment> &segments);
+    void endPaintImpl();
     KisPaintInformation getStabilizedPaintInfo(const QQueue<KisPaintInformation> &queue,
                                                const KisPaintInformation &lastPaintInfo);
     int computeAirbrushTimerInterval() const;
@@ -154,6 +163,7 @@ private Q_SLOTS:
     void stabilizerPollAndPaint();
     void slotSmoothingTypeChanged();
     void curveRestTimeout();
+    void curveTailTimeout();
 
 private:
     struct Private;

@@ -100,6 +100,8 @@ public Q_SLOTS:
     void setCurveSpeedInfluence(int percent);
     void setCurvePressureInfluence(int percent);
     void setCurveCatchUp(bool value);
+    void setCurveCatchUpTime(int ms);
+    void setCurveShowLagLine(bool value);
     void resetCurveSmoothing();
 
     void updateSettingsViews() override;
@@ -145,6 +147,9 @@ private:
     KisSliderSpinBox *m_sliderCurveSpeedInfluence {0};
     KisSliderSpinBox *m_sliderCurvePressureInfluence {0};
     QCheckBox *m_chkCurveCatchUp {0};
+    KisSliderSpinBox *m_sliderCurveCatchUpTime {0};
+    QWidget *m_curveCatchUpTimeRow {0};
+    QCheckBox *m_chkCurveShowLagLine {0};
     // Each slider sits in a row with its reset button; the rows are what
     // get shown/hidden per smoothing mode.
     QWidget *m_curveAmountRow {0};

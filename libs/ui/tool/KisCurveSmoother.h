@@ -7,6 +7,7 @@
 #define KIS_CURVE_SMOOTHER_H
 
 #include <QPointF>
+#include <QPolygonF>
 #include <QVector>
 
 #include <brushengine/kis_paint_information.h>
@@ -30,9 +31,11 @@
  *    curve does not overshoot or form loops at tight turns. Very sharp turns
  *    are kept as corners instead of being rounded.
  *
- * The filtered line trails a little behind the pen. When the pen rests or
- * lifts, catchUpStep() / end() keep feeding the last pen position through
- * the filter, so the line eases into the pen instead of snapping to it.
+ * The filtered line trails a little behind the pen. Catch-up closes that gap:
+ *  - while the pen rests: catchUpStep(), driven by a timer in the helper;
+ *  - when the pen lifts: either instantly with end(), or animated over time
+ *    with startTail() + tailStep(), which glide the line into the pen-up
+ *    point with an ease-out.
  *
  * This class only does math. It has no Qt widgets or timers and is not
  * thread-safe: KisToolFreehandHelper owns one and calls it on the GUI thread.
@@ -72,11 +75,27 @@ public:
     bool catchUpStep(int timeMs, QVector<Segment> &out);
 
     /**
-     * The pen lifted. Appends the remaining segments to @p out.
-     * With @p catchUp the line eases into the pen-up position; without it,
-     * the line stops where the filter currently is.
+     * The pen lifted. Appends all remaining segments to @p out and ends the
+     * stroke. With @p catchUp the line reaches the pen-up position right
+     * away; without it, the line stops where the filter currently is.
+     * Also finishes a running tail animation instantly.
      */
     void end(bool catchUp, QVector<Segment> &out);
+
+    /**
+     * The pen lifted: start gliding the line into the pen-up position over
+     * @p durationMs, with an ease-out (fast at first, slowing as it lands).
+     * Call tailStep() regularly until it returns true.
+     */
+    void startTail(int nowMs, int durationMs);
+
+    /**
+     * Advance the tail animation to @p nowMs. Appends segments to @p out.
+     * @return true when the tail has landed and the stroke is finished.
+     */
+    bool tailStep(int nowMs, QVector<Segment> &out);
+
+    bool hasTail() const { return m_tailActive; }
 
     /// The last real pen sample.
     KisPaintInformation lastRawInfo() const { return m_lastRaw; }
@@ -84,15 +103,24 @@ public:
     /// The most recent filtered sample (what the line has reached).
     KisPaintInformation lastSmoothedInfo() const;
 
+    /**
+     * The part of the line that isn't painted yet, in image coordinates:
+     * from the end of the last painted segment, through the pending curve
+     * points, to the pen. Used to draw the optional lag line preview.
+     */
+    QPolygonF pendingPath() const;
+
     /// Distance in screen pixels between the line's head and the pen.
     qreal lagInScreenPixels() const;
 
     bool isActive() const { return m_active; }
 
 private:
-    void filterTowards(const KisPaintInformation &raw, qreal dtSeconds);
+    void filterTowards(const KisPaintInformation &raw, const QPointF &previousRawPos,
+                       qreal dtSeconds, qreal minimumCutoff);
     void pushPoint(const KisPaintInformation &info, QVector<Segment> &out, bool force);
     void emitSegment(QVector<Segment> &out) const;
+    void closeCurve(QVector<Segment> &out);
 
     qreal minCutoff() const;
     qreal beta() const;
@@ -103,8 +131,14 @@ private:
 
     KisPaintInformation m_lastRaw;      ///< last real pen sample
     KisPaintInformation m_filtered;     ///< current filtered sample
-    QPointF m_filteredVelocity;         ///< image px / second
+    QPointF m_filteredVelocity;         ///< pen velocity, image px / second
     qreal m_lastTime {0.0};             ///< ms, time of the last filter step
+
+    // Tail animation (pen lifted)
+    bool m_tailActive {false};
+    QPointF m_tailStart;
+    int m_tailStartTime {0};
+    int m_tailDuration {0};
 
     /// Sliding window of the last (up to) 4 spline points. A segment is
     /// emitted between window[1] and window[2] once there are 4 points.

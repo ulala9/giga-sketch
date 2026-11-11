@@ -167,11 +167,37 @@ void KisToolFreehand::activate(const QSet<KoShape*> &shapes)
 
 void KisToolFreehand::deactivate()
 {
+    // Giga Sketch: a Smooth Curve tail may still be gliding in after the pen
+    // lifted; finish that stroke before the tool goes away.
+    m_helper->finishPendingTail();
+
     if (mode() == PAINT_MODE) {
         endStroke();
         setMode(KisTool::HOVER_MODE);
     }
     KisToolPaint::deactivate();
+}
+
+void KisToolFreehand::requestStrokeEnd()
+{
+    m_helper->finishPendingTail();
+    KisToolPaint::requestStrokeEnd();
+}
+
+void KisToolFreehand::requestStrokeCancellation()
+{
+    // The pen already lifted, so the tail belongs to a finished stroke:
+    // complete it rather than throw the stroke away.
+    m_helper->finishPendingTail();
+    KisToolPaint::requestStrokeCancellation();
+}
+
+void KisToolFreehand::requestUndoDuringStroke()
+{
+    // Without this, Ctrl+Z pressed during the ~0.1 s tail would be ignored,
+    // because undo is refused while a stroke is still open.
+    m_helper->finishPendingTail();
+    KisToolPaint::requestUndoDuringStroke();
 }
 
 void KisToolFreehand::initStroke(KoPointerEvent *event)

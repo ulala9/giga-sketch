@@ -31,7 +31,11 @@ struct KisSmoothingOptions::Private {
         curveSpeedInfluence = defaultCurveSpeedInfluence();
         curvePressureInfluence = defaultCurvePressureInfluence();
         curveCatchUp = defaultCurveCatchUp();
+        curveCatchUpTime = defaultCurveCatchUpTime();
+        curveShowLagLine = defaultCurveShowLagLine();
         if (useSavedSmoothing) {
+            curveCatchUpTime = qBound(0, cfg.readEntry<int>("GigaCurveSmoothingCatchUpTime", curveCatchUpTime), 1000);
+            curveShowLagLine = cfg.readEntry<bool>("GigaCurveSmoothingShowLagLine", curveShowLagLine);
             curveAmount = cfg.readEntry<qreal>("GigaCurveSmoothingAmount", curveAmount);
             curveSpeedInfluence = cfg.readEntry<qreal>("GigaCurveSmoothingSpeedInfluence", curveSpeedInfluence);
             curvePressureInfluence = cfg.readEntry<qreal>("GigaCurveSmoothingPressureInfluence", curvePressureInfluence);
@@ -62,6 +66,8 @@ struct KisSmoothingOptions::Private {
     qreal curveSpeedInfluence;
     qreal curvePressureInfluence;
     bool curveCatchUp;
+    int curveCatchUpTime;
+    bool curveShowLagLine;
 };
 
 KisSmoothingOptions::KisSmoothingOptions(bool useSavedSmoothing)
@@ -246,6 +252,28 @@ void KisSmoothingOptions::setCurveCatchUp(bool value)
     m_d->writeCompressor.start();
 }
 
+int KisSmoothingOptions::curveCatchUpTime() const
+{
+    return m_d->curveCatchUpTime;
+}
+
+void KisSmoothingOptions::setCurveCatchUpTime(int ms)
+{
+    m_d->curveCatchUpTime = qBound(0, ms, 1000);
+    m_d->writeCompressor.start();
+}
+
+bool KisSmoothingOptions::curveShowLagLine() const
+{
+    return m_d->curveShowLagLine;
+}
+
+void KisSmoothingOptions::setCurveShowLagLine(bool value)
+{
+    m_d->curveShowLagLine = value;
+    m_d->writeCompressor.start();
+}
+
 void KisSmoothingOptions::slotWriteConfig()
 {
     KisConfig cfg(false);
@@ -264,4 +292,6 @@ void KisSmoothingOptions::slotWriteConfig()
     cfg.writeEntry<qreal>("GigaCurveSmoothingSpeedInfluence", m_d->curveSpeedInfluence);
     cfg.writeEntry<qreal>("GigaCurveSmoothingPressureInfluence", m_d->curvePressureInfluence);
     cfg.writeEntry<bool>("GigaCurveSmoothingCatchUp", m_d->curveCatchUp);
+    cfg.writeEntry<int>("GigaCurveSmoothingCatchUpTime", m_d->curveCatchUpTime);
+    cfg.writeEntry<bool>("GigaCurveSmoothingShowLagLine", m_d->curveShowLagLine);
 }

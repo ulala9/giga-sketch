@@ -166,4 +166,87 @@ void KisCurveSmootherTest::testFastStrokeLagsLessThanSlow()
     QVERIFY2(fast < slow, qPrintable(QString("fast %1 ms, slow %2 ms").arg(fast).arg(slow)));
 }
 
+void KisCurveSmootherTest::testSlowStrokeIsActuallySmoothed()
+{
+    // A slow, shaky horizontal line (+-3 px zig-zag). The smoothed line
+    // should wobble much less than the input. This guards against the
+    // filter treating its own lag as "speed" and switching itself off.
+    KisCurveSmoother s;
+    QVector<KisCurveSmoother::Segment> out;
+    s.begin(sample(QPointF(0, 0), 0), params(0.5, 0.5));
+    qreal t = 0;
+    for (int i = 1; i <= 200; i++) {
+        t += 8.0; // ~ 250 px/s
+        s.addSample(sample(QPointF(i * 2.0, (i % 2) ? 3.0 : -3.0), t), out);
+    }
+    QVERIFY(out.size() > 10);
+    qreal maxDev = 0;
+    for (int i = out.size() / 3; i < out.size(); i++) { // skip the start-up
+        maxDev = qMax(maxDev, qAbs(out[i].p2.pos().y()));
+    }
+    QVERIFY2(maxDev < 1.0, qPrintable(QString("max wobble %1 px").arg(maxDev)));
+}
+
+void KisCurveSmootherTest::testTailGlidesInWithEaseOut()
+{
+    KisCurveSmoother s;
+    QVector<KisCurveSmoother::Segment> out;
+    s.begin(sample(QPointF(0, 0), 0), params(0.9));
+    qreal t = feedPolyline(s, {QPointF(0, 0), QPointF(400, 0)}, 4.0, 4.0, 0, out);
+    const qreal startLag = s.lagInScreenPixels();
+    QVERIFY(startLag > 20.0);
+
+    out.clear();
+    s.startTail(int(t), 120);
+    QVERIFY(s.hasTail());
+
+    // Track how far the head moves each 8 ms frame.
+    QVector<qreal> stepLengths;
+    qreal prevX = s.lastRawInfo().pos().x() - startLag;
+    bool landed = false;
+    int frames = 0;
+    while (!landed && frames < 100) {
+        t += 8;
+        landed = s.tailStep(int(t), out);
+        frames++;
+        const qreal x = landed ? 400.0 : (s.lastRawInfo().pos().x() - s.lagInScreenPixels());
+        stepLengths << (x - prevX);
+        prevX = x;
+    }
+    QVERIFY(landed);
+    QVERIFY(frames <= 120 / 8 + 1);          // finished on time
+    QCOMPARE(out.last().p2.pos(), QPointF(400, 0)); // landed on the pen
+    verifyChained(out);
+    // Ease-out: early frames move further than late ones.
+    QVERIFY(stepLengths.first() > stepLengths[stepLengths.size() - 2]);
+    QVERIFY(!s.isActive());
+}
+
+void KisCurveSmootherTest::testTailCanBeFinishedEarly()
+{
+    KisCurveSmoother s;
+    QVector<KisCurveSmoother::Segment> out;
+    s.begin(sample(QPointF(0, 0), 0), params(0.9));
+    qreal t = feedPolyline(s, {QPointF(0, 0), QPointF(0, 300)}, 4.0, 4.0, 0, out);
+    s.startTail(int(t), 200);
+    s.tailStep(int(t + 16), out);
+    // New stroke / undo / tool switch: finish now.
+    s.end(false, out); // even with catchUp=false, a running tail lands on the pen
+    QCOMPARE(out.last().p2.pos(), QPointF(0, 300));
+    QVERIFY(!s.isActive());
+    QVERIFY(!s.hasTail());
+}
+
+void KisCurveSmootherTest::testPendingPathEndsAtPen()
+{
+    KisCurveSmoother s;
+    QVector<KisCurveSmoother::Segment> out;
+    s.begin(sample(QPointF(0, 0), 0), params(0.8));
+    feedPolyline(s, {QPointF(0, 0), QPointF(200, 50)}, 3.0, 5.0, 0, out);
+    const QPolygonF path = s.pendingPath();
+    QVERIFY(path.size() >= 2);
+    QCOMPARE(path.first(), out.last().p2.pos()); // starts where paint ended
+    QCOMPARE(path.last(), QPointF(200, 50));     // ends at the pen
+}
+
 SIMPLE_TEST_MAIN(KisCurveSmootherTest)
