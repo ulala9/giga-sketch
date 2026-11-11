@@ -32,6 +32,19 @@
 #include "libs/macosutils/KisMacosEntitlements.h"
 #endif
 
+#include <GigaBranding.h>
+
+// Giga Sketch splash images. They are compiled in from
+// krita/pics/branding/GigaSketch/branding.qrc, so they only exist when the
+// build uses BRANDING=GigaSketch. Otherwise we fall back to Krita's images.
+static const QString s_gigaSplashBackground = QStringLiteral(":/giga-splash/background.jpg");
+static const QString s_gigaSplashBanner = QStringLiteral(":/giga-splash/banner.svg");
+
+static bool hasGigaSplash()
+{
+    return QFile::exists(s_gigaSplashBackground) && QFile::exists(s_gigaSplashBanner);
+}
+
 static void addDropShadow(QWidget *widget)
 {
     QGraphicsDropShadowEffect *effect = new QGraphicsDropShadowEffect(widget);
@@ -59,7 +72,7 @@ KisSplashScreen::KisSplashScreen(bool themed, QWidget *parent, Qt::WindowFlags f
     addDropShadow(m_loadingTextLabel);
 
     m_brandingSvg = new QSvgWidget(QStringLiteral(":/krita-branding.svgz"), lblSplash);
-    m_bannerSvg = new QSvgWidget(QStringLiteral(":/splash/banner.svg"), lblSplash);
+    m_bannerSvg = new QSvgWidget(hasGigaSplash() ? s_gigaSplashBanner : QStringLiteral(":/splash/banner.svg"), lblSplash);
     addDropShadow(m_bannerSvg);
 
     m_artCreditsLabel = new QLabel(lblSplash);
@@ -207,26 +220,19 @@ void KisSplashScreen::displayLinks(bool show) {
         lblLinksText    << "<html>"
                         << "<head/>"
                         << "<body><table style=\"width:100%\" cellpadding=\"30\"><tr><td>"
-                        << i18n("<p><span style=\" color:%1;\"><b>Using Krita</b></span></p>",color);
+                        << i18n("<p><span style=\" color:%1;\"><b>Using Giga Sketch</b></span></p>",color);
 
-#ifdef Q_OS_MACOS
-        // macOS store version should not contain external links containing donation buttons or forms
-        if (!KisMacosEntitlements().sandbox()) {
-#endif
-
-            lblLinksText    << i18n("<p><a href=\"https://krita.org/support-us/\"><span style=\" text-decoration: underline; color:%1;\">Support Krita's Development!</span></a></p>",color)
-                            << i18n("<p><a href=\"https://krita.org/\"><span style=\" text-decoration: underline; color:%1;\">Krita Website</span></a></p>",color);
-#ifdef Q_OS_MACOS
-        }
-#endif
-        lblLinksText    << i18n("<p><a href=\"https://docs.krita.org/en/user_manual/getting_started.html\"><span style=\" text-decoration: underline; color:%1;\">Getting Started</span></a></p>",color)
-                        << i18n("<p><a href=\"https://docs.krita.org/\"><span style=\" text-decoration: underline; color:%1;\">Manual</span></a></p>",color)
+        // Giga Sketch: no Krita donation or website links. The help links
+        // go to Krita's documentation, which still covers almost everything,
+        // so they are labelled as Krita's.
+        lblLinksText    << i18n("<p><a href=\"https://docs.krita.org/en/user_manual/getting_started.html\"><span style=\" text-decoration: underline; color:%1;\">Getting Started (Krita docs)</span></a></p>",color)
+                        << i18n("<p><a href=\"https://docs.krita.org/\"><span style=\" text-decoration: underline; color:%1;\">Krita Manual</span></a></p>",color)
                         << "</td><td>"
-                        << i18n("<p><span style=\" color:%1;\"><b>Coding Krita</b></span></p>",color)
-                        << i18n("<p><a href=\"https://krita-artists.org\"><span style=\" text-decoration: underline; color:%1;\">User Community</span></a></p>",color)
-                        << i18n("<p><a href=\"https://invent.kde.org/graphics/krita\"><span style=\" text-decoration: underline; color:%1;\">Source Code</span></a></p>",color)
-                        << i18n("<p><a href=\"https://api.kde.org/krita/html/classKrita.html\"><span style=\" text-decoration: underline; color:%1;\">Scripting API</span></a></p>",color)
-                        << i18n("<p><a href=\"https://scripting.krita.org/lessons/introduction\"><span style=\" text-decoration: underline; color:%1;\">Scripting School</span></a></p>",color)
+                        << i18n("<p><span style=\" color:%1;\"><b>Code and Community</b></span></p>",color)
+                        << i18n("<p><a href=\"%2\"><span style=\" text-decoration: underline; color:%1;\">Source Code</span></a></p>",color, GigaBranding::homepage())
+                        << i18n("<p><a href=\"https://krita-artists.org\"><span style=\" text-decoration: underline; color:%1;\">Krita Artists Community</span></a></p>",color)
+                        << i18n("<p><a href=\"https://api.kde.org/krita/html/classKrita.html\"><span style=\" text-decoration: underline; color:%1;\">Krita Scripting API</span></a></p>",color)
+                        << i18n("<p><a href=\"https://scripting.krita.org/lessons/introduction\"><span style=\" text-decoration: underline; color:%1;\">Krita Scripting School</span></a></p>",color)
                         << "</td></tr></table></body>"
                         << "</html>";
 
@@ -290,6 +296,11 @@ KisSplashScreen::Source KisSplashScreen::getImageSource()
     }
 #endif
 #endif
+    // Giga Sketch: our own placeholder background, which has no artist credit.
+    if (hasGigaSplash()) {
+        resourcePath = s_gigaSplashBackground;
+        artistCredit.clear();
+    }
     if (!artistCredit.isEmpty()) {
         artistCredit = i18nc("splash image credit", "Artwork by: %1", artistCredit);
     }

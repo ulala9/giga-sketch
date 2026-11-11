@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-FileCopyrightText: 2026 The Giga Sketch contributors
+  SPDX-License-Identifier: CC0-1.0
+  Giga Sketch wordmark shown on the splash screen, next to the logo.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="80" viewBox="0 0 360 80">
+  <text x="352" y="56" text-anchor="end" fill="#fffffd"
+        font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="44" font-weight="800"
+        letter-spacing="3">GIGA SKETCH</text>
+</svg>

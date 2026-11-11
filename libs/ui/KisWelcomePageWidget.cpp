@@ -7,6 +7,7 @@
  */
 
 #include "KisWelcomePageWidget.h"
+#include <GigaBranding.h>
 #include "KisRecentDocumentsModelWrapper.h"
 #include <QDesktopServices>
 #include <QMimeData>
@@ -184,6 +185,17 @@ KisWelcomePageWidget::KisWelcomePageWidget(QWidget *parent)
 
     supporterBadge->hide();
     wdgAndroidSupportBanner->hide();
+
+    // Giga Sketch: hide Krita's donation/support links and message, the
+    // krita.org website link, and the right-hand column (Krita news feed,
+    // update notifications, supporter badge). The widgets stay in the .ui
+    // file so upstream merges of KisWelcomePage.ui stay simple.
+    supportKritaIcon->hide();
+    supportKritaLink->hide();
+    kritaWebsiteIcon->hide();
+    kritaWebsiteLink->hide();
+    stkSupport->hide();
+    widgetRight->hide();
 #ifdef Q_OS_ANDROID
     initDonations();
 #endif
@@ -191,6 +203,10 @@ KisWelcomePageWidget::KisWelcomePageWidget(QWidget *parent)
     // configure the News area
     KisConfig cfg(true);
     m_networkIsAllowed = cfg.readEntry<bool>("FetchNews", false);
+    // Giga Sketch: the news feed and update checker talk to krita.org about
+    // Krita releases, which don't apply to this fork. Keep them off even if
+    // FetchNews was enabled in imported Krita settings.
+    m_networkIsAllowed = false;
 
 
 #ifdef ENABLE_UPDATERS
@@ -352,13 +368,13 @@ void KisWelcomePageWidget::slotUpdateThemeColors()
 
     // HTML links seem to be a bit more stubborn with theme changes... setting inline styles to help with color change
     userCommunityLink->setText(QString("<a style=\"color: " + blendedColor.name() + " \" href=\"https://krita-artists.org\">")
-                               .append(i18n("User Community")).append("</a>"));
+                               .append(i18n("Krita Artists Community")).append("</a>"));
 
     gettingStartedLink->setText(QString("<a style=\"color: " + blendedColor.name() + " \" href=\"https://docs.krita.org/user_manual/getting_started.html\">")
-                                .append(i18n("Getting Started")).append("</a>"));
+                                .append(i18n("Getting Started (Krita docs)")).append("</a>"));
 
     manualLink->setText(QString("<a style=\"color: " + blendedColor.name() + " \" href=\"https://docs.krita.org\">")
-                        .append(i18n("User Manual")).append("</a>"));
+                        .append(i18n("Krita Manual")).append("</a>"));
 
     supportKritaLink->setText(QString("<a style=\"color: " + blendedColor.name() + " \" href=\"https://krita.org/support-us/donations?" + analyticsString + "donations" + "\">")
                               .append(i18n("Support Krita")).append("</a>"));
@@ -366,7 +382,7 @@ void KisWelcomePageWidget::slotUpdateThemeColors()
     kritaWebsiteLink->setText(QString("<a style=\"color: " + blendedColor.name() + " \" href=\"https://www.krita.org?" + analyticsString + "marketing-site" + "\">")
                               .append(i18n("Krita Website")).append("</a>"));
 
-    sourceCodeLink->setText(QString("<a style=\"color: " + blendedColor.name() + " \" href=\"https://invent.kde.org/graphics/krita\">")
+    sourceCodeLink->setText(QString("<a style=\"color: " + blendedColor.name() + " \" href=\"" + GigaBranding::homepage() + "\">")
                             .append(i18n("Source Code")).append("</a>"));
 
     poweredByKDELink->setText(QString("<a style=\"color: " + blendedColor.name() + " \" href=\"https://userbase.kde.org/What_is_KDE\">")

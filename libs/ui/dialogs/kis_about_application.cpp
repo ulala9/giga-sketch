@@ -6,6 +6,7 @@
  */
 
 #include "kis_about_application.h"
+#include <GigaBranding.h>
 
 #include <KAboutData>
 #include <KLocalizedString>
@@ -32,7 +33,7 @@ public:
 KisAboutApplication::KisAboutApplication(QWidget *parent)
     : KoDialog(parent)
 {
-    setWindowTitle(i18n("About Krita"));
+    setWindowTitle(i18n("About %1", GigaBranding::displayName()));
     setButtons(KoDialog::Close);
 
     WdgAboutApplication *wdgTab = new WdgAboutApplication(this);
@@ -46,8 +47,12 @@ KisAboutApplication::KisAboutApplication(QWidget *parent)
     QString authors = i18n("<html>"
                           "<head/>"
                           "<body>"
-                          "<h1 align=\"center\">Created By</h1></p>"
-                          "<p>");
+                          "<h1 align=\"center\">%1</h1>"
+                          "<p align=\"center\">%1 is a fork of Krita, focused on painting and illustration. "
+                          "It is free software under the GNU GPL, version 3 or later. "
+                          "Source code: <a href=\"%2\">%2</a></p>"
+                          "<h1 align=\"center\">Krita was created by</h1>"
+                          "<p>", GigaBranding::displayName(), GigaBranding::homepage());
 
     QFile fileDevelopers(":/developers.txt");
     Q_ASSERT(fileDevelopers.exists());

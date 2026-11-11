@@ -16,6 +16,10 @@ set(krita_SRCS main.cc)
 # Set the application icon on the application
 if (NOT APPLE)
 	file(GLOB ICON_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/pics/branding/${BRANDING}/*-apps-krita.png")
+	# Giga Sketch branding names its icons *-apps-gigasketch.png.
+	if (NOT ICON_SRCS)
+		file(GLOB ICON_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/pics/branding/${BRANDING}/*-apps-gigasketch.png")
+	endif()
 else()
     # XCode below 26 cannot work with .icon format
     if(${XCODE_VERSION} VERSION_GREATER_EQUAL "26.0")
@@ -285,6 +289,8 @@ install(FILES org.kde.krita.desktop DESTINATION ${KDE_INSTALL_APPDIR})
 # binary goes into Exec=, so the launcher runs this build, not a stock
 # "krita" that may be on PATH.
 set(GIGA_EXEC_PATH "${KDE_INSTALL_FULL_BINDIR}/krita")
+# Full icon path, because a custom install prefix is not on the icon theme search path.
+set(GIGA_ICON_PATH "${KDE_INSTALL_FULL_ICONDIR}/hicolor/256x256/apps/gigasketch.png")
 configure_file(io.github.ulala9.gigasketch.desktop.in
                ${CMAKE_CURRENT_BINARY_DIR}/io.github.ulala9.gigasketch.desktop @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.ulala9.gigasketch.desktop

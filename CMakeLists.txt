@@ -380,6 +380,12 @@ if(BUILD_WITH_QT6 AND NOT "QT6" IN_LIST ALLOW_UNSTABLE)
     )
 endif()
 
+# Giga Sketch: use our own branding unless another one is asked for on the
+# command line (e.g. -DBRANDING=Next to get Krita's).
+if ("${BRANDING}" STREQUAL "")
+    set(BRANDING "GigaSketch")
+endif()
+
 # Branding. Available options: default, Beta, Plus, Next. Can be set from command line
 if ("${BRANDING}" STREQUAL "")
     if (DEFINED KRITA_STABLE)

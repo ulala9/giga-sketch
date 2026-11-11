@@ -1,0 +1,17 @@
+<!DOCTYPE RCC>
+<!--
+  SPDX-FileCopyrightText: 2026 The Giga Sketch contributors
+  SPDX-License-Identifier: CC0-1.0
+
+  Giga Sketch branding, compiled into the app when BRANDING=GigaSketch.
+  "krita-branding.svgz" keeps Krita's alias so all code that loads the
+  app logo picks up ours. The giga-splash/ files are used by
+  libs/ui/kis_splash_screen.cpp when present.
+-->
+<RCC version="1.0">
+    <qresource>
+        <file alias="krita-branding.svgz">sc-apps-gigasketch.svgz</file>
+        <file alias="giga-splash/background.jpg">splash-background.jpg</file>
+        <file alias="giga-splash/banner.svg">splash-banner.svg</file>
+    </qresource>
+</RCC>
