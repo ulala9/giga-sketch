@@ -4,6 +4,7 @@
  *  SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "KisUsageLogger.h"
+#include <GigaBranding.h>
 
 #include <QScreen>
 #include <QGlobalStatic>
@@ -60,8 +61,8 @@ KisUsageLogger::KisUsageLogger()
     if (!QFileInfo(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)).exists()) {
         QDir().mkpath(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
     }
-    d->logFile.setFileName(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/krita.log");
-    d->sysInfoFile.setFileName(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/krita-sysinfo.log");
+    d->logFile.setFileName(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + GigaBranding::usageLogFile());
+    d->sysInfoFile.setFileName(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + GigaBranding::sysInfoLogFile());
 
     QFileInfo fi(d->logFile.fileName());
     if (fi.size() > 100 * 1000 * 1000) { // 100 mb seems a reasonable max

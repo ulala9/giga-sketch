@@ -281,6 +281,15 @@ else()
 endif()
 install(FILES org.kde.krita.desktop DESTINATION ${KDE_INSTALL_APPDIR})
 
+# Giga Sketch launcher, installed next to Krita's. The full path to the
+# binary goes into Exec=, so the launcher runs this build, not a stock
+# "krita" that may be on PATH.
+set(GIGA_EXEC_PATH "${KDE_INSTALL_FULL_BINDIR}/krita")
+configure_file(io.github.ulala9.gigasketch.desktop.in
+               ${CMAKE_CURRENT_BINARY_DIR}/io.github.ulala9.gigasketch.desktop @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.ulala9.gigasketch.desktop
+        DESTINATION ${KDE_INSTALL_APPDIR})
+
 set(actions_files krita.action kritamenu.action)
 if (ANDROID)
     # In-app-purchase-related actions are only relevant on Android. They

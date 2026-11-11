@@ -5,6 +5,7 @@
 */
 
 #include "kbugreport.h"
+#include <GigaBranding.h>
 
 #include <QProcess>
 #include <QCoreApplication>
@@ -169,7 +170,7 @@ KisKBugReport::KisKBugReport(const KAboutData &aboutData, QWidget *_parent)
     lay->addSpacing(10);
 
     QByteArray additionalInformation;
-    QFile sysinfo(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/krita-sysinfo.log");
+    QFile sysinfo(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + GigaBranding::sysInfoLogFile());
     if (sysinfo.open(QFile::ReadOnly)) {
         additionalInformation += sysinfo.readAll();
         sysinfo.close();
@@ -177,7 +178,7 @@ KisKBugReport::KisKBugReport(const KAboutData &aboutData, QWidget *_parent)
 
     additionalInformation += "\n---------------------\n";
 
-    QFile log(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/krita.log");
+    QFile log(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + GigaBranding::usageLogFile());
     if (log.open(QFile::ReadOnly)) {
         additionalInformation += log.readAll();
         log.close();

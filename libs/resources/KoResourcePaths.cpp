@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 #include "KoResourcePaths.h"
+#include <GigaBranding.h>
 
 #include <QGlobalStatic>
 #include <QString>
@@ -700,8 +701,10 @@ QString KoResourcePaths::saveLocationInternal(const QString &type, const QString
 #ifndef Q_OS_ANDROID
     // on Android almost all config locations we save to are app specific,
     // and don't end with "krita".
-    if (!path.endsWith("krita") && useStandardLocation) {
-        path += "/krita";
+    // Giga Sketch: use our own folder name so we never write into a stock
+    // Krita user folder (e.g. GenericDataLocation + "/krita").
+    if (!path.endsWith(GigaBranding::appName()) && useStandardLocation) {
+        path += QLatin1Char('/') + GigaBranding::appName();
     }
 #endif
 

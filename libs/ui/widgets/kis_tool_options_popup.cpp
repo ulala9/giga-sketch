@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: LGPL-2.0-or-later
  */
 #include "widgets/kis_tool_options_popup.h"
+#include <GigaBranding.h>
 
 
 #include <QList>
@@ -86,7 +87,7 @@ public:
                 currentAuxWidgets.insert(s);
             }
         }
-        if (specialCount == currentWidgetList.count() || qApp->applicationName().contains("krita")) {
+        if (specialCount == currentWidgetList.count() || GigaBranding::isMainApplicationName(qApp->applicationName())) {
             housekeeperLayout->setRowStretch(cnt, 10000);
         }
 

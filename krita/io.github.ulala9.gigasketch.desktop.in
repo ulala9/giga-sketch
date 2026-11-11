@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 The Giga Sketch contributors
+# SPDX-License-Identifier: CC0-1.0
+#
+# Giga Sketch launcher. CMake fills in @...@ values at build time
+# (see krita/CMakeLists.txt). The file name must match
+# GigaBranding::desktopFileName() so that on Wayland the compositor can
+# match the running window to this launcher (taskbar icon, grouping).
+[Desktop Entry]
+Type=Application
+Name=Giga Sketch
+GenericName=Digital Painting
+Comment=Digital painting and illustration (based on Krita)
+Exec=@GIGA_EXEC_PATH@ %F
+Icon=gigasketch
+Categories=Qt;Graphics;2DGraphics;RasterGraphics;
+MimeType=application/x-krita;image/openraster;application/x-krita-paintoppreset;
+StartupNotify=true
+StartupWMClass=gigasketch
+# Lower than Krita's 99, so .kra files keep opening in stock Krita
+# when both are installed. Raise it if you want Giga Sketch as the default.
+InitialPreference=5

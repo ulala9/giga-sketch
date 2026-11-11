@@ -5,6 +5,7 @@
  */
 
 #include "DlgSysInfo.h"
+#include <GigaBranding.h>
 #include <QStandardPaths>
 
 DlgSysInfo::DlgSysInfo(QWidget *parent)
@@ -15,7 +16,7 @@ DlgSysInfo::DlgSysInfo(QWidget *parent)
 
 QString DlgSysInfo::originalFileName()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/krita-sysinfo.log";
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + GigaBranding::sysInfoLogFile();
 }
 
 QString DlgSysInfo::captionText()

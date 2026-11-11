@@ -36,6 +36,7 @@
 #include <kaboutdata.h>
 
 #include <KisApplication.h>
+#include <GigaBranding.h>
 #include <KisMainWindow.h>
 #include <KisSupportedArchitectures.h>
 #include <KisUsageLogger.h>
@@ -174,7 +175,7 @@ Java_org_krita_android_JNIWrappers_saveState(JNIEnv* /*env*/,
     }
 
     const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-    QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
+    QSettings kritarc(configPath + QLatin1Char('/') + GigaBranding::displayConfigFile(), QSettings::IniFormat);
     kritarc.setValue("canvasState", "OPENGL_SUCCESS");
 }
 
@@ -243,7 +244,7 @@ extern "C" MAIN_EXPORT int MAIN_FN(int argc, char **argv)
     qputenv("QT_BEARER_POLL_TIMEOUT", QByteArray::number(-1));
 
     // A per-user unique string, without /, because QLocalServer cannot use names with a / in it
-    QString key = "Krita5" + QStandardPaths::writableLocation(QStandardPaths::HomeLocation).replace("/", "_");
+    QString key = GigaBranding::singleInstanceKeyPrefix() + QStandardPaths::writableLocation(QStandardPaths::HomeLocation).replace("/", "_");
     key = key.replace(":", "_").replace("\\","_");
 
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts, true);
@@ -360,7 +361,7 @@ extern "C" MAIN_EXPORT int MAIN_FN(int argc, char **argv)
 #endif
 
     const QDir configPath(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation));
-    QSettings kritarc(configPath.absoluteFilePath("kritadisplayrc"), QSettings::IniFormat);
+    QSettings kritarc(configPath.absoluteFilePath(GigaBranding::displayConfigFile()), QSettings::IniFormat);
 
     // KFI18N is broken on Android. See kswitchlanguagedialog_p.cpp for details.
     // If/when removing this, also remove the matching logic from there!
@@ -715,14 +716,14 @@ if (!qEnvironmentVariableIsEmpty("KRITA_OPENGL_DEBUG")) {
 
     /// Initialize application info, it will be used by both, Qt and
     /// DrKonqi of the host system
-    KAboutData aboutData("krita",
-                            "Krita",
+    KAboutData aboutData(GigaBranding::appName(),
+                            GigaBranding::displayName(),
                             KritaVersionWrapper::versionString(true),
                             "", // TODO: "short description" needs new string exception
                             KAboutLicense::GPL,
                             i18nc("@info:credit", "© 1999–2026 The Krita Developers"));
-    aboutData.setHomepage(QStringLiteral("https://krita.org"));
-    aboutData.setOrganizationDomain("krita.org");
+    aboutData.setHomepage(GigaBranding::homepage());
+    aboutData.setOrganizationDomain(GigaBranding::organizationDomain().toUtf8());
 
     // this call sets corresponding fields of QApplication as well
     KAboutData::setApplicationData(aboutData);
@@ -802,7 +803,7 @@ if (!qEnvironmentVariableIsEmpty("KRITA_OPENGL_DEBUG")) {
     KisApplication::setAttribute(Qt::AA_DisableWindowContextHelpButton);
 #endif
     app.installEventFilter(KisQtWidgetsTweaker::instance());
-    app.setDesktopFileName(QStringLiteral("org.kde.krita"));
+    app.setDesktopFileName(GigaBranding::desktopFileName());
 
     if (!args.noSplash()) {
         QWidget *splash = new KisSplashScreen();
@@ -874,7 +875,7 @@ if (!qEnvironmentVariableIsEmpty("KRITA_OPENGL_DEBUG")) {
     int state = KisApplication::exec();
 
     {
-        QSettings kritarc(configPath.absoluteFilePath("kritadisplayrc"), QSettings::IniFormat);
+        QSettings kritarc(configPath.absoluteFilePath(GigaBranding::displayConfigFile()), QSettings::IniFormat);
         kritarc.setValue("canvasState", "OPENGL_SUCCESS");
     }
 

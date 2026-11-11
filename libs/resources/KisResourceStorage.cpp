@@ -6,6 +6,7 @@
  */
 
 #include "KisResourceStorage.h"
+#include <GigaBranding.h>
 
 #include <QApplication>
 #include <QDebug>
@@ -411,7 +412,7 @@ QString KisStorageVersioningHelper::chooseUniqueName(KoResourceSP resource,
         QString versionString = QString("%1").arg(version, numPlaceholders, 10, QChar('0'));
 
         // XXX: Temporary, until I've fixed the tests
-        if (versionString == "0000" && qApp->applicationName() == "krita") {
+        if (versionString == "0000" && GigaBranding::isMainApplicationName(qApp->applicationName())) {
             newFilename = resource->filename();
         }
         else {
