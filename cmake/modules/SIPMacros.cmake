@@ -159,6 +159,13 @@ else()
             set(sip_disabled_features "[]")
         endif()
 
+        # Giga Sketch: allow overriding the SIP ABI version. Some distros
+        # (e.g. Fedora 44) ship a PyQt6 that needs ABI >= 13.8, so the
+        # default 13.0 fails. Configure with -DKRITA_SIP_ABI_VERSION=13.8.
+        if (KRITA_SIP_ABI_VERSION)
+            set(abi_version "${KRITA_SIP_ABI_VERSION}")
+        endif()
+
         set(module_tags)
         if (QT_MAJOR_VERSION STREQUAL "5")
             foreach(_tag ${SIP_TAGS})
