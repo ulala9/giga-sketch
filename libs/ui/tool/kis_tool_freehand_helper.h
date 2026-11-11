@@ -8,6 +8,7 @@
 #define __KIS_TOOL_FREEHAND_HELPER_H
 
 #include <QObject>
+#include "KisCurveSmoother.h"
 #include <QVector>
 
 #include "kis_types.h"
@@ -135,6 +136,11 @@ private:
 
     void stabilizerStart(KisPaintInformation firstPaintInfo);
     void stabilizerEnd();
+
+    // Giga Sketch "Smooth Curve" mode (KisSmoothingOptions::CURVE_SMOOTHING)
+    void curveStart(const KisPaintInformation &firstPaintInfo);
+    void curveEnd();
+    void curvePaintSegments(const QVector<KisCurveSmoother::Segment> &segments);
     KisPaintInformation getStabilizedPaintInfo(const QQueue<KisPaintInformation> &queue,
                                                const KisPaintInformation &lastPaintInfo);
     int computeAirbrushTimerInterval() const;
@@ -147,6 +153,7 @@ private Q_SLOTS:
     void doAirbrushing();
     void stabilizerPollAndPaint();
     void slotSmoothingTypeChanged();
+    void curveRestTimeout();
 
 private:
     struct Private;

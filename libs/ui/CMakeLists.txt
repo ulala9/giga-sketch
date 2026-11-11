@@ -219,6 +219,7 @@ set(kritaui_LIB_SRCS
     tool/kis_resources_snapshot.cpp
     tool/KisStrokeCompatibilityInfo.cpp
     tool/kis_smoothing_options.cpp
+    tool/KisCurveSmoother.cpp
     tool/KisStabilizerDelayedPaintHelper.cpp
     tool/KisStrokeSpeedMonitor.cpp
     tool/strokes/freehand_stroke.cpp

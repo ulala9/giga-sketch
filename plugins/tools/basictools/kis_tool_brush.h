@@ -94,6 +94,12 @@ public Q_SLOTS:
 
     void setFinishStabilizedCurve(bool value);
 
+    // Giga Sketch "Smooth Curve" controls (sliders are 0..100 %)
+    void setCurveAmount(int percent);
+    void setCurveSpeedInfluence(int percent);
+    void setCurvePressureInfluence(int percent);
+    void setCurveCatchUp(bool value);
+
     void updateSettingsViews() override;
 
 Q_SIGNALS:
@@ -132,6 +138,11 @@ private:
     KisDoubleSliderSpinBox *m_sliderDelayDistance {0};
 
     QCheckBox *m_chkFinishStabilizedCurve {0};
+
+    KisSliderSpinBox *m_sliderCurveAmount {0};
+    KisSliderSpinBox *m_sliderCurveSpeedInfluence {0};
+    KisSliderSpinBox *m_sliderCurvePressureInfluence {0};
+    QCheckBox *m_chkCurveCatchUp {0};
     KisSignalMapper m_signalMapper;
 };
 

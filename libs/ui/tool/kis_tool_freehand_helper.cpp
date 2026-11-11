@@ -111,6 +111,13 @@ struct KisToolFreehandHelper::Private
     KisStabilizedEventsSampler stabilizedSampler;
     KisStabilizerDelayedPaintHelper stabilizerDelayedPaintHelper;
 
+    // Giga Sketch "Smooth Curve" data. Everything here is only touched on the
+    // GUI thread (pointer events and a GUI-thread QTimer), so no locking.
+    bool usingCurveSmoother {false};
+    KisCurveSmoother curveSmoother;
+    QTimer curveRestTimer;         // lets the line catch up while the pen rests
+    int lastCurveEventTime {0};    // ms since stroke start, last real pen event
+
     qreal effectiveSmoothnessDistance(qreal speed) const;
 
     bool isTentativePixel(const QPoint &currentPixelPos) const
@@ -153,6 +160,10 @@ KisToolFreehandHelper::KisToolFreehandHelper(KisPaintingInformationBuilder *info
     connect(&m_d->airbrushingTimer, SIGNAL(timeout()), SLOT(doAirbrushing()));
     connect(&m_d->stabilizerPollTimer, SIGNAL(timeout()), SLOT(stabilizerPollAndPaint()));
     connect(m_d->smoothingOptions.data(), SIGNAL(sigSmoothingTypeChanged()), SLOT(slotSmoothingTypeChanged()));
+
+    // ~60 Hz: often enough for a smooth catch-up, cheap when idle.
+    m_d->curveRestTimer.setInterval(16);
+    connect(&m_d->curveRestTimer, SIGNAL(timeout()), SLOT(curveRestTimeout()));
 
     m_d->stabilizerDelayedPaintHelper.setPaintLineCallback(
                 [this](const KisPaintInformation &pi1, const KisPaintInformation &pi2) {
@@ -357,6 +368,10 @@ void KisToolFreehandHelper::initPaintImpl(qreal startAngle,
 
     if (m_d->smoothingOptions->smoothingType() == KisSmoothingOptions::STABILIZER) {
         stabilizerStart(m_d->previousPaintInformation);
+    }
+
+    if (m_d->smoothingOptions->smoothingType() == KisSmoothingOptions::CURVE_SMOOTHING) {
+        curveStart(m_d->previousPaintInformation);
     }
 
     // If airbrushing, paint an initial dab immediately. This is a workaround for an issue where
@@ -684,6 +699,18 @@ void KisToolFreehandHelper::paint(KisPaintInformation &info)
         }
     }
 
+    if (m_d->smoothingOptions->smoothingType() == KisSmoothingOptions::CURVE_SMOOTHING) {
+        if (!m_d->usingCurveSmoother) {
+            curveStart(m_d->previousPaintInformation);
+        }
+        QVector<KisCurveSmoother::Segment> segments;
+        m_d->curveSmoother.addSample(info, segments);
+        curvePaintSegments(segments);
+        m_d->lastCurveEventTime = elapsedStrokeTime();
+        // The line (not the pen) is where painting continues from.
+        m_d->previousPaintInformation = m_d->curveSmoother.lastSmoothedInfo();
+    }
+
     if (m_d->smoothingOptions->smoothingType() == KisSmoothingOptions::STABILIZER) {
         m_d->stabilizedSampler.addEvent(info);
         if (m_d->stabilizerDelayedPaintHelper.running()) {
@@ -691,7 +718,7 @@ void KisToolFreehandHelper::paint(KisPaintInformation &info)
             // This is just a tricky source for a relatively stable 7ms "timer"
             m_d->stabilizerDelayedPaintHelper.paintSome();
         }
-    } else {
+    } else if (m_d->smoothingOptions->smoothingType() != KisSmoothingOptions::CURVE_SMOOTHING) {
         m_d->previousPaintInformation = info;
     }
 
@@ -702,6 +729,12 @@ void KisToolFreehandHelper::paint(KisPaintInformation &info)
 
 void KisToolFreehandHelper::endPaint()
 {
+    // Smooth Curve: paint the rest of the line (with catch-up) before the
+    // generic end-of-stroke handling below.
+    if (m_d->usingCurveSmoother) {
+        curveEnd();
+    }
+
     if (!m_d->hasPaintAtLeastOnce) {
         paintAt(m_d->previousPaintInformation);
     } else if (m_d->smoothingOptions->smoothingType() != KisSmoothingOptions::NO_SMOOTHING) {
@@ -759,6 +792,10 @@ void KisToolFreehandHelper::cancelPaint()
     if (m_d->stabilizerDelayedPaintHelper.running()) {
         m_d->stabilizerDelayedPaintHelper.cancel();
     }
+
+    // Smooth Curve: drop the pending tail, nothing more gets painted.
+    m_d->curveRestTimer.stop();
+    m_d->usingCurveSmoother = false;
 
     // see a comment in endPaint()
     m_d->strokeInfos.clear();
@@ -946,6 +983,71 @@ void KisToolFreehandHelper::slotSmoothingTypeChanged()
             && (currentSmoothingType == KisSmoothingOptions::STABILIZER)) {
         stabilizerStart(m_d->previousPaintInformation);
     }
+
+    // Smooth Curve switched off mid-stroke: finish its pending tail.
+    // (Switched on mid-stroke: paint() starts it on the next event.)
+    if (m_d->usingCurveSmoother
+            && currentSmoothingType != KisSmoothingOptions::CURVE_SMOOTHING) {
+        curveEnd();
+    }
+}
+
+void KisToolFreehandHelper::curveStart(const KisPaintInformation &firstPaintInfo)
+{
+    KisCurveSmoother::Params params;
+    params.amount = m_d->smoothingOptions->curveAmount();
+    params.speedInfluence = m_d->smoothingOptions->curveSpeedInfluence();
+    params.pressureInfluence = m_d->smoothingOptions->curvePressureInfluence();
+    params.zoom = m_d->resources ? m_d->resources->effectiveZoom() : currentZoom();
+
+    m_d->curveSmoother.begin(firstPaintInfo, params);
+    m_d->usingCurveSmoother = true;
+    m_d->lastCurveEventTime = elapsedStrokeTime();
+
+    if (m_d->smoothingOptions->curveCatchUp()) {
+        m_d->curveRestTimer.start();
+    }
+}
+
+void KisToolFreehandHelper::curveEnd()
+{
+    m_d->curveRestTimer.stop();
+    if (!m_d->usingCurveSmoother) return;
+
+    QVector<KisCurveSmoother::Segment> segments;
+    m_d->curveSmoother.end(m_d->smoothingOptions->curveCatchUp(), segments);
+    curvePaintSegments(segments);
+    m_d->previousPaintInformation = m_d->curveSmoother.lastSmoothedInfo();
+    m_d->usingCurveSmoother = false;
+}
+
+void KisToolFreehandHelper::curvePaintSegments(const QVector<KisCurveSmoother::Segment> &segments)
+{
+    // Each segment becomes one Bézier job. The brush engine stamps dabs
+    // along it on its worker threads, exactly like the Basic smoothing mode.
+    for (const KisCurveSmoother::Segment &segment : segments) {
+        paintBezierCurve(segment.p1, segment.control1, segment.control2, segment.p2);
+    }
+}
+
+void KisToolFreehandHelper::curveRestTimeout()
+{
+    // Runs on the GUI thread. If the pen has been still for a moment, pull
+    // the line one step toward it, so it doesn't stay stuck behind.
+    if (!m_d->usingCurveSmoother || m_d->strokeInfos.isEmpty()) return;
+
+    const int now = elapsedStrokeTime();
+    if (now - m_d->lastCurveEventTime < m_d->curveRestTimer.interval()) {
+        return; // the pen is moving; real events will move the line
+    }
+
+    QVector<KisCurveSmoother::Segment> segments;
+    m_d->curveSmoother.catchUpStep(now, segments);
+    if (!segments.isEmpty()) {
+        curvePaintSegments(segments);
+        m_d->previousPaintInformation = m_d->curveSmoother.lastSmoothedInfo();
+        Q_EMIT requestExplicitUpdateOutline();
+    }
 }
 
 void KisToolFreehandHelper::finishStroke()
@@ -971,7 +1073,11 @@ void KisToolFreehandHelper::doAirbrushing()
 
         // Add a new painting update at a point identical to the previous one, except for the time
         // and speed information.
-        const KisPaintInformation &prevPaint = m_d->previousPaintInformation;
+        // Smooth Curve: the pen is at the last raw sample; the line
+        // (previousPaintInformation) lags behind it.
+        const KisPaintInformation prevPaint = m_d->usingCurveSmoother
+            ? m_d->curveSmoother.lastRawInfo()
+            : m_d->previousPaintInformation;
         KisPaintInformation nextPaint(prevPaint.pos(),
                                       prevPaint.pressure(),
                                       prevPaint.xTilt(),

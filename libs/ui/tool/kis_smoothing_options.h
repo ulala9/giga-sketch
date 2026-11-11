@@ -22,7 +22,11 @@ public:
         SIMPLE_SMOOTHING,
         WEIGHTED_SMOOTHING,
         STABILIZER,
-        PIXEL_PERFECT
+        PIXEL_PERFECT,
+        /// Giga Sketch: speed-adaptive filter + centripetal Catmull-Rom curve
+        /// fit, with an eased catch-up when the pen lifts. See KisCurveSmoother.
+        /// Must stay last: the value is stored as an int in the config.
+        CURVE_SMOOTHING
     };
 
 public:
@@ -62,6 +66,24 @@ public:
 
     void setStabilizeSensors(bool value);
     bool stabilizeSensors() const;
+
+    // Giga Sketch "Smooth Curve" mode settings (CURVE_SMOOTHING). All 0..1.
+
+    /// How much the path is smoothed (0 = barely, 1 = very smooth and laggy).
+    qreal curveAmount() const;
+    void setCurveAmount(qreal value);
+
+    /// How much drawing faster reduces smoothing (keeps fast flicks crisp).
+    qreal curveSpeedInfluence() const;
+    void setCurveSpeedInfluence(qreal value);
+
+    /// How much a light touch increases smoothing.
+    qreal curvePressureInfluence() const;
+    void setCurvePressureInfluence(qreal value);
+
+    /// When the pen lifts (or rests), let the line ease into the pen position.
+    bool curveCatchUp() const;
+    void setCurveCatchUp(bool value);
 
 Q_SIGNALS:
     void sigSmoothingTypeChanged();

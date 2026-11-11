@@ -187,6 +187,20 @@ void KisToolBrush::slotSetSmoothingType(int index)
         // scalable distance option is disabled due to bug 421314
         showControl(m_chkUseScalableDistance, false);
         break;
+    case KisSmoothingOptions::CURVE_SMOOTHING:
+        smoothingOptions()->setSmoothingType(KisSmoothingOptions::CURVE_SMOOTHING);
+        m_lblSmoothnessDistanceMin->setVisible(false);
+        m_sliderSmoothnessDistanceMin->setVisible(false);
+        m_lblSmoothnessDistanceMax->setVisible(false);
+        m_sliderSmoothnessDistanceMax->setVisible(false);
+        m_distanceAspectButton->setVisible(false);
+        showControl(m_sliderTailAggressiveness, false);
+        showControl(m_chkSmoothPressure, false);
+        showControl(m_chkUseScalableDistance, false);
+        showControl(m_sliderDelayDistance, false);
+        showControl(m_chkFinishStabilizedCurve, false);
+        showControl(m_chkStabilizeSensors, false);
+        break;
     case KisSmoothingOptions::PIXEL_PERFECT:
     default:
         smoothingOptions()->setSmoothingType(KisSmoothingOptions::PIXEL_PERFECT);
@@ -202,9 +216,38 @@ void KisToolBrush::slotSetSmoothingType(int index)
         showControl(m_chkFinishStabilizedCurve, false);
         showControl(m_chkStabilizeSensors, false);
     }
+
+    // Giga Sketch: the Smooth Curve controls belong to that mode only.
+    {
+        const bool curve = smoothingOptions()->smoothingType() == KisSmoothingOptions::CURVE_SMOOTHING;
+        showControl(m_sliderCurveAmount, curve);
+        showControl(m_sliderCurveSpeedInfluence, curve);
+        showControl(m_sliderCurvePressureInfluence, curve);
+        showControl(m_chkCurveCatchUp, curve);
+    }
     updateSmoothnessDistanceLabel();
 
     Q_EMIT smoothingTypeChanged();
+}
+
+void KisToolBrush::setCurveAmount(int percent)
+{
+    smoothingOptions()->setCurveAmount(percent / 100.0);
+}
+
+void KisToolBrush::setCurveSpeedInfluence(int percent)
+{
+    smoothingOptions()->setCurveSpeedInfluence(percent / 100.0);
+}
+
+void KisToolBrush::setCurvePressureInfluence(int percent)
+{
+    smoothingOptions()->setCurvePressureInfluence(percent / 100.0);
+}
+
+void KisToolBrush::setCurveCatchUp(bool value)
+{
+    smoothingOptions()->setCurveCatchUp(value);
 }
 
 void KisToolBrush::updateSmoothnessDistanceLabel()
@@ -416,7 +459,8 @@ QWidget * KisToolBrush::createOptionWidget()
                                  << i18nc("@item:inlistbox Brush Smoothing", "Basic")
                                  << i18nc("@item:inlistbox Brush Smoothing", "Weighted")
                                  << i18nc("@item:inlistbox Brush Smoothing", "Stabilizer")
-                                 << i18nc("@item:inlistbox Brush Smoothing", "Pixel"));
+                                 << i18nc("@item:inlistbox Brush Smoothing", "Pixel")
+                                 << i18nc("@item:inlistbox Brush Smoothing", "Smooth Curve"));
     connect(m_cmbSmoothingType, SIGNAL(currentIndexChanged(int)), this, SLOT(slotSetSmoothingType(int)));
     addOptionWidgetOption(m_cmbSmoothingType, new QLabel(i18n("Brush Smoothing:"), optionsWidget));
 
@@ -537,6 +581,39 @@ QWidget * KisToolBrush::createOptionWidget()
                                                "level is chosen"));
     connect(m_chkUseScalableDistance, SIGNAL(toggled(bool)), this, SLOT(setUseScalableDistance(bool)));
     addOptionWidgetOption(m_chkUseScalableDistance, new QLabel(QString("%1:").arg(i18n("Scalable Distance")), optionsWidget));
+
+    // Giga Sketch "Smooth Curve" controls. Shown only for that mode
+    // (see slotSetSmoothingType).
+    m_sliderCurveAmount = new KisSliderSpinBox(optionsWidget);
+    m_sliderCurveAmount->setRange(0, 100);
+    m_sliderCurveAmount->setSuffix(i18n("%"));
+    m_sliderCurveAmount->setToolTip(i18nc("@info:tooltip", "How strongly the stroke path is smoothed. Higher values give smoother lines that trail further behind the pen."));
+    m_sliderCurveAmount->setValue(qRound(smoothingOptions()->curveAmount() * 100));
+    connect(m_sliderCurveAmount, SIGNAL(valueChanged(int)), SLOT(setCurveAmount(int)));
+    addOptionWidgetOption(m_sliderCurveAmount, new QLabel(i18n("Amount:"), optionsWidget));
+
+    m_sliderCurveSpeedInfluence = new KisSliderSpinBox(optionsWidget);
+    m_sliderCurveSpeedInfluence->setRange(0, 100);
+    m_sliderCurveSpeedInfluence->setSuffix(i18n("%"));
+    m_sliderCurveSpeedInfluence->setToolTip(i18nc("@info:tooltip", "How much drawing faster reduces smoothing, so quick flicks stay crisp while slow curves are smoothed."));
+    m_sliderCurveSpeedInfluence->setValue(qRound(smoothingOptions()->curveSpeedInfluence() * 100));
+    connect(m_sliderCurveSpeedInfluence, SIGNAL(valueChanged(int)), SLOT(setCurveSpeedInfluence(int)));
+    addOptionWidgetOption(m_sliderCurveSpeedInfluence, new QLabel(i18n("Speed Influence:"), optionsWidget));
+
+    m_sliderCurvePressureInfluence = new KisSliderSpinBox(optionsWidget);
+    m_sliderCurvePressureInfluence->setRange(0, 100);
+    m_sliderCurvePressureInfluence->setSuffix(i18n("%"));
+    m_sliderCurvePressureInfluence->setToolTip(i18nc("@info:tooltip", "How much a light touch adds smoothing."));
+    m_sliderCurvePressureInfluence->setValue(qRound(smoothingOptions()->curvePressureInfluence() * 100));
+    connect(m_sliderCurvePressureInfluence, SIGNAL(valueChanged(int)), SLOT(setCurvePressureInfluence(int)));
+    addOptionWidgetOption(m_sliderCurvePressureInfluence, new QLabel(i18n("Pressure Influence:"), optionsWidget));
+
+    m_chkCurveCatchUp = new QCheckBox(optionsWidget);
+    m_chkCurveCatchUp->setMinimumHeight(m_cmbSmoothingType->sizeHint().height()-3);
+    m_chkCurveCatchUp->setToolTip(i18nc("@info:tooltip", "When the pen rests or lifts, the line eases into the pen position instead of stopping short."));
+    m_chkCurveCatchUp->setChecked(smoothingOptions()->curveCatchUp());
+    connect(m_chkCurveCatchUp, SIGNAL(toggled(bool)), SLOT(setCurveCatchUp(bool)));
+    addOptionWidgetOption(m_chkCurveCatchUp, new QLabel(i18n("Catch Up:"), optionsWidget));
 
     // add a line spacer so we know that the next set of options are for different settings
     QFrame* line = new QFrame(optionsWidget);

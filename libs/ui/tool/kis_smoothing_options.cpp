@@ -24,6 +24,18 @@ struct KisSmoothingOptions::Private {
         useDelayDistance = cfg.lineSmoothingUseDelayDistance(!useSavedSmoothing);
         finishStabilizedCurve = cfg.lineSmoothingFinishStabilizedCurve(!useSavedSmoothing);
         stabilizeSensors = cfg.lineSmoothingStabilizeSensors(!useSavedSmoothing);
+
+        // Giga Sketch "Smooth Curve" settings. Stored under their own keys,
+        // read with KisConfig's generic accessor so kis_config.h stays untouched.
+        curveAmount = useSavedSmoothing ? cfg.readEntry<qreal>("GigaCurveSmoothingAmount", 0.5) : 0.5;
+        curveSpeedInfluence = useSavedSmoothing ? cfg.readEntry<qreal>("GigaCurveSmoothingSpeedInfluence", 0.5) : 0.5;
+        curvePressureInfluence = useSavedSmoothing ? cfg.readEntry<qreal>("GigaCurveSmoothingPressureInfluence", 0.0) : 0.0;
+        curveCatchUp = useSavedSmoothing ? cfg.readEntry<bool>("GigaCurveSmoothingCatchUp", true) : true;
+
+        // A config written by a newer build could hold an unknown type.
+        if (smoothingType < NO_SMOOTHING || smoothingType > CURVE_SMOOTHING) {
+            smoothingType = SIMPLE_SMOOTHING;
+        }
     }
 
     KisSignalCompressor writeCompressor;
@@ -39,6 +51,11 @@ struct KisSmoothingOptions::Private {
     bool useDelayDistance;
     bool finishStabilizedCurve;
     bool stabilizeSensors;
+
+    qreal curveAmount;
+    qreal curveSpeedInfluence;
+    qreal curvePressureInfluence;
+    bool curveCatchUp;
 };
 
 KisSmoothingOptions::KisSmoothingOptions(bool useSavedSmoothing)
@@ -179,6 +196,50 @@ bool KisSmoothingOptions::stabilizeSensors() const
     return m_d->stabilizeSensors;
 }
 
+qreal KisSmoothingOptions::curveAmount() const
+{
+    return m_d->curveAmount;
+}
+
+void KisSmoothingOptions::setCurveAmount(qreal value)
+{
+    m_d->curveAmount = qBound(0.0, value, 1.0);
+    m_d->writeCompressor.start();
+}
+
+qreal KisSmoothingOptions::curveSpeedInfluence() const
+{
+    return m_d->curveSpeedInfluence;
+}
+
+void KisSmoothingOptions::setCurveSpeedInfluence(qreal value)
+{
+    m_d->curveSpeedInfluence = qBound(0.0, value, 1.0);
+    m_d->writeCompressor.start();
+}
+
+qreal KisSmoothingOptions::curvePressureInfluence() const
+{
+    return m_d->curvePressureInfluence;
+}
+
+void KisSmoothingOptions::setCurvePressureInfluence(qreal value)
+{
+    m_d->curvePressureInfluence = qBound(0.0, value, 1.0);
+    m_d->writeCompressor.start();
+}
+
+bool KisSmoothingOptions::curveCatchUp() const
+{
+    return m_d->curveCatchUp;
+}
+
+void KisSmoothingOptions::setCurveCatchUp(bool value)
+{
+    m_d->curveCatchUp = value;
+    m_d->writeCompressor.start();
+}
+
 void KisSmoothingOptions::slotWriteConfig()
 {
     KisConfig cfg(false);
@@ -193,4 +254,8 @@ void KisSmoothingOptions::slotWriteConfig()
     cfg.setLineSmoothingUseDelayDistance(m_d->useDelayDistance);
     cfg.setLineSmoothingFinishStabilizedCurve(m_d->finishStabilizedCurve);
     cfg.setLineSmoothingStabilizeSensors(m_d->stabilizeSensors);
+    cfg.writeEntry<qreal>("GigaCurveSmoothingAmount", m_d->curveAmount);
+    cfg.writeEntry<qreal>("GigaCurveSmoothingSpeedInfluence", m_d->curveSpeedInfluence);
+    cfg.writeEntry<qreal>("GigaCurveSmoothingPressureInfluence", m_d->curvePressureInfluence);
+    cfg.writeEntry<bool>("GigaCurveSmoothingCatchUp", m_d->curveCatchUp);
 }
