@@ -12,6 +12,9 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QToolButton>
 
 #include <klocalizedstring.h>
 #include <QAction>
@@ -220,10 +223,11 @@ void KisToolBrush::slotSetSmoothingType(int index)
     // Giga Sketch: the Smooth Curve controls belong to that mode only.
     {
         const bool curve = smoothingOptions()->smoothingType() == KisSmoothingOptions::CURVE_SMOOTHING;
-        showControl(m_sliderCurveAmount, curve);
-        showControl(m_sliderCurveSpeedInfluence, curve);
-        showControl(m_sliderCurvePressureInfluence, curve);
+        showControl(m_curveAmountRow, curve);
+        showControl(m_curveSpeedInfluenceRow, curve);
+        showControl(m_curvePressureInfluenceRow, curve);
         showControl(m_chkCurveCatchUp, curve);
+        showControl(m_btnResetCurveSmoothing, curve);
     }
     updateSmoothnessDistanceLabel();
 
@@ -248,6 +252,16 @@ void KisToolBrush::setCurvePressureInfluence(int percent)
 void KisToolBrush::setCurveCatchUp(bool value)
 {
     smoothingOptions()->setCurveCatchUp(value);
+}
+
+void KisToolBrush::resetCurveSmoothing()
+{
+    // Setting the widgets fires their change signals, which update the
+    // smoothing options and save them, same as moving them by hand.
+    m_sliderCurveAmount->setValue(qRound(KisSmoothingOptions::defaultCurveAmount() * 100));
+    m_sliderCurveSpeedInfluence->setValue(qRound(KisSmoothingOptions::defaultCurveSpeedInfluence() * 100));
+    m_sliderCurvePressureInfluence->setValue(qRound(KisSmoothingOptions::defaultCurvePressureInfluence() * 100));
+    m_chkCurveCatchUp->setChecked(KisSmoothingOptions::defaultCurveCatchUp());
 }
 
 void KisToolBrush::updateSmoothnessDistanceLabel()
@@ -584,13 +598,34 @@ QWidget * KisToolBrush::createOptionWidget()
 
     // Giga Sketch "Smooth Curve" controls. Shown only for that mode
     // (see slotSetSmoothingType).
+    // Puts a slider in a row with a small reset button (same icon as the
+    // brush preset editor's reload button) that sets it back to `percent`.
+    auto makeResettableRow = [optionsWidget](KisSliderSpinBox *slider, int defaultPercent) {
+        QWidget *row = new QWidget(optionsWidget);
+        QHBoxLayout *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(2);
+        layout->addWidget(slider, 1);
+
+        QToolButton *reset = new QToolButton(row);
+        reset->setIcon(KisIconUtils::loadIcon("reload-preset-16"));
+        reset->setAutoRaise(true);
+        reset->setToolTip(i18nc("@info:tooltip", "Reset to default (%1%)", defaultPercent));
+        QObject::connect(reset, &QToolButton::clicked, slider, [slider, defaultPercent]() {
+            slider->setValue(defaultPercent); // valueChanged updates the setting
+        });
+        layout->addWidget(reset);
+        return row;
+    };
+
     m_sliderCurveAmount = new KisSliderSpinBox(optionsWidget);
     m_sliderCurveAmount->setRange(0, 100);
     m_sliderCurveAmount->setSuffix(i18n("%"));
     m_sliderCurveAmount->setToolTip(i18nc("@info:tooltip", "How strongly the stroke path is smoothed. Higher values give smoother lines that trail further behind the pen."));
     m_sliderCurveAmount->setValue(qRound(smoothingOptions()->curveAmount() * 100));
     connect(m_sliderCurveAmount, SIGNAL(valueChanged(int)), SLOT(setCurveAmount(int)));
-    addOptionWidgetOption(m_sliderCurveAmount, new QLabel(i18n("Amount:"), optionsWidget));
+    m_curveAmountRow = makeResettableRow(m_sliderCurveAmount, qRound(KisSmoothingOptions::defaultCurveAmount() * 100));
+    addOptionWidgetOption(m_curveAmountRow, new QLabel(i18n("Amount:"), optionsWidget));
 
     m_sliderCurveSpeedInfluence = new KisSliderSpinBox(optionsWidget);
     m_sliderCurveSpeedInfluence->setRange(0, 100);
@@ -598,7 +633,8 @@ QWidget * KisToolBrush::createOptionWidget()
     m_sliderCurveSpeedInfluence->setToolTip(i18nc("@info:tooltip", "How much drawing faster reduces smoothing, so quick flicks stay crisp while slow curves are smoothed."));
     m_sliderCurveSpeedInfluence->setValue(qRound(smoothingOptions()->curveSpeedInfluence() * 100));
     connect(m_sliderCurveSpeedInfluence, SIGNAL(valueChanged(int)), SLOT(setCurveSpeedInfluence(int)));
-    addOptionWidgetOption(m_sliderCurveSpeedInfluence, new QLabel(i18n("Speed Influence:"), optionsWidget));
+    m_curveSpeedInfluenceRow = makeResettableRow(m_sliderCurveSpeedInfluence, qRound(KisSmoothingOptions::defaultCurveSpeedInfluence() * 100));
+    addOptionWidgetOption(m_curveSpeedInfluenceRow, new QLabel(i18n("Speed Influence:"), optionsWidget));
 
     m_sliderCurvePressureInfluence = new KisSliderSpinBox(optionsWidget);
     m_sliderCurvePressureInfluence->setRange(0, 100);
@@ -606,7 +642,8 @@ QWidget * KisToolBrush::createOptionWidget()
     m_sliderCurvePressureInfluence->setToolTip(i18nc("@info:tooltip", "How much a light touch adds smoothing."));
     m_sliderCurvePressureInfluence->setValue(qRound(smoothingOptions()->curvePressureInfluence() * 100));
     connect(m_sliderCurvePressureInfluence, SIGNAL(valueChanged(int)), SLOT(setCurvePressureInfluence(int)));
-    addOptionWidgetOption(m_sliderCurvePressureInfluence, new QLabel(i18n("Pressure Influence:"), optionsWidget));
+    m_curvePressureInfluenceRow = makeResettableRow(m_sliderCurvePressureInfluence, qRound(KisSmoothingOptions::defaultCurvePressureInfluence() * 100));
+    addOptionWidgetOption(m_curvePressureInfluenceRow, new QLabel(i18n("Pressure Influence:"), optionsWidget));
 
     m_chkCurveCatchUp = new QCheckBox(optionsWidget);
     m_chkCurveCatchUp->setMinimumHeight(m_cmbSmoothingType->sizeHint().height()-3);
@@ -614,6 +651,12 @@ QWidget * KisToolBrush::createOptionWidget()
     m_chkCurveCatchUp->setChecked(smoothingOptions()->curveCatchUp());
     connect(m_chkCurveCatchUp, SIGNAL(toggled(bool)), SLOT(setCurveCatchUp(bool)));
     addOptionWidgetOption(m_chkCurveCatchUp, new QLabel(i18n("Catch Up:"), optionsWidget));
+
+    m_btnResetCurveSmoothing = new QPushButton(i18n("Reset Smooth Curve"), optionsWidget);
+    m_btnResetCurveSmoothing->setIcon(KisIconUtils::loadIcon("reload-preset-16"));
+    m_btnResetCurveSmoothing->setToolTip(i18nc("@info:tooltip", "Set all Smooth Curve options back to their defaults"));
+    connect(m_btnResetCurveSmoothing, SIGNAL(clicked()), SLOT(resetCurveSmoothing()));
+    addOptionWidgetOption(m_btnResetCurveSmoothing);
 
     // add a line spacer so we know that the next set of options are for different settings
     QFrame* line = new QFrame(optionsWidget);

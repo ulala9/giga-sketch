@@ -24,6 +24,7 @@
 #include <KoIcon.h>
 
 class QCheckBox;
+class QPushButton;
 class QComboBox;
 class QLabel;
 
@@ -99,6 +100,7 @@ public Q_SLOTS:
     void setCurveSpeedInfluence(int percent);
     void setCurvePressureInfluence(int percent);
     void setCurveCatchUp(bool value);
+    void resetCurveSmoothing();
 
     void updateSettingsViews() override;
 
@@ -143,6 +145,12 @@ private:
     KisSliderSpinBox *m_sliderCurveSpeedInfluence {0};
     KisSliderSpinBox *m_sliderCurvePressureInfluence {0};
     QCheckBox *m_chkCurveCatchUp {0};
+    // Each slider sits in a row with its reset button; the rows are what
+    // get shown/hidden per smoothing mode.
+    QWidget *m_curveAmountRow {0};
+    QWidget *m_curveSpeedInfluenceRow {0};
+    QWidget *m_curvePressureInfluenceRow {0};
+    QPushButton *m_btnResetCurveSmoothing {0};
     KisSignalMapper m_signalMapper;
 };
 

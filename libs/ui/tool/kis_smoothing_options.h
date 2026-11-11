@@ -69,6 +69,12 @@ public:
 
     // Giga Sketch "Smooth Curve" mode settings (CURVE_SMOOTHING). All 0..1.
 
+    // Defaults, used for first launch and by the reset buttons in the tool options.
+    static constexpr qreal defaultCurveAmount() { return 0.5; }
+    static constexpr qreal defaultCurveSpeedInfluence() { return 0.5; }
+    static constexpr qreal defaultCurvePressureInfluence() { return 0.0; }
+    static constexpr bool defaultCurveCatchUp() { return true; }
+
     /// How much the path is smoothed (0 = barely, 1 = very smooth and laggy).
     qreal curveAmount() const;
     void setCurveAmount(qreal value);

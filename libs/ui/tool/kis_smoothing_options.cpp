@@ -27,10 +27,16 @@ struct KisSmoothingOptions::Private {
 
         // Giga Sketch "Smooth Curve" settings. Stored under their own keys,
         // read with KisConfig's generic accessor so kis_config.h stays untouched.
-        curveAmount = useSavedSmoothing ? cfg.readEntry<qreal>("GigaCurveSmoothingAmount", 0.5) : 0.5;
-        curveSpeedInfluence = useSavedSmoothing ? cfg.readEntry<qreal>("GigaCurveSmoothingSpeedInfluence", 0.5) : 0.5;
-        curvePressureInfluence = useSavedSmoothing ? cfg.readEntry<qreal>("GigaCurveSmoothingPressureInfluence", 0.0) : 0.0;
-        curveCatchUp = useSavedSmoothing ? cfg.readEntry<bool>("GigaCurveSmoothingCatchUp", true) : true;
+        curveAmount = defaultCurveAmount();
+        curveSpeedInfluence = defaultCurveSpeedInfluence();
+        curvePressureInfluence = defaultCurvePressureInfluence();
+        curveCatchUp = defaultCurveCatchUp();
+        if (useSavedSmoothing) {
+            curveAmount = cfg.readEntry<qreal>("GigaCurveSmoothingAmount", curveAmount);
+            curveSpeedInfluence = cfg.readEntry<qreal>("GigaCurveSmoothingSpeedInfluence", curveSpeedInfluence);
+            curvePressureInfluence = cfg.readEntry<qreal>("GigaCurveSmoothingPressureInfluence", curvePressureInfluence);
+            curveCatchUp = cfg.readEntry<bool>("GigaCurveSmoothingCatchUp", curveCatchUp);
+        }
 
         // A config written by a newer build could hold an unknown type.
         if (smoothingType < NO_SMOOTHING || smoothingType > CURVE_SMOOTHING) {
