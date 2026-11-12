@@ -712,7 +712,7 @@ struct GigaPanelEntry {
 };
 // Order matches the Giga layout: colour, brushes/tools, layers.
 const GigaPanelEntry GIGA_PANELS[] = {
-    {"ColorSelectorNg", "extended_color_selector"},
+    {"WideGamutColorSelector", "extended_color_selector"},
     {"PaletteDocker", "config-popup-palette"},
     {"PresetDocker", "paintop_settings_01"},
     {"sharedtooldocker", "configure"},
@@ -847,7 +847,8 @@ void KisMainWindow::applyGigaLayout()
     // Each inner list becomes one tabbed group, stacked top to bottom on the
     // right. The first docker of a group is the tab shown in front.
     const QList<QStringList> rightGroups = {
-        {QStringLiteral("ColorSelectorNg"), QStringLiteral("PaletteDocker")},
+        // Colour square + hue (Wide Gamut selector), colour sliders/hex, swatches.
+        {QStringLiteral("WideGamutColorSelector"), QStringLiteral("SpecificColorSelector"), QStringLiteral("PaletteDocker")},
         {QStringLiteral("sharedtooldocker"), QStringLiteral("PresetDocker"), QStringLiteral("TextProperties")},
         {QStringLiteral("KisLayerBox"), QStringLiteral("ChannelDocker"), QStringLiteral("History")},
     };

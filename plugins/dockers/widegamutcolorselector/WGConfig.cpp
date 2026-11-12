@@ -192,9 +192,11 @@ WGConfigNotifier *notifier()
     return s_notifier_instance;
 }
 
+// Giga Sketch: Photoshop-like default: a saturation/value square with a
+// hue slider beside it (Krita's default is a triangle in a hue ring).
 const KisColorSelectorConfiguration WGConfig::defaultColorSelectorConfiguration =
-        KisColorSelectorConfiguration(KisColorSelectorConfiguration::Triangle,
-                                      KisColorSelectorConfiguration::Ring,
+        KisColorSelectorConfiguration(KisColorSelectorConfiguration::Square,
+                                      KisColorSelectorConfiguration::Slider,
                                       KisColorSelectorConfiguration::SV,
                                       KisColorSelectorConfiguration::H);
 
@@ -236,7 +238,8 @@ const ColorPatches popupPatches {
 
 const GenericSetting<bool> proofToPaintingColors {"proofToPaintingColors", false};
 const GenericSetting<bool> colorHistoryEnabled {"colorHistoryEnabled", true};
-const GenericSetting<bool> commonColorsEnabled {"commonColorsEnabled", true};
+// Giga Sketch: off by default (no Photoshop equivalent; recent colours stay).
+const GenericSetting<bool> commonColorsEnabled {"commonColorsEnabled", false};
 const GenericSetting<bool> colorHistoryShowClearButton { "colorHistoryShowClearButton", false };
 const GenericSetting<bool> commonColorsAutoUpdate { "commonColorsAutoUpdate", false };
 
