@@ -753,18 +753,25 @@ bool KisMainWindow::eventFilter(QObject *watched, QEvent *event)
 {
     QTabBar *tabBar = qobject_cast<QTabBar *>(watched);
     if (tabBar && tabBar == d->findTabBarHACK()) {
-        if (event->type() == QEvent::MouseButtonPress) {
-            d->gigaTabPressed = static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton;
-        } else if (event->type() == QEvent::MouseButtonRelease) {
+        // Pens send tablet events; mice send mouse events. Handle both.
+        const QEvent::Type type = event->type();
+        const bool isPress = type == QEvent::MouseButtonPress || type == QEvent::TabletPress;
+        const bool isRelease = type == QEvent::MouseButtonRelease || type == QEvent::TabletRelease;
+        const bool isMove = type == QEvent::MouseMove || type == QEvent::TabletMove;
+
+        if (isPress) {
+            d->gigaTabPressed = static_cast<QSinglePointEvent *>(event)->button() == Qt::LeftButton;
+        } else if (isRelease) {
             d->gigaTabPressed = false;
-        } else if (event->type() == QEvent::MouseMove && d->gigaTabPressed) {
-            const QPoint pos = static_cast<QMouseEvent *>(event)->position().toPoint();
+        } else if (isMove && d->gigaTabPressed) {
+            const QPoint pos = static_cast<QSinglePointEvent *>(event)->position().toPoint();
             // Dragged well above or below the tab bar: tear the tab out,
             // like Photoshop. Only when there's another document to keep.
             const int margin = 40;
             const bool pulledOut = pos.y() < -margin || pos.y() > tabBar->height() + margin;
             if (pulledOut && d->mdiArea->subWindowList().size() > 1) {
                 d->gigaTabPressed = false;
+                KisUsageLogger::log(QStringLiteral("Giga: document tab torn off into a new window"));
                 // Do it after this event is handled, not while Qt is still
                 // inside the tab bar's mouse handling.
                 QTimer::singleShot(0, this, [this]() { gigaDetachActiveView(); });
@@ -2826,6 +2833,12 @@ void KisMainWindow::toggleDockersVisibility(bool visible, bool onWelcomePage)
 
 void KisMainWindow::subWindowActivated()
 {
+    // Giga Sketch: (re)attach the tab tear-off watcher. The MDI area can
+    // replace its tab bar after startup; installing twice is harmless.
+    if (QTabBar *tabBar = d->findTabBarHACK()) {
+        tabBar->installEventFilter(this);
+    }
+
     bool enabled = (activeKisView() != 0);
 
     d->mdiCascade->setEnabled(enabled);
