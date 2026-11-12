@@ -170,6 +170,19 @@ public:
     QList<KoShape*> shapesInside() const;
 
     /**
+     * Giga Sketch: true when some text did not fit inside the text area
+     * (shape-inside), so it isn't shown. Used for the text box overflow marker.
+     */
+    bool gigaTextOverflows() const;
+
+    /**
+     * Giga Sketch: re-read a contour shape (e.g. a text box rectangle) after
+     * its geometry changed, and reflow. Needed after KoPathShape::setSize(),
+     * which reports the change before it moves the path points.
+     */
+    void gigaContourChanged(KoShape *contour);
+
+    /**
      * @brief setShapesSubtract
      * @param shapesSubtract the list of shapes that subtract from the wrapping area.
      */

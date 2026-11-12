@@ -664,6 +664,7 @@ QVector<LineBox> flowTextInShapes(const KoSvgTextProperties &properties,
                             wordNew.append(i);
                         } else {
                             result[i].hidden = true;
+                            result[i].gigaOverflow = true;
                             result[i].cssPosition = advance-result[i].advance;
                         }
                         wordIndices = wordNew;
@@ -677,6 +678,7 @@ QVector<LineBox> flowTextInShapes(const KoSvgTextProperties &properties,
                     result[j].cssPosition = advance;
                     advance += result[j].advance;
                     result[j].hidden = true;
+                    result[j].gigaOverflow = true; // no room left in the shape
                 }
             }
         }

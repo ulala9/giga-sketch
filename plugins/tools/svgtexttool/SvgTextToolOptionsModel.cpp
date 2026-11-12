@@ -13,6 +13,7 @@ SvgTextToolOptionsModel::SvgTextToolOptionsModel(const QString &configName, lage
     , LAGER_QT(useVisualBidiCursor) {data[&SvgTextToolOptionsData::useVisualBidiCursor]}
     , LAGER_QT(pasteRichtTextByDefault) {data[&SvgTextToolOptionsData::pasteRichtTextByDefault]}
     , LAGER_QT(newLayerPerText) {data[&SvgTextToolOptionsData::newLayerPerText]}
+    , LAGER_QT(boxText) {data[&SvgTextToolOptionsData::boxText]}
     , m_configName(configName)
 {
     lager::watch(data, std::bind(&SvgTextToolOptionsModel::optionsChanged, this));

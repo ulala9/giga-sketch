@@ -2565,6 +2565,20 @@ void KoSvgTextShape::setShapesSubtract(QList<KoShape *> shapesSubtract)
     addShapeContours(shapesSubtract, false);
 }
 
+void KoSvgTextShape::gigaContourChanged(KoShape *contour)
+{
+    shapeChanged(ContentChanged, contour);
+}
+
+bool KoSvgTextShape::gigaTextOverflows() const
+{
+    if (d->shapesInside.isEmpty()) return false;
+    for (const CharacterResult &r : d->result) {
+        if (r.gigaOverflow && r.addressable) return true;
+    }
+    return false;
+}
+
 QList<QPainterPath> KoSvgTextShape::textWrappingAreas() const
 {
     return d->currentTextWrappingAreas;

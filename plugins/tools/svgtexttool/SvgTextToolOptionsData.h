@@ -21,6 +21,7 @@ struct SvgTextToolOptionsData
     /// text (Photoshop-style). Off = Krita's behaviour (texts share the
     /// active vector layer).
     bool newLayerPerText = true;
+    bool boxText = true; ///< Giga Sketch: a drag makes a fixed-size text box
 
     void writeConfig(const QString &toolId);
     void loadConfig(const QString &toolId);

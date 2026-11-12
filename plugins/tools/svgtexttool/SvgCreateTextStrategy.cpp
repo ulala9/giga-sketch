@@ -6,6 +6,7 @@
 
 #include "SvgCreateTextStrategy.h"
 #include "SvgTextTool.h"
+#include "GigaTextBoxResizeStrategy.h"
 
 #include <KoFontRegistry.h>
 
@@ -86,7 +87,13 @@ KUndo2Command *SvgCreateTextStrategy::createCommand()
     if (rectangle.width() < m_minSizeInline.width() && rectangle.height() < m_minSizeInline.height()) {
         unwrappedText = true;
     }
-    if (!unwrappedText) {
+    // Giga Sketch: a drag makes a Photoshop-style box (fixed width and
+    // height, text flows inside an invisible rectangle) unless the tool
+    // option asks for Krita's width-only text.
+    const bool boxText = !unwrappedText && tool->boxText();
+    if (boxText) {
+        properties.removeProperty(KoSvgTextProperties::InlineSizeId);
+    } else if (!unwrappedText) {
         KoSvgText::AutoValue val;
         val.isAuto = false;
         val.customValue = writingMode == KoSvgText::HorizontalTB? rectangle.width(): rectangle.height();
@@ -172,6 +179,12 @@ KUndo2Command *SvgCreateTextStrategy::createCommand()
     KUndo2Command *cmd = tool->canvas()->shapeController()->addShape(textShape, parent, parentCommand);
 
     parentCommand->setText(cmd->text());
+
+    if (boxText) {
+        KoPathShape *box = GigaTextBox::createBoxShape(rectangle);
+        textShape->setPosition(rectangle.topLeft());
+        new KoSvgTextAddShapeCommand(textShape, box, true, parentCommand);
+    }
 
     if (m_flowShape) {
         textShape->setPosition(m_flowShape->absolutePosition(KoFlake::TopLeft));

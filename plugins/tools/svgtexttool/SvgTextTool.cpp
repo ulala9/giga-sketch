@@ -24,6 +24,10 @@
 #include "SvgTextToolOptionsModel.h"
 #include <kis_shape_layer.h>
 #include "GigaTextOptionsBar.h"
+#include "GigaTextBoxResizeStrategy.h"
+#include <KoPathShape.h>
+#include <QMenu>
+#include <commands/KoSvgTextAddRemoveShapeCommands.h>
 #include <KisMainWindow.h>
 #include "SvgTextTypeSettingStrategy.h"
 #include "SvgTextChangeTransformsOnRange.h"
@@ -259,6 +263,76 @@ void SvgTextTool::deactivate()
 KisPopupWidgetInterface *SvgTextTool::popupWidget()
 {
     return nullptr;
+}
+
+QMenu *SvgTextTool::popupActionsMenu()
+{
+    // Giga Sketch: with a text selected, right-click offers Photoshop's
+    // point/paragraph text conversion. Otherwise the usual popup.
+    KoSvgTextShape *shape = selectedShape();
+    if (!shape || !canvas()) return nullptr;
+    const bool onPath = !shape->textPathsAtRange(0, shape->posForIndex(shape->plainText().size())).isEmpty();
+    if (onPath) return nullptr;
+
+    if (!m_gigaContextMenu) {
+        m_gigaContextMenu = new QMenu(canvas()->canvasWidget());
+    }
+    m_gigaContextMenu->clear();
+    if (!shape->shapesInside().isEmpty()) {
+        m_gigaContextMenu->addAction(i18nc("@action:inmenu", "Convert to Point Text"), this, [this]() { gigaConvertToPointText(); });
+    } else {
+        m_gigaContextMenu->addAction(i18nc("@action:inmenu", "Convert to Paragraph Text"), this, [this]() { gigaConvertToBoxText(); });
+    }
+    return m_gigaContextMenu;
+}
+
+int SvgTextTool::gigaBoxHandleAt(const QPointF &point) const
+{
+    KoPathShape *box = GigaTextBox::boxOf(selectedShape());
+    if (!box) return -1;
+    const QRectF grab = handleGrabRect(point);
+    for (int h = 0; h < GigaTextBox::HandleCount; h++) {
+        if (grab.contains(GigaTextBox::handleDocument(box, h))) return h;
+    }
+    return -1;
+}
+
+void SvgTextTool::gigaConvertToPointText()
+{
+    KoSvgTextShape *shape = selectedShape();
+    if (!shape) return;
+    if (KoPathShape *box = GigaTextBox::boxOf(shape)) {
+        // Our own invisible box: take it away for good.
+        canvas()->addCommand(GigaTextBox::makeRemoveBoxCommand(shape, box));
+    } else if (!shape->shapesInside().isEmpty()) {
+        // Text flowing in a user's shape: put the shape back on the layer.
+        KUndo2Command *cmd = new KUndo2Command(kundo2_i18n("Convert to Point Text"));
+        KoSvgTextRemoveShapeCommand::removeContourShapesFromFlow(shape, cmd, true, false);
+        canvas()->addCommand(cmd);
+    }
+    repaintDecorations();
+}
+
+void SvgTextTool::gigaConvertToBoxText()
+{
+    KoSvgTextShape *shape = selectedShape();
+    if (!shape || !shape->shapesInside().isEmpty()) return;
+
+    // A box around the text as it is now (a little roomier), in the text's
+    // own coordinates so it follows the text's rotation.
+    KoSvgTextProperties props = shape->textProperties();
+    props.inheritFrom(KoSvgTextProperties::defaultProperties(), true);
+    const qreal pad = props.fontSize().value * 0.25;
+    QRectF local = shape->outlineRect().adjusted(-pad, -pad, pad, pad);
+    local.setWidth(qMax(local.width(), props.fontSize().value * 4));
+
+    KoPathShape *box = GigaTextBox::createBoxShape(local);
+    box->applyAbsoluteTransformation(shape->absoluteTransformation()); // text coords -> document
+
+    KUndo2Command *cmd = new KUndo2Command(kundo2_i18n("Convert to Paragraph Text"));
+    new KoSvgTextAddShapeCommand(shape, box, true, cmd);
+    canvas()->addCommand(cmd);
+    repaintDecorations();
 }
 
 QVariant SvgTextTool::inputMethodQuery(Qt::InputMethodQuery query) const
@@ -528,6 +602,11 @@ bool SvgTextTool::newLayerPerText() const
     return m_optionManager ? m_optionManager->optionsModel()->newLayerPerText() : true;
 }
 
+bool SvgTextTool::boxText() const
+{
+    return m_optionManager ? m_optionManager->optionsModel()->boxText() : true;
+}
+
 void SvgTextTool::updateAutoLayerName(KoSvgTextShape *shape)
 {
     if (!shape) return;
@@ -748,6 +827,12 @@ QRectF SvgTextTool::decorationsRect() const
             rect |= kisGrowRect(info->boundingRect(), handleRadius() * 2);
         }
 
+        // Giga Sketch: box handles and the overflow marker sit on the box edge.
+        if (KoPathShape *box = GigaTextBox::boxOf(shape)) {
+            const qreal markerPt = canvas()->viewConverter()->viewToDocumentX(24.0);
+            rect |= kisGrowRect(box->boundingRect(), handleRadius() * 2 + markerPt);
+        }
+
         if (canvas()->snapGuide()->isSnapping()) {
             rect |= canvas()->snapGuide()->boundingRect();
         }
@@ -810,6 +895,38 @@ void SvgTextTool::paint(QPainter &gc, const KoViewConverter &converter)
             handlePainter.setHandleStyle(KisHandleStyle::primarySelection());
         }
         handlePainter.drawHandleCircle(QPointF(), KoToolBase::handleRadius() * 0.75);
+    }
+
+    // Giga Sketch: text box frame and its 8 resize handles, plus the red
+    // overflow marker when the text doesn't fit.
+    if (KoPathShape *box = GigaTextBox::boxOf(shape)) {
+        {
+            KisHandlePainterHelper boxPainter =
+                KoShape::createHandlePainterHelperView(&gc, box, converter, handleRadius(), decorationThickness());
+            const QRectF rect = box->outlineRect();
+            boxPainter.setHandleStyle(KisHandleStyle::secondarySelection());
+            QPainterPath frame;
+            frame.addRect(rect);
+            boxPainter.drawPath(frame);
+            for (int h = 0; h < GigaTextBox::HandleCount; h++) {
+                const bool hot = (m_highlightItem == HighlightItem::BoxHandle && m_boxHandle == h)
+                        || (m_dragging == DragMode::BoxResize && m_boxHandle == h);
+                boxPainter.setHandleStyle(hot ? KisHandleStyle::highlightedPrimaryHandles()
+                                              : KisHandleStyle::primarySelection());
+                boxPainter.drawHandleRect(GigaTextBox::handleLocal(rect, h));
+            }
+        }
+        if (shape->gigaTextOverflows()) {
+            const QPointF corner = converter.documentToView(GigaTextBox::handleDocument(box, GigaTextBox::BottomRight));
+            const QRectF marker(corner + QPointF(7, 7), QSizeF(11, 11));
+            gc.save();
+            gc.setRenderHint(QPainter::Antialiasing, false);
+            gc.fillRect(marker, QColor(220, 40, 40));
+            gc.setPen(QPen(Qt::white, 1.5));
+            gc.drawLine(QPointF(marker.center().x(), marker.top() + 2.5), QPointF(marker.center().x(), marker.bottom() - 2.5));
+            gc.drawLine(QPointF(marker.left() + 2.5, marker.center().y()), QPointF(marker.right() - 2.5, marker.center().y()));
+            gc.restore();
+        }
     }
 
     m_textOutlineHelper->setDecorationThickness(decorationThickness());
@@ -885,6 +1002,19 @@ void SvgTextTool::mousePressEvent(KoPointerEvent *event)
             event->accept();
             KoToolManager::instance()->switchToolRequested("InteractionTool");
             return;
+        }
+
+        // Giga Sketch: drag a text box handle to resize the box.
+        if (m_highlightItem == HighlightItem::BoxHandle) {
+            KoPathShape *box = GigaTextBox::boxOf(selectedShape);
+            const int handle = gigaBoxHandleAt(event->point);
+            if (box && handle >= 0) {
+                m_boxHandle = handle;
+                m_interactionStrategy.reset(new GigaTextBoxResizeStrategy(this, selectedShape, box, handle, event->point));
+                m_dragging = DragMode::BoxResize;
+                event->accept();
+                return;
+            }
         }
 
         if (m_highlightItem == HighlightItem::TypeSettingHandle) {
@@ -1020,6 +1150,8 @@ void SvgTextTool::mouseMoveEvent(KoPointerEvent *event)
             } else {
                 useCursor(m_ibeam_vertical);
             }
+        } else if (m_dragging == DragMode::BoxResize) {
+            useCursor(m_boxHandleCursor);
         } else if (m_dragging != DragMode::InShapeOffset) {
             useCursor(Qt::ArrowCursor);
         }
@@ -1038,6 +1170,19 @@ void SvgTextTool::mouseMoveEvent(KoPointerEvent *event)
             if (handle != SvgTextCursor::NoHandle) {
                 cursor = m_textCursor.cursorTypeForTypeSetting();
                 m_highlightItem = HighlightItem::TypeSettingHandle;
+            }
+
+            // Giga Sketch: text box handles.
+            if (m_highlightItem == HighlightItem::None) {
+                const int handle = gigaBoxHandleAt(event->point);
+                if (handle >= 0) {
+                    KoPathShape *box = GigaTextBox::boxOf(selectedShape);
+                    const QPointF center = box->absoluteTransformation().map(box->outlineRect().center());
+                    m_highlightItem = HighlightItem::BoxHandle;
+                    m_boxHandle = handle;
+                    m_boxHandleCursor = QCursor(lineToCursor(QLineF(center, GigaTextBox::handleDocument(box, handle)), canvas()));
+                    cursor = m_boxHandleCursor;
+                }
             }
 
             if (m_highlightItem == HighlightItem::None) {
@@ -1112,6 +1257,12 @@ void SvgTextTool::mouseMoveEvent(KoPointerEvent *event)
             } else {
                 cursor = m_ibeam_vertical;
             }
+        }
+        if (m_highlightItem == HighlightItem::BoxHandle) {
+            // The handle wins over the padding edge and shape hover below it.
+            cursor = m_boxHandleCursor;
+            textAreasHovered = false;
+            m_hoveredShapeHighlightRect = QPainterPath();
         }
         m_textOutlineHelper->setTextAreasHovered(textAreasHovered);
         // Giga Sketch: with Ctrl held, a click-drag will move the text.

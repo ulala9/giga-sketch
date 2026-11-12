@@ -69,6 +69,8 @@ public:
     void deactivate() override;
 
     KisPopupWidgetInterface* popupWidget() override;
+    /// Giga Sketch: right-click menu (Convert to Point / Paragraph Text).
+    QMenu *popupActionsMenu() override;
 
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
     void inputMethodEvent(QInputMethodEvent *event) override;
@@ -100,6 +102,8 @@ protected:
 
     /// Giga Sketch: whether new texts get their own layer (tool option).
     bool newLayerPerText() const;
+    /// Giga Sketch: a drag creates a fixed-size text box (tool option).
+    bool boxText() const;
 
     /// Giga Sketch: node property holding the name we gave a text layer.
     /// If the layer still has that name, the user hasn't renamed it, so we
@@ -224,6 +228,7 @@ private:
         TextPathHandle,
         InShapeOffset,
         TypeSetting,
+        BoxResize, ///< Giga Sketch: dragging a text box handle
     };
     enum class HighlightItem {
         None = 0,
@@ -231,6 +236,7 @@ private:
         InlineSizeEndHandle,
         MoveBorder,
         TypeSettingHandle,
+        BoxHandle, ///< Giga Sketch: a text box resize handle
     };
 
     QScopedPointer<SvgTextToolOptionsManager>m_optionManager;
@@ -242,6 +248,14 @@ private:
     DragMode m_dragging {DragMode::None};
     std::unique_ptr<KoInteractionStrategy> m_interactionStrategy;
     HighlightItem m_highlightItem {HighlightItem::None};
+    int m_boxHandle {-1}; ///< Giga Sketch: hovered text box handle (GigaTextBox::Handle)
+    QCursor m_boxHandleCursor;
+    QPointer<QMenu> m_gigaContextMenu;
+    /// Giga Sketch: the text box handle under @p point, or -1.
+    int gigaBoxHandleAt(const QPointF &point) const;
+    /// Giga Sketch: Convert to Point Text / Convert to Paragraph Text.
+    void gigaConvertToPointText();
+    void gigaConvertToBoxText();
     bool m_strategyAddingCommand {false};
 
     QScopedPointer<KisSignalMapper> m_textTypeSignalsMapper;

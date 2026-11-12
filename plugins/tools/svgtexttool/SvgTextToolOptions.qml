@@ -188,6 +188,22 @@ Control {
             Layout.fillWidth: true;
         }
 
+        CheckBox {
+            id: chkBoxText;
+            text: i18nc("@option:check", "Drag Creates a Text Box");
+            checked: manager.optionsModel.boxText;
+            onCheckedChanged: {
+                manager.optionsModel.boxText = checked;
+            }
+            Kis.ToolTipBase {
+                parent: chkBoxText;
+                text: i18nc("@info:tooltip", "On: dragging draws a fixed-size box the text flows inside, with handles to resize it. Off: dragging only sets the line width.");
+                visible: parent.hovered;
+            }
+            hoverEnabled: true;
+            Layout.fillWidth: true;
+        }
+
         Kis.ToolSeparatorBase {
             orientation: Qt.Horizontal;
             Layout.fillWidth: true;

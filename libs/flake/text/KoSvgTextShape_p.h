@@ -126,6 +126,7 @@ struct CharacterResult {
     bool isHanging = false;
     bool textLengthApplied = false;
     bool overflowWrap = false;
+    bool gigaOverflow = false; ///< Giga Sketch: hidden because it didn't fit in the text box (shape-inside).
 
     qreal extraFontScaling = 1.0; ///< Freetype doesn't allow us to scale below 1pt, so we need to do an extra transformation in these cases.
     qreal fontHalfLeading; ///< Leading for both sides, can be either negative or positive.

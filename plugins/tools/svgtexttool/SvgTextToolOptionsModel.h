@@ -24,6 +24,7 @@ public:
     LAGER_QT_CURSOR(bool, useVisualBidiCursor);
     LAGER_QT_CURSOR(bool, pasteRichtTextByDefault);
     LAGER_QT_CURSOR(bool, newLayerPerText);
+    LAGER_QT_CURSOR(bool, boxText);
 
     void setConfigName(const QString &configName);
 

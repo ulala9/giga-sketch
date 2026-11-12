@@ -27,6 +27,7 @@ kis_add_tests(
     TestFontLibraryResourceUtils.cpp
     TestSvgTextShape.cpp
     TestGigaParagraphSpacing.cpp
+    TestGigaTextBox.cpp
     TestDependentShapes.cpp
 
     LINK_LIBRARIES kritaflake kritatestsdk
