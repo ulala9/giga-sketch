@@ -285,6 +285,8 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
     Use ChildPolished, not ChildAdded: at ChildAdded the child isn't constructed, so qobject_cast fails (this had broken
     the blue drop indicator). Remaining cost: theme swap (Krita's updateTheme reloads all icons, ~0.5-0.8 s) and the
     Studio menu rebuild (~0.1 s). setUpdatesEnabled(false) around the switch avoids partial redraws.
+  - "Same Theme in All Modes" (View > Interface Mode, `gigaOneTheme`, default on): applyModeTheme() does nothing and
+    leaving a mode doesn't overwrite its `gigaModeTheme<n>`; unticking re-applies the current mode's own theme.
   - Smoke-test gotcha: config's ResourceDirectory is absolute; point it at the temp HOME or the test waits on the running app's lock.
 
 ## Text boxes (feature/text-boxes → giga-main)

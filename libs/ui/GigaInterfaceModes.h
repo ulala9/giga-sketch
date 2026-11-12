@@ -83,6 +83,10 @@ private:
     QActionGroup *m_group {nullptr};
     QAction *m_modeActions[ModeCount] {};
     QAction *m_next {nullptr};
+    /// "Same Theme in All Modes": mode switches leave the theme alone
+    /// (switching is then much faster: no icon reload).
+    QAction *m_oneTheme {nullptr};
+    bool oneTheme() const;
     int m_mode {Studio};
 
     // Photoshop panels: Krita's own title bars, to put back afterwards.

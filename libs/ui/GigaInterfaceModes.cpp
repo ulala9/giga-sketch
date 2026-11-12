@@ -75,6 +75,16 @@ GigaInterfaceModes::GigaInterfaceModes(KisMainWindow *mainWindow)
         m_modeActions[mode] = action;
     }
     m_menu->addSeparator();
+    m_oneTheme = m_menu->addAction(i18nc("@action:inmenu", "Same Theme in All Modes"));
+    m_oneTheme->setCheckable(true);
+    m_oneTheme->setToolTip(i18nc("@info:tooltip", "Keep the current theme when switching modes. Switching is faster, "
+                                                  "because changing the theme reloads every icon."));
+    m_oneTheme->setChecked(KisConfig(true).readEntry<bool>("gigaOneTheme", true));
+    connect(m_oneTheme, &QAction::toggled, this, [this](bool on) {
+        KisConfig(false).writeEntry<bool>("gigaOneTheme", on);
+        if (!on && m_mode >= 0) applyModeTheme(m_mode); // back to this mode's own theme
+    });
+    m_menu->addSeparator();
     m_menu->addAction(m_next);
 
     m_procreate = new GigaProcreateMode(m_mainWindow, m_next);
@@ -211,7 +221,10 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
         if (!leaving.isEmpty()) {
             cfg.writeEntry<QByteArray>(stateKey(m_mode), leaving.toBase64());
         }
-        cfg.writeEntry<QString>(themeKey(m_mode), m_mainWindow->gigaCurrentThemeName());
+        if (!oneTheme()) {
+            // (With one theme for all, keep each mode's own choice for later.)
+            cfg.writeEntry<QString>(themeKey(m_mode), m_mainWindow->gigaCurrentThemeName());
+        }
         if (m_mode != Procreate) {
             cfg.writeEntry<bool>(statusBarKey(m_mode), cfg.showStatusBar());
         }
@@ -263,8 +276,14 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
     m_mainWindow->setUpdatesEnabled(true);
 }
 
+bool GigaInterfaceModes::oneTheme() const
+{
+    return m_oneTheme && m_oneTheme->isChecked();
+}
+
 void GigaInterfaceModes::applyModeTheme(int mode)
 {
+    if (oneTheme()) return; // the theme stays as the user set it
     // Studio keeps the classic Krita theme; the others use Giga Dark. Pick
     // another theme while in a mode and that mode remembers it.
     KisConfig cfg(true);
