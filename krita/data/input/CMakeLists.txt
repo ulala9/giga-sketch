@@ -3,6 +3,7 @@ install(FILES
     kritadefault.profile
     painttoolsaicompatible.profile
     photoshopcompatible.profile
+    gigasketch.profile
     DESTINATION  ${KDE_INSTALL_DATADIR}/krita/input
 )
 if (WIN32)

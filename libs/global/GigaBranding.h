@@ -69,7 +69,7 @@ inline QString defaultShortcutScheme() { return QStringLiteral("photoshop_compat
 
 /// Default canvas input profile (pan/zoom/rotate keys and mouse buttons),
 /// Krita's bundled Photoshop-compatible one.
-inline QString defaultInputProfile() { return QStringLiteral("Photoshop Compatible"); }
+inline QString defaultInputProfile() { return QStringLiteral("Giga Sketch"); }
 
 /// True for both the stock Krita name and ours. For upstream code that
 /// checks "are we running inside the real app (not a unit test)?".
