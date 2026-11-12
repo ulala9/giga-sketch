@@ -62,6 +62,10 @@
 #include "kis_icon_utils.h"
 #include "dialogs/GigaNewDocumentDialog.h"
 #include <QToolBar>
+#include <QGuiApplication>
+#include <QFrame>
+#include <QVBoxLayout>
+#include <QLabel>
 #include <krecentfilesaction.h>
 #include "krita_utils.h"
 #include <ktoggleaction.h>
@@ -710,6 +714,41 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     }
 }
 
+
+namespace {
+// Giga Sketch: a popup frame that hosts a docker's content while it is shown
+// as a flyout. When it hides (click outside, Esc), the content goes back to
+// its docker.
+class GigaPanelFlyout : public QFrame
+{
+public:
+    explicit GigaPanelFlyout(QWidget *parent)
+        : QFrame(parent, Qt::Popup)
+    {
+        setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
+        setAttribute(Qt::WA_DeleteOnClose);
+    }
+    std::function<void()> onHide;
+
+protected:
+    void hideEvent(QHideEvent *event) override
+    {
+        QFrame::hideEvent(event);
+        if (onHide) {
+            auto callback = onHide;
+            onHide = nullptr; // only once
+            callback();
+        }
+    }
+};
+
+// Panels that may shrink narrower than their widest row (content scrolls).
+const char *const GIGA_NARROW_PANELS[] = {
+    "KisLayerBox", "PresetDocker", "PaletteDocker", "History", "ChannelDocker",
+    "SpecificColorSelector", "WideGamutColorSelector",
+};
+}
+
 namespace {
 struct GigaPanelEntry {
     const char *dockId;
@@ -747,11 +786,135 @@ void KisMainWindow::createGigaPanelStrip()
         QDockWidget *dock = dockWidget(id);
         if (!dock) continue; // e.g. Tool Options docker when options are in the toolbar
         QAction *action = strip->addAction(KisIconUtils::loadIcon(entry.icon), dock->windowTitle());
-        action->setToolTip(dock->windowTitle());
-        connect(action, &QAction::triggered, this, [this, id]() { gigaTogglePanel(id); });
+        action->setToolTip(i18nc("@info:tooltip", "%1 (click: flyout, Shift+click: dock)", dock->windowTitle()));
+        connect(action, &QAction::triggered, this, [this, id, strip, action]() {
+            gigaTogglePanel(id, strip->widgetForAction(action));
+        });
     }
 
     addToolBar(Qt::RightToolBarArea, strip);
+
+    // Single-key panels, Photoshop-like (F6 already opens brush presets).
+    const QList<QPair<QString, QKeySequence>> panelKeys = {
+        {QStringLiteral("PresetDocker"), QKeySequence(Qt::Key_F5)},
+        {QStringLiteral("KisLayerBox"), QKeySequence(Qt::Key_F7)},
+        {QStringLiteral("WideGamutColorSelector"), QKeySequence(Qt::Key_F8)},
+    };
+    for (const auto &entry : panelKeys) {
+        QDockWidget *dock = dockWidget(entry.first);
+        if (!dock) continue;
+        QAction *key = new QAction(dock->windowTitle(), this);
+        key->setShortcut(entry.second);
+        key->setShortcutContext(Qt::WindowShortcut);
+        const QString id = entry.first;
+        connect(key, &QAction::triggered, this, [this, id]() { gigaTogglePanel(id); });
+        addAction(key);
+    }
+
+    // View > Compact Interface (on by default).
+    KisConfig cfg(true);
+    QAction *compact = new QAction(i18nc("@action:inmenu", "Compact Interface"), this);
+    compact->setCheckable(true);
+    compact->setChecked(cfg.readEntry<bool>("gigaCompactUi", true));
+    connect(compact, &QAction::toggled, this, [this](bool on) {
+        KisConfig(false).writeEntry<bool>("gigaCompactUi", on);
+        gigaApplyCompactMode(on);
+    });
+    actionCollection()->addAction(QStringLiteral("giga_compact_ui"), compact);
+    // The menus were already built from the menu file, so add it directly.
+    if (QMenu *viewMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("view"), this))) {
+        viewMenu->addSeparator();
+        viewMenu->addAction(compact);
+    }
+
+    gigaMakePanelsNarrowFriendly();
+    // Toolbars are created from the menu file after this; apply once ready.
+    QTimer::singleShot(0, this, [this]() {
+        gigaApplyCompactMode(KisConfig(true).readEntry<bool>("gigaCompactUi", true));
+    });
+}
+
+void KisMainWindow::gigaMakePanelsNarrowFriendly()
+{
+    // A docker can't be narrower than its content's minimum width (its
+    // widest row of controls). Putting the content in a scroll area lets the
+    // panel shrink; anything that doesn't fit scrolls instead.
+    for (const char *rawId : GIGA_NARROW_PANELS) {
+        QDockWidget *dock = dockWidget(QString::fromLatin1(rawId));
+        if (!dock) continue;
+        QWidget *content = dock->widget();
+        if (!content || qobject_cast<QScrollArea *>(content)) continue;
+
+        QScrollArea *scroll = new QScrollArea(dock);
+        scroll->setObjectName(QStringLiteral("GigaNarrowScroll"));
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        scroll->setMinimumWidth(120);
+        scroll->setWidget(content); // takes content out of the docker
+        dock->setWidget(scroll);
+    }
+}
+
+void KisMainWindow::gigaApplyCompactMode(bool compact)
+{
+    const int toolbarIcon = compact ? 16 : 22;
+    Q_FOREACH (QToolBar *bar, findChildren<QToolBar *>()) {
+        if (bar->objectName() == QLatin1String("GigaPanelStrip")) {
+            bar->setIconSize(QSize(compact ? 18 : 22, compact ? 18 : 22));
+        } else {
+            bar->setIconSize(QSize(toolbarIcon, toolbarIcon));
+        }
+    }
+    const int margin = compact ? 0 : 1;
+    for (auto it = d->dockWidgetsMap.constBegin(); it != d->dockWidgetsMap.constEnd(); ++it) {
+        QDockWidget *dock = it.value();
+        if (dock && dock->widget() && dock->widget()->layout()) {
+            dock->widget()->layout()->setContentsMargins(margin, margin, margin, margin);
+        }
+    }
+}
+
+void KisMainWindow::gigaShowPanelFlyout(const QString &dockId, QWidget *anchor)
+{
+    QDockWidget *dock = dockWidget(dockId);
+    if (!dock || !dock->widget()) return;
+
+    QWidget *content = dock->widget();
+    GigaPanelFlyout *flyout = new GigaPanelFlyout(this);
+    QVBoxLayout *layout = new QVBoxLayout(flyout);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(2);
+    QLabel *title = new QLabel(dock->windowTitle(), flyout);
+    QFont titleFont = title->font();
+    titleFont.setBold(true);
+    title->setFont(titleFont);
+    layout->addWidget(title);
+    layout->addWidget(content); // borrowed from the docker while the flyout is open
+    content->show();
+
+    KConfigGroup sizes = d->windowStateConfig.group("GigaFlyoutSizes");
+    flyout->resize(sizes.readEntry(dockId, QSize(340, 520)));
+
+    // Open to the left of the strip icon (popups may be positioned relative
+    // to their parent window even on Wayland).
+    QPoint pos = mapToGlobal(QPoint(width() - flyout->width() - 60, 80));
+    if (anchor) {
+        const QPoint anchorPos = anchor->mapToGlobal(QPoint(0, 0));
+        pos = QPoint(anchorPos.x() - flyout->width() - 4, anchorPos.y());
+    }
+    flyout->move(pos);
+
+    QPointer<QDockWidget> dockGuard = dock;
+    QPointer<QWidget> contentGuard = content;
+    flyout->onHide = [this, dockGuard, contentGuard, flyout, dockId]() {
+        d->windowStateConfig.group("GigaFlyoutSizes").writeEntry(dockId, flyout->size());
+        if (dockGuard && contentGuard) {
+            dockGuard->setWidget(contentGuard); // give it back to the docker
+        }
+    };
+    flyout->show();
 }
 
 bool KisMainWindow::eventFilter(QObject *watched, QEvent *event)
@@ -836,18 +999,21 @@ void KisMainWindow::gigaApplyWording()
     }
 }
 
-void KisMainWindow::gigaTogglePanel(const QString &dockId)
+void KisMainWindow::gigaTogglePanel(const QString &dockId, QWidget *anchor)
 {
     QDockWidget *dock = dockWidget(dockId);
     if (!dock) return;
-    // Visible and actually on screen (not hidden behind another tab): hide it.
-    // Otherwise show it and bring its tab to the front.
+    // Docked and on screen: hide it. Shift: dock it (show + bring to front).
+    // Otherwise: open it as a flyout over the canvas, like Photoshop's
+    // collapsed panels and Procreate's popovers.
     const bool onScreen = dock->isVisible() && !dock->visibleRegion().isEmpty();
     if (onScreen) {
         dock->hide();
-    } else {
+    } else if (QGuiApplication::keyboardModifiers().testFlag(Qt::ShiftModifier) || dock->isVisible()) {
         dock->show();
         dock->raise();
+    } else {
+        gigaShowPanelFlyout(dockId, anchor);
     }
 }
 

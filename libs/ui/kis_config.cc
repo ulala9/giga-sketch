@@ -1812,7 +1812,8 @@ void KisConfig::setShowStatusBar(const bool value) const
 
 bool KisConfig::hideMenuFullscreen(bool defaultValue) const
 {
-    return (defaultValue ? true: m_cfg.readEntry("hideMenuFullScreen", true));
+    // Giga Sketch: Tab keeps the menu bar (Photoshop's Tab hides panels only).
+    return (defaultValue ? false: m_cfg.readEntry("hideMenuFullScreen", false));
 }
 
 void KisConfig::setHideMenuFullscreen(const bool value) const
@@ -1832,7 +1833,7 @@ void KisConfig::setHideScrollbarsFullscreen(const bool value) const
 
 bool KisConfig::hideStatusbarFullscreen(bool defaultValue) const
 {
-    return (defaultValue ? true: m_cfg.readEntry("hideStatusbarFullScreen", true));
+    return (defaultValue ? false: m_cfg.readEntry("hideStatusbarFullScreen", false));
 }
 
 void KisConfig::setHideStatusbarFullscreen(const bool value) const
@@ -1842,7 +1843,7 @@ void KisConfig::setHideStatusbarFullscreen(const bool value) const
 
 bool KisConfig::hideTitlebarFullscreen(bool defaultValue) const
 {
-    return (defaultValue ? true : m_cfg.readEntry("hideTitleBarFullscreen", true));
+    return (defaultValue ? false : m_cfg.readEntry("hideTitleBarFullscreen", false));
 }
 
 void KisConfig::setHideTitlebarFullscreen(const bool value) const

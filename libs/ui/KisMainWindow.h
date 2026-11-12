@@ -449,7 +449,14 @@ protected:
     /// Giga Sketch: watches the document tab bar for "drag a tab out".
     bool eventFilter(QObject *watched, QEvent *event) override;
 private:
-    void gigaTogglePanel(const QString &dockId);
+    void gigaTogglePanel(const QString &dockId, QWidget *anchor = nullptr);
+    /// Giga Sketch: show a hidden panel as a flyout over the canvas (a
+    /// popup next to its strip icon); it closes when you click elsewhere.
+    void gigaShowPanelFlyout(const QString &dockId, QWidget *anchor);
+    /// Giga Sketch: let key panels shrink narrower (content scrolls).
+    void gigaMakePanelsNarrowFriendly();
+    /// Giga Sketch: compact interface (smaller toolbar icons, tighter panels).
+    void gigaApplyCompactMode(bool compact);
     void gigaToggleCollapseAll();
 public Q_SLOTS:
 
