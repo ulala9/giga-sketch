@@ -274,6 +274,11 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   - Upstream bug guarded: KisShadeSelectorLine::resizeEvent divided by old width 0 (SIGFPE) when a layout floats the
     Advanced Color Selector.
   - Status bar per mode: `gigaModeStatusBar<n>` (Studio off, Photoshop on), also sets KisConfig showStatusBar + the showStatusBar action (Krita re-applies that on document open).
+  - Welcome page (no document): Krita hides all panels and never saves the layout there (`saveWindowState`,
+    `adjustLayoutForWelcomePage`). `KisMainWindow::gigaShowingWelcomePage()`; on the Welcome page switchTo() works with
+    the SAVED layouts (leaving mode <- [MainWindow] State; entering mode -> written to [MainWindow] State, applied when a
+    document opens) and only records MenuBar/StatusBar. Before this fix the startup sync saved the hidden-panel layout
+    over the user's real one ("layout resets after restart").
   - Smoke-test gotcha: config's ResourceDirectory is absolute; point it at the temp HOME or the test waits on the running app's lock.
 
 ## Text boxes (feature/text-boxes → giga-main)

@@ -12,6 +12,7 @@
 #include <QMenuBar>
 #include <QPainter>
 #include <QRubberBand>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QTabWidget>
@@ -115,13 +116,18 @@ void GigaInterfaceModes::showStandardBars(int mode)
     // when a document opens), so set that and the menu check mark as well.
     const bool statusBarOn = KisConfig(true).readEntry<bool>(statusBarKey(mode), mode == Photoshop);
     KisConfig(false).setShowStatusBar(statusBarOn);
-    m_mainWindow->statusBar()->setVisible(statusBarOn);
+    // (The Welcome page keeps its bars hidden; they come back with a document.)
+    const bool welcome = m_mainWindow->gigaShowingWelcomePage();
+    if (!welcome) m_mainWindow->statusBar()->setVisible(statusBarOn);
     if (KisViewManager *viewManager = m_mainWindow->viewManager()) {
         if (QAction *toggle = viewManager->actionManager()->actionByName(QStringLiteral("showStatusBar"))) {
+            // On the Welcome page only update the check mark (toggling would show the bar).
+            QSignalBlocker blocker(welcome ? toggle : nullptr);
             toggle->setChecked(statusBarOn);
         }
     }
     // The options bar is the toolbar that holds the brush/tool controls.
+    if (welcome) return;
     Q_FOREACH (QToolBar *bar, m_mainWindow->findChildren<QToolBar *>()) {
         if (bar->objectName() == QLatin1String("BrushesAndStuff")) bar->show();
     }
@@ -184,10 +190,20 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
         return;
     }
     KisConfig cfg(false);
+    // On the Welcome page Krita hides every panel, so what's on screen is not
+    // the real layout. Then work with the saved layouts instead: the one in
+    // [MainWindow] State is applied when a document opens.
+    const bool welcome = m_mainWindow->gigaShowingWelcomePage();
+    KConfigGroup windowConfig = KSharedConfig::openConfig()->group(QStringLiteral("MainWindow"));
 
     // 1. Remember the layout and theme of the mode we're leaving.
     if (!atStartup && m_mode >= 0) {
-        cfg.writeEntry<QByteArray>(stateKey(m_mode), m_mainWindow->saveState().toBase64());
+        const QByteArray leaving = welcome
+            ? QByteArray::fromBase64(windowConfig.readEntry("State", QByteArray()))
+            : m_mainWindow->saveState();
+        if (!leaving.isEmpty()) {
+            cfg.writeEntry<QByteArray>(stateKey(m_mode), leaving.toBase64());
+        }
         cfg.writeEntry<QString>(themeKey(m_mode), m_mainWindow->gigaCurrentThemeName());
         if (m_mode != Procreate) {
             cfg.writeEntry<bool>(statusBarKey(m_mode), cfg.showStatusBar());
@@ -207,7 +223,11 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
         m_procreate->setActive(true);
     } else {
         if (mode == Photoshop) setPhotoshopPanels(true);
-        if (!saved.isEmpty()) {
+        if (welcome) {
+            // Don't bring panels onto the Welcome page; hand the layout to
+            // Krita to apply when a document opens.
+            if (!saved.isEmpty()) windowConfig.writeEntry("State", saved.toBase64());
+        } else if (!saved.isEmpty()) {
             m_mainWindow->restoreState(saved);
         } else if (mode == Photoshop && !atStartup) {
             m_mainWindow->applyGigaLayout(); // first visit: start from the Photoshop-like arrangement
@@ -215,8 +235,19 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
         m_procreate->hideBars(); // a restored layout may not know about them
         showStandardBars(mode);
     }
+    if (welcome && mode == Procreate && !saved.isEmpty()) {
+        windowConfig.writeEntry("State", saved.toBase64()); // Procreate's own (panel-free) layout
+    }
     applyModeTheme(mode);
-    syncSavedWindowSettings();
+    if (!welcome) {
+        syncSavedWindowSettings();
+    } else {
+        // Never save the Welcome page's hidden panels, but do record which
+        // bars this mode shows, for when a document opens.
+        const bool barsOn = mode != Procreate;
+        windowConfig.writeEntry("MenuBar", barsOn ? "Enabled" : "Disabled");
+        windowConfig.writeEntry("StatusBar", (barsOn && cfg.showStatusBar()) ? "Enabled" : "Disabled");
+    }
     if (!atStartup) showModeMessage(mode);
 
     m_mode = mode;

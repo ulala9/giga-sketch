@@ -904,6 +904,11 @@ void KisMainWindow::gigaSetClassicInterface(bool classic)
     }
 }
 
+bool KisMainWindow::gigaShowingWelcomePage() const
+{
+    return d->widgetStack && d->widgetStack->currentIndex() == 0; // same test as saveWindowState()
+}
+
 QString KisMainWindow::gigaCurrentThemeName() const
 {
 #ifndef Q_OS_HAIKU

@@ -446,6 +446,9 @@ public:
      */
     void gigaSetClassicInterface(bool classic);
     QString gigaCurrentThemeName() const;
+    /// Giga Sketch: the Welcome page is showing (no document). Krita hides
+    /// the panels then, so the on-screen layout must not be saved.
+    bool gigaShowingWelcomePage() const;
     void gigaSetTheme(const QString &name);
 
 private:
