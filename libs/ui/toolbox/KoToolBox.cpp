@@ -24,6 +24,8 @@
 #include <QMenu>
 #include <QAction>
 #include <QScreen>
+#include <QContextMenuEvent>
+#include <algorithm>
 
 #include <klocalizedstring.h>
 #include <WidgetsDebug.h>
@@ -37,6 +39,59 @@
 #include <KoShapeLayer.h>
 
 #define BUTTON_MARGIN 10
+
+// Giga Sketch: Photoshop-style tool groups. Each group shows one button (the
+// last tool used from it); press-and-hold or right-click lists the others.
+// Groups live in four sections, so separators fall between tool families.
+// Tools not listed here keep Krita's normal placement, so none can vanish.
+struct GigaToolGroup {
+    const char *key;
+    const char *section;
+    QStringList toolIds;
+};
+
+static const QList<GigaToolGroup> &gigaToolGroups()
+{
+    static const QList<GigaToolGroup> groups = {
+        // Move, select, crop, sample
+        {"move",    "giga-1-select", {"KritaTransform/KisToolMove", "KisToolTransform"}},
+        {"marquee", "giga-1-select", {"KisToolSelectRectangular", "KisToolSelectElliptical"}},
+        {"lasso",   "giga-1-select", {"KisToolSelectOutline", "KisToolSelectPolygonal", "KisToolSelectMagnetic", "KisToolSelectPath"}},
+        {"wand",    "giga-1-select", {"KisToolSelectContiguous", "KisToolSelectSimilar"}},
+        {"crop",    "giga-1-select", {"KisToolCrop"}},
+        {"sample",  "giga-1-select", {"KritaSelected/KisToolColorSampler", "KritaShape/KisToolMeasure", "KisAssistantTool", "ToolReferenceImages"}},
+        // Paint, retouch, fill
+        {"brush",   "giga-2-paint",  {"KritaShape/KisToolBrush", "KritaShape/KisToolMultiBrush", "KritaShape/KisToolDyna", "KarbonCalligraphyTool"}},
+        {"heal",    "giga-2-paint",  {"KritaShape/KisToolSmartPatch"}},
+        {"fill",    "giga-2-paint",  {"KritaFill/KisToolGradient", "KritaFill/KisToolFill", "KisToolEncloseAndFill", "KritaShape/KisToolLazyBrush"}},
+        // Vector, text, shapes
+        {"pen",     "giga-3-vector", {"KisToolPath", "KisToolPencil", "PathTool"}},
+        {"type",    "giga-3-vector", {"SvgTextTool"}},
+        {"select-shapes", "giga-3-vector", {"InteractionTool", "KritaShape/KisToolKnife"}},
+        {"shapes",  "giga-3-vector", {"KritaShape/KisToolRectangle", "KritaShape/KisToolEllipse", "KisToolPolygon", "KisToolPolyline", "KritaShape/KisToolLine"}},
+        // View
+        {"hand",    "giga-4-view",   {"PanTool"}},
+        {"zoom",    "giga-4-view",   {"ZoomTool"}},
+    };
+    return groups;
+}
+
+// Finds a tool's group: returns the group index (or -1) and its position.
+static int gigaGroupOf(const QString &toolId, int *position = nullptr)
+{
+    const QList<GigaToolGroup> &groups = gigaToolGroups();
+    for (int g = 0; g < groups.size(); g++) {
+        const int pos = groups[g].toolIds.indexOf(toolId);
+        if (pos >= 0) {
+            if (position) *position = pos;
+            return g;
+        }
+    }
+    return -1;
+}
+
+static const char *GIGA_GROUPED_KEY = "gigaGroupedTools";
+static QString gigaLastToolKey(const char *groupKey) { return QStringLiteral("gigaGroupLast_") + QLatin1String(groupKey); }
 
 static int buttonSize(int screen)
 {
@@ -75,6 +130,12 @@ public:
     QMap<QAction*,int> contextIconSizes;
     QAction *defaultIconSizeAction {0};
     Qt::Orientation orientation {Qt::Vertical};
+
+    // Giga Sketch tool groups
+    bool gigaGrouped {true};
+    QHash<int, QList<KoToolBoxButton*>> gigaMembers; ///< group index -> buttons, in table order
+    QHash<int, QMenu*> gigaMenus;                    ///< group index -> its popup menu
+    QHash<QToolButton*, bool> codeVisible;           ///< visibility decided by setButtonsVisible()
 };
 
 void KoToolBox::Private::addSection(Section *section, const QString &name)
@@ -88,6 +149,19 @@ KoToolBox::KoToolBox()
     : d(new Private)
 {
     d->layout = new KoToolBoxLayout(this);
+
+    // Giga Sketch: grouped tools come first, in four family sections.
+    d->gigaGrouped = KSharedConfig::openConfig()->group("KoToolBox").readEntry(GIGA_GROUPED_KEY, true);
+    if (d->gigaGrouped) {
+        QStringList sectionNames;
+        Q_FOREACH (const GigaToolGroup &group, gigaToolGroups()) {
+            if (!sectionNames.contains(QLatin1String(group.section))) sectionNames << QLatin1String(group.section);
+        }
+        Q_FOREACH (const QString &name, sectionNames) {
+            d->addSection(new Section(this), name);
+        }
+    }
+
     // add defaults
     d->addSection(new Section(this), "main");
     d->addSection(new Section(this), "dynamic");
@@ -171,12 +245,57 @@ void KoToolBox::addButton(KoToolAction *toolAction)
         sectionToBeAddedTo = section;
     }
 
+    int priority = toolAction->priority();
+
+    // Giga Sketch: grouped tools go to their family section, in a fixed slot
+    // per group (group index * 100 + position), so a group's button never
+    // moves when you switch tools inside it.
+    int gigaPosition = 0;
+    const int gigaGroup = d->gigaGrouped ? gigaGroupOf(toolAction->id(), &gigaPosition) : -1;
+    if (gigaGroup >= 0) {
+        sectionToBeAddedTo = QLatin1String(gigaToolGroups()[gigaGroup].section);
+        priority = gigaGroup * 100 + gigaPosition;
+
+        QList<KoToolBoxButton*> &members = d->gigaMembers[gigaGroup];
+        members << button;
+        std::sort(members.begin(), members.end(), [](KoToolBoxButton *a, KoToolBoxButton *b) {
+            int pa = 0, pb = 0;
+            gigaGroupOf(a->toolAction()->id(), &pa);
+            gigaGroupOf(b->toolAction()->id(), &pb);
+            return pa < pb;
+        });
+
+        // (Re)build the group's menu: one entry per tool in the group.
+        QMenu *menu = d->gigaMenus.value(gigaGroup);
+        if (!menu) {
+            menu = new QMenu(this);
+            d->gigaMenus.insert(gigaGroup, menu);
+        }
+        menu->clear();
+        Q_FOREACH (KoToolBoxButton *member, members) {
+            KoToolAction *memberAction = member->toolAction();
+            QAction *entry = menu->addAction(member->icon(), memberAction->iconText());
+            entry->setToolTip(memberAction->toolTip());
+            connect(entry, SIGNAL(triggered()), memberAction, SLOT(trigger()));
+        }
+        const bool hasOthers = members.size() > 1;
+        Q_FOREACH (KoToolBoxButton *member, members) {
+            member->setGroupIndicator(hasOthers);
+            if (hasOthers) {
+                // Click = use this tool; press and hold = group menu.
+                member->setMenu(menu);
+                member->setPopupMode(QToolButton::DelayedPopup);
+                member->installEventFilter(this);
+            }
+        }
+    }
+
     Section *sectionWidget = d->sections.value(sectionToBeAddedTo);
     if (sectionWidget == 0) {
         sectionWidget = new Section(this);
         d->addSection(sectionWidget, sectionToBeAddedTo);
     }
-    sectionWidget->addButton(button, toolAction->priority());
+    sectionWidget->addButton(button, priority);
 
     d->buttonGroup->addButton(button);
     d->buttonsByToolId.insert(toolAction->id(), button);
@@ -189,6 +308,20 @@ void KoToolBox::setActiveTool(KoCanvasController *canvas)
     Q_UNUSED(canvas);
 
     QString id = KoToolManager::instance()->activeToolId();
+
+    // Giga Sketch: the active tool becomes its group's visible button.
+    if (d->gigaGrouped) {
+        const int group = gigaGroupOf(id);
+        if (group >= 0) {
+            KConfigGroup cfg = KSharedConfig::openConfig()->group("KoToolBox");
+            const QString key = gigaLastToolKey(gigaToolGroups()[group].key);
+            if (cfg.readEntry(key, QString()) != id) {
+                cfg.writeEntry(key, id);
+            }
+            gigaApplyGroups();
+        }
+    }
+
     KoToolBoxButton *button = d->buttonsByToolId.value(id);
     if (button) {
         button->setChecked(true);
@@ -224,8 +357,50 @@ void KoToolBox::setButtonsVisible(const QList<QString> &codes)
             button->setVisible( codes.contains(code) );
         }
     }
+    // Giga Sketch: remember what Krita decided, then hide the non-current
+    // members of each tool group.
+    Q_FOREACH (QToolButton *button, d->visibilityCodes.keys()) {
+        d->codeVisible.insert(button, !button->isHidden());
+    }
+    gigaApplyGroups();
+
     layout()->invalidate();
     update();
+}
+
+void KoToolBox::gigaApplyGroups()
+{
+    if (!d->gigaGrouped) return;
+    KConfigGroup cfg = KSharedConfig::openConfig()->group("KoToolBox");
+
+    for (auto it = d->gigaMembers.constBegin(); it != d->gigaMembers.constEnd(); ++it) {
+        const QList<KoToolBoxButton*> &members = it.value();
+        if (members.isEmpty()) continue;
+
+        const QString lastId = cfg.readEntry(gigaLastToolKey(gigaToolGroups()[it.key()].key), QString());
+        KoToolBoxButton *shown = members.first();
+        Q_FOREACH (KoToolBoxButton *member, members) {
+            if (member->toolAction()->id() == lastId) shown = member;
+        }
+        Q_FOREACH (KoToolBoxButton *member, members) {
+            member->setVisible(member == shown && d->codeVisible.value(member, true));
+        }
+    }
+    layout()->invalidate();
+    update();
+}
+
+bool KoToolBox::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::ContextMenu) {
+        KoToolBoxButton *button = qobject_cast<KoToolBoxButton*>(watched);
+        if (button && button->menu()) {
+            QContextMenuEvent *contextEvent = static_cast<QContextMenuEvent*>(event);
+            button->menu()->exec(contextEvent->globalPos());
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void KoToolBox::setCurrentLayer(const KoCanvasController *canvas, const KoShapeLayer *layer)
@@ -361,6 +536,15 @@ void KoToolBox::setupIconSizeMenu(QMenu *menu)
                 action->setChecked(true);
             }
         }
+
+        // Giga Sketch: switch between grouped (Photoshop-style) and flat tools.
+        menu->addSeparator();
+        QAction *grouped = menu->addAction(i18nc("@item:inmenu", "Group Related Tools (restart to apply)"));
+        grouped->setCheckable(true);
+        grouped->setChecked(d->gigaGrouped);
+        connect(grouped, &QAction::toggled, this, [](bool on) {
+            KSharedConfig::openConfig()->group("KoToolBox").writeEntry(GIGA_GROUPED_KEY, on);
+        });
     }
 }
 

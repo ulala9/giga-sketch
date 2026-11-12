@@ -93,9 +93,14 @@ private Q_SLOTS:
 protected:
     void paintEvent(QPaintEvent *event) override;
     void changeEvent(QEvent *event) override;
+    /// Giga Sketch: right-click on a grouped tool opens its group menu.
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void setupIconSizeMenu(QMenu *menu);
+
+    /// Giga Sketch: show one button per tool group (its last-used tool).
+    void gigaApplyGroups();
 
     friend class KoToolBoxDocker;
 
