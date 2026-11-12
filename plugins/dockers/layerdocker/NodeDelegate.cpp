@@ -481,6 +481,25 @@ QList<OptionalProperty> NodeDelegate::Private::rightmostProperties(const KisBase
         }
     }
 
+    // Giga Sketch: clean, Photoshop-like rows. Show only properties that are
+    // switched on (a lock, inherit alpha, layer style...) and warnings, not a
+    // row of greyed-out toggles on every layer. Turn off with the config key
+    // gigaCleanLayerRows=false to get Krita's full icon row back.
+    static const bool cleanRows = KisConfig(true).readEntry<bool>("gigaCleanLayerRows", true);
+    if (cleanRows) {
+        QList<OptionalProperty> shown;
+        Q_FOREACH (OptionalProperty prop, prependList + list) {
+            if (!prop) continue;
+            const bool isWarning = prop->id == KisLayerPropertiesIcons::layerError.id()
+                || prop->id == KisLayerPropertiesIcons::layerColorSpaceMismatch.id()
+                || prop->id == KisLayerPropertiesIcons::colorOverlay.id();
+            if (isWarning || prop->state.toBool()) {
+                shown << prop;
+            }
+        }
+        return shown;
+    }
+
     return prependList + list;
 }
 

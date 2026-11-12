@@ -36,6 +36,7 @@
 
 #include "kritalayerdocker_export.h"
 
+class QToolButton;
 class QModelIndex;
 
 typedef QList<QModelIndex> QModelIndexList;
@@ -153,6 +154,14 @@ private:
 private:
 
     QPointer<KisCanvas2> m_canvas;
+
+    // Giga Sketch: Photoshop-style Layers panel (lock row, button order).
+    void gigaSetupPanel();
+    void gigaUpdateLockButtons();
+    void gigaTriggerAction(const QString &actionName);
+    QToolButton *m_gigaLockAlpha {nullptr};
+    QToolButton *m_gigaLockInherit {nullptr};
+    QToolButton *m_gigaLockAll {nullptr};
     QScopedPointer<KisSelectionActionsAdapter> m_selectionActionsAdapter;
     QMenu *m_newLayerMenu;
     QMenu *m_opLayerMenu;

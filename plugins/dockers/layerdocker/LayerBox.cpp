@@ -29,6 +29,11 @@
 #include <QBitmap>
 #include <QList>
 #include <QMenu>
+#include <QLabel>
+#include <QTimer>
+#include <QToolButton>
+#include <kis_icon_utils.h>
+#include <kis_layer_properties_icons.h>
 #include <QWidgetAction>
 #include <QProxyStyle>
 #include <QStyleFactory>
@@ -225,6 +230,8 @@ LayerBox::LayerBox()
     m_opLayerMenu = new QMenu(this);
     m_wdgLayerBox->bnProperties->setMenu(m_opLayerMenu);
     m_wdgLayerBox->bnProperties->setPopupMode(QToolButton::MenuButtonPopup);
+
+    gigaSetupPanel();
 
     m_nodeModel = new KisNodeModel(this, 2);
     m_filteringModel = new KisNodeFilterProxyModel(this);
@@ -673,6 +680,108 @@ void LayerBox::notifyImageDeleted()
     setCanvas(0);
 }
 
+void LayerBox::gigaTriggerAction(const QString &actionName)
+{
+    if (!m_canvas || !m_canvas->viewManager()) return;
+    if (KisAction *action = m_canvas->viewManager()->actionManager()->actionByName(actionName)) {
+        action->trigger(); // Krita's own actions: undoable, same as the menus
+    }
+}
+
+void LayerBox::gigaSetupPanel()
+{
+    auto makeButton = [this](const char *icon, const QString &tip, const QString &actionName, bool checkable = false) {
+        QToolButton *button = new QToolButton(m_wdgLayerBox->bnAdd->parentWidget());
+        button->setAutoRaise(true);
+        button->setIconSize(QSize(22, 22));
+        button->setIcon(KisIconUtils::loadIcon(icon));
+        button->setToolTip(tip);
+        button->setCheckable(checkable);
+        connect(button, &QToolButton::clicked, this, [this, actionName]() {
+            gigaTriggerAction(actionName);
+            // The action toggles the layer property; re-read the real state.
+            QTimer::singleShot(0, this, [this]() { gigaUpdateLockButtons(); });
+        });
+        return button;
+    };
+
+    // --- Lock row under blend mode / opacity, like Photoshop's "Lock:" ---
+    QHBoxLayout *lockRow = new QHBoxLayout();
+    lockRow->setContentsMargins(0, 0, 0, 0);
+    lockRow->setSpacing(2);
+    lockRow->addWidget(new QLabel(i18nc("@label Layers panel lock row", "Lock:"), m_wdgLayerBox->bnAdd->parentWidget()));
+    m_gigaLockAlpha = makeButton("transparency-locked", i18nc("@info:tooltip", "Lock transparent pixels (paint only where the layer already has paint)"), "toggle_layer_alpha_lock", true);
+    m_gigaLockInherit = makeButton("transparency-disabled", i18nc("@info:tooltip", "Clip to the layers below (inherit alpha)"), "toggle_layer_inherit_alpha", true);
+    m_gigaLockAll = makeButton("layer-locked", i18nc("@info:tooltip", "Lock all (no edits to this layer)"), "toggle_layer_lock", true);
+    lockRow->addWidget(m_gigaLockAlpha);
+    lockRow->addWidget(m_gigaLockInherit);
+    lockRow->addWidget(m_gigaLockAll);
+    lockRow->addStretch(1);
+    // verticalLayout: [blend mode row][opacity row][layer list][buttons]
+    m_wdgLayerBox->verticalLayout->insertLayout(2, lockRow);
+
+    // --- Bottom row in Photoshop's order, right-aligned ---
+    // Raise/Lower: drag in the list. Duplicate: Ctrl+J. Properties: double-click.
+    m_wdgLayerBox->bnDuplicate->hide();
+    m_wdgLayerBox->bnLower->hide();
+    m_wdgLayerBox->bnRaise->hide();
+    m_wdgLayerBox->bnProperties->hide();
+
+    QHBoxLayout *row = m_wdgLayerBox->hbox1;
+    row->removeWidget(m_wdgLayerBox->bnAdd);
+    row->removeWidget(m_wdgLayerBox->bnDelete);
+
+    row->addWidget(makeButton("layer-style-enabled", i18nc("@info:tooltip", "Layer style (fx)"), "layer_style"));
+    row->addWidget(makeButton("convert-to-transparencyMask", i18nc("@info:tooltip", "Add layer mask"), "add_new_transparency_mask"));
+
+    QToolButton *fillAdjust = new QToolButton(m_wdgLayerBox->bnAdd->parentWidget());
+    fillAdjust->setAutoRaise(true);
+    fillAdjust->setIconSize(QSize(22, 22));
+    fillAdjust->setIcon(KisIconUtils::loadIcon("fillLayer"));
+    fillAdjust->setToolTip(i18nc("@info:tooltip", "New fill or adjustment layer"));
+    fillAdjust->setPopupMode(QToolButton::InstantPopup);
+    QMenu *fillMenu = new QMenu(fillAdjust);
+    connect(fillMenu->addAction(KisIconUtils::loadIcon("fillLayer"), i18nc("@action:inmenu", "Fill Layer...")),
+            &QAction::triggered, this, [this]() { gigaTriggerAction("add_new_fill_layer"); });
+    connect(fillMenu->addAction(KisIconUtils::loadIcon("filterLayer"), i18nc("@action:inmenu", "Adjustment Layer...")),
+            &QAction::triggered, this, [this]() { gigaTriggerAction("add_new_adjustment_layer"); });
+    fillAdjust->setMenu(fillMenu);
+    row->addWidget(fillAdjust);
+
+    row->addWidget(makeButton("groupLayer", i18nc("@info:tooltip", "Group the selected layers"), "create_quick_group"));
+    row->addWidget(m_wdgLayerBox->bnAdd);
+    row->addWidget(m_wdgLayerBox->bnDelete);
+
+    gigaUpdateLockButtons();
+}
+
+void LayerBox::gigaUpdateLockButtons()
+{
+    if (!m_gigaLockAlpha) return;
+    KisNodeSP node = m_nodeManager ? m_nodeManager->activeNode() : KisNodeSP();
+
+    auto stateOf = [&node](const QString &id, bool *available) {
+        *available = false;
+        if (!node) return false;
+        Q_FOREACH (const KisBaseNode::Property &prop, node->sectionModelProperties()) {
+            if (prop.id == id) {
+                *available = true;
+                return prop.state.toBool();
+            }
+        }
+        return false;
+    };
+    auto sync = [&stateOf](QToolButton *button, const QString &id) {
+        bool available = false;
+        const bool on = stateOf(id, &available);
+        button->setEnabled(available);
+        button->setChecked(on);
+    };
+    sync(m_gigaLockAlpha, KisLayerPropertiesIcons::alphaLocked.id());
+    sync(m_gigaLockInherit, KisLayerPropertiesIcons::inheritAlpha.id());
+    sync(m_gigaLockAll, KisLayerPropertiesIcons::locked.id());
+}
+
 void LayerBox::updateUI()
 {
     if (!m_canvas) return;
@@ -698,6 +807,7 @@ void LayerBox::updateUI()
                     this, SLOT(slotUpdateOpacitySlider(quint8)));
         }
     }
+    gigaUpdateLockButtons();
 
     m_wdgLayerBox->bnRaise->setEnabled(activeNode && activeNode->isEditable(false) && (activeNode->nextSibling()
                                                                                        || (activeNode->parent() && activeNode->parent() != m_image->root())));
