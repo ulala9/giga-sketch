@@ -85,6 +85,7 @@ set(kritaui_LIB_SRCS
     GigaProcreateMode.cpp
     GigaProcreateWidgets.cpp
     GigaInterfaceModes.cpp
+    GigaSaveDated.cpp
     GigaPanelTitleBar.cpp
 
     flake/kis_node_dummies_graph.cpp

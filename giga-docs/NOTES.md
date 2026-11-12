@@ -333,3 +333,15 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   applyGigaLayout puts them in the Tool Options/Presets group.
 - Not supported by the engine (no property): character scale, hyphenation.
 - Tests: tests/GigaTextPanelsTest (9) uses KisCanvasResourceProvider(nullptr) + a bare KoCanvasResourceProvider.
+
+## Save Dated JPG (feature/save-dated-jpg → giga-main)
+- Built-in replacement for the user's PyQt5 "Save Dated JPG" Python docker (PyQt5 isn't available in this Qt6 build).
+- `libs/ui/GigaSaveDated.{h,cpp}`: `nextDatedPath()` (yyyy-MM-dd.jpg, then _v2, _v3...) and `saveDatedJpg()`: folder =
+  the .kra's folder; never-saved image asks once (`gigaSaveDatedFolder`). Export via KisDocument::exportDocument (async,
+  like File > Export) with the last-used image/jpeg config at quality 90.
+- GOTCHA: KisImportExportManager::askUserAboutExportConfiguration opens the JPEG options dialog unless the document is
+  in file batch mode. Set `setFileBatchMode(true)` only around the exportDocument() call (read synchronously at start).
+- Action `giga_save_dated_jpg` is defined in `krita/gigasketch.action` (installed with Krita's .action files) so it
+  appears in Configure Shortcuts and keeps custom shortcuts; created via actionManager->createAction();
+  `KisMainWindow::gigaAddFileMenuItems()` inserts it after file_save_as (also after menu rebuilds).
+- Test: libs/ui/tests/TestGigaSaveDated.

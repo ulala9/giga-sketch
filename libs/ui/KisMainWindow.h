@@ -480,6 +480,8 @@ private:
     /// Giga Sketch: put our items (Compact Interface, Interface Mode) in the
     /// View menu; needed again whenever the menus are rebuilt.
     void gigaAddViewMenuItems();
+    /// Giga Sketch: File > Save Dated JPG, placed right after Save As.
+    void gigaAddFileMenuItems();
     void gigaToggleCollapseAll();
 public Q_SLOTS:
 

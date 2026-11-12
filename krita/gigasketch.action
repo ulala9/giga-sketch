@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Giga Sketch actions. Defined here (not in Krita's own .action files) so
+     they show up in Settings > Configure Shortcuts and keep custom shortcuts. -->
+<ActionCollection version="2" name="Giga Sketch">
+  <Actions category="File">
+    <text>File</text>
+    <Action name="giga_save_dated_jpg">
+      <icon>document-export</icon>
+      <text>Save Dated JPG</text>
+      <whatsThis>Save a flattened JPG copy named after today's date (e.g. 2026-11-12.jpg, then _v2, _v3...) next to the document.</whatsThis>
+      <toolTip>Save a JPG copy named after today's date next to the document</toolTip>
+      <iconText>Save Dated JPG</iconText>
+      <activationFlags>1</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+  </Actions>
+</ActionCollection>

@@ -62,6 +62,7 @@
 #include "kis_icon_utils.h"
 #include "dialogs/GigaNewDocumentDialog.h"
 #include "GigaInterfaceModes.h"
+#include "GigaSaveDated.h"
 #include <QToolBar>
 #include <QGuiApplication>
 #include <QFrame>
@@ -845,6 +846,7 @@ void KisMainWindow::createGigaPanelStrip()
     d->gigaModesMenu = modes->menu();
     // The menus were already built from the menu file, so add them directly.
     gigaAddViewMenuItems();
+    gigaAddFileMenuItems();
 
     // Toolbars are created from the menu file after this; apply once ready.
     QTimer::singleShot(0, this, [this, modes]() {
@@ -853,6 +855,19 @@ void KisMainWindow::createGigaPanelStrip()
         }
         modes->restoreSavedMode(); // remembered from last time
     });
+}
+
+void KisMainWindow::gigaAddFileMenuItems()
+{
+    QMenu *fileMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("file"), this));
+    QAction *saveDated = actionCollection()->action(QStringLiteral("giga_save_dated_jpg"));
+    if (!fileMenu || !saveDated || fileMenu->actions().contains(saveDated)) return;
+    // Right after Save As (or at the end if the menu has no Save As).
+    const QList<QAction *> items = fileMenu->actions();
+    QAction *saveAs = actionCollection()->action(QStringLiteral("file_save_as"));
+    const int at = items.indexOf(saveAs);
+    QAction *before = (at >= 0 && at + 1 < items.size()) ? items.at(at + 1) : nullptr;
+    fileMenu->insertAction(before, saveDated);
 }
 
 void KisMainWindow::gigaAddViewMenuItems()
@@ -883,6 +898,7 @@ void KisMainWindow::gigaLoadMenuFile(const QString &fileName)
     applyActionIconOverridesFromLocalXML();
     synchronizeDynamicActions(); // Python plugin actions placed in menus
     gigaAddViewMenuItems();
+    gigaAddFileMenuItems();
     applyToolBarLayout();
     setUpdatesEnabled(true);
 }
@@ -3634,6 +3650,12 @@ void KisMainWindow::createActions()
 
     d->exportFile  = actionManager->createAction("file_export_file");
     connect(d->exportFile, SIGNAL(triggered(bool)), this, SLOT(slotExportFile()));
+
+    // Giga Sketch: File > Save Dated JPG (defined in gigasketch.action, so
+    // it can be given a shortcut in Settings > Configure Shortcuts).
+    if (KisAction *saveDated = actionManager->createAction("giga_save_dated_jpg")) {
+        connect(saveDated, &QAction::triggered, this, [this]() { GigaSaveDated::saveDatedJpg(this); });
+    }
 
     d->exportFileAdvance  = actionManager->createAction("file_export_advanced");
     connect(d->exportFileAdvance, SIGNAL(triggered(bool)), this, SLOT(slotExportAdvance()));

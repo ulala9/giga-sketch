@@ -302,7 +302,7 @@ configure_file(io.github.ulala9.gigasketch.desktop.in
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.ulala9.gigasketch.desktop
         DESTINATION ${KDE_INSTALL_APPDIR})
 
-set(actions_files krita.action kritamenu.action)
+set(actions_files krita.action kritamenu.action gigasketch.action)
 if (ANDROID)
     # In-app-purchase-related actions are only relevant on Android. They
     # wouldn't show up in the menu anyway because the application doesn't
