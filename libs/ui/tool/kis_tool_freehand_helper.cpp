@@ -243,7 +243,10 @@ KisOptimizedBrushOutline KisToolFreehandHelper::paintOpOutline(const QPointF &sa
 
     KisPaintInformation info;
 
-    if (!m_d->strokeInfos.isEmpty()) {
+    // Giga Sketch: while a Smooth Curve tail glides in, the pen has already
+    // lifted. Draw the outline at the hovering pen (the branch below), not
+    // at the tail, or the cursor seems stuck until the tail lands.
+    if (!m_d->strokeInfos.isEmpty() && !m_d->curveTailPending) {
         settings = m_d->resources->currentPaintOpPreset()->settings();
         if (m_d->stabilizerDelayedPaintHelper.running() &&
                 m_d->stabilizerDelayedPaintHelper.hasLastPaintInformation()) {
@@ -278,7 +281,9 @@ KisOptimizedBrushOutline KisToolFreehandHelper::paintOpOutline(const QPointF &sa
             distanceInfo = *m_d->strokeInfos.first()->dragDistance;
         }
     } else {
-        info = m_d->infoBuilder->hover(savedCursorPos, event, !m_d->strokeInfos.isEmpty());
+        // (Before Giga Sketch this branch only ran with no stroke, so the
+        // last argument was always false; keep it false during the tail.)
+        info = m_d->infoBuilder->hover(savedCursorPos, event, false);
     }
 
     KisPaintInformation::DistanceInformationRegistrar registrar =
