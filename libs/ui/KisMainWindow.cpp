@@ -60,6 +60,7 @@
 #include "dialogs/KisDlgCreateNewDocument.h"
 #include "kis_selection_manager.h"
 #include "kis_icon_utils.h"
+#include "dialogs/GigaNewDocumentDialog.h"
 #include <QToolBar>
 #include <krecentfilesaction.h>
 #include "krita_utils.h"
@@ -2056,6 +2057,15 @@ void KisMainWindow::showWelcomeScreen(bool show)
 
 void KisMainWindow::slotFileNew()
 {
+    // Giga Sketch: Photoshop-style New Document dialog ("More Options..."
+    // inside it opens Krita's full dialog). Config gigaPsNewDocument=false
+    // goes straight to Krita's.
+    if (KisConfig(true).readEntry<bool>("gigaPsNewDocument", true)) {
+        GigaNewDocumentDialog dialog(this);
+        dialog.exec();
+        return;
+    }
+
     KisDlgCreateNewDocument* dlg = new KisDlgCreateNewDocument(this);
     dlg->exec();
     dlg->deleteLater();

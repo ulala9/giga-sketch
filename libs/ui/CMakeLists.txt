@@ -81,6 +81,7 @@ set(kritaui_LIB_SRCS
     dialogs/KisProofingConfigModel.cpp
     dialogs/KisFrameRateLimitModel.cpp
     dialogs/KisDlgCreateNewDocument.cpp
+    dialogs/GigaNewDocumentDialog.cpp
 
     flake/kis_node_dummies_graph.cpp
     flake/kis_dummies_facade_base.cpp
