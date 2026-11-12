@@ -117,6 +117,13 @@ Running notes on how the Krita codebase works, kept so they carry over between s
 - "Show Lag Line": `paintOpOutline()` adds `KisCurveSmoother::pendingPath()` (painted end → pending points → pen)
   to the brush outline. Needs "show outline while painting" on.
 - New config keys: `GigaCurveSmoothingCatchUpTime` (ms), `GigaCurveSmoothingShowLagLine`.
+- Undo during the tail (fix/undo-during-catch-up): KisDocument's UndoStack::undoImpl calls image->requestUndoDuringStroke(),
+  then tryUndoUnfinishedLod0Stroke() (only works with instant preview/LOD), then tryBarrierLock() — and SILENTLY DROPS the
+  undo if the image is still busy. finishPendingTail() closes the stroke but its dabs are still painting → Ctrl+Z lost.
+  Fix in KisToolFreehand: "owed undo". requestUndoDuringStroke() with a pending tail records the document, connects
+  (queued) to undoStack indexChanged (fires on push AND cumulative-undo merge; push happens on a worker thread), and a
+  10 ms GUI timer waits for image()->isIdle(), allows one settle tick, then calls doc->undoStack()->undo() only if the
+  stroke landed (LOD path pushes nothing → no double undo). Extra Ctrl+Z presses while busy are counted. Gives up after 3 s.
 
 ## Text tool audit (goal 3) — Krita 6.0.4.1
 Code: tool `plugins/tools/svgtexttool/` (SvgTextTool, SvgTextCursor = on-canvas editing, Svg*Strategy = drag
