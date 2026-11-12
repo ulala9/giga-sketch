@@ -140,6 +140,15 @@ struct KisToolFreehandHelper::Private
     KisStrokesFacade *quickShapeFacade {nullptr};
     KisNodeSP quickShapeOverrideNode;
     KisDefaultBoundsBaseSP quickShapeBounds;
+    bool quickShapeNeedsModifier {true}; // only snap while Ctrl is held
+    // Editing after the snap: drag to rotate/scale before lifting.
+    QPainterPath quickShapePath;        // the shape as recognised
+    QPointF quickShapeAnchor;           // fixed point (start, or centre if closed)
+    QPointF quickShapeGrab;             // pen position when it snapped
+    QPointF quickShapePen;              // latest pen position
+    bool quickShapeIsLine {false};
+    qreal quickShapePressure {1.0};
+    QTimer quickShapeRepaintTimer;      // limits repaints to ~30 per second
 
     qreal effectiveSmoothnessDistance(qreal speed) const;
 
@@ -190,6 +199,9 @@ KisToolFreehandHelper::KisToolFreehandHelper(KisPaintingInformationBuilder *info
     m_d->curveTailTimer.setInterval(8); // ~120 Hz, smooth on high refresh screens
     m_d->quickShapeTimer.setSingleShot(true);
     connect(&m_d->quickShapeTimer, SIGNAL(timeout()), SLOT(quickShapeTimeout()));
+    m_d->quickShapeRepaintTimer.setSingleShot(true);
+    m_d->quickShapeRepaintTimer.setInterval(33);
+    connect(&m_d->quickShapeRepaintTimer, SIGNAL(timeout()), SLOT(quickShapeRepaintTimeout()));
     connect(&m_d->curveTailTimer, SIGNAL(timeout()), SLOT(curveTailTimeout()));
 
     m_d->stabilizerDelayedPaintHelper.setPaintLineCallback(
@@ -339,7 +351,8 @@ void KisToolFreehandHelper::initPaint(KoPointerEvent *event,
     {
         KisConfig cfg(true);
         m_d->quickShapeEnabled = cfg.readEntry<bool>("gigaQuickShape", true);
-        m_d->quickShapeTimer.setInterval(qBound(150, cfg.readEntry<int>("gigaQuickShapeDelay", 500), 3000));
+        m_d->quickShapeTimer.setInterval(qBound(150, cfg.readEntry<int>("gigaQuickShapeDelay", 300), 3000));
+        m_d->quickShapeNeedsModifier = cfg.readEntry<bool>("gigaQuickShapeNeedsCtrl", true);
     }
     m_d->quickShapeDone = false;
     m_d->quickShapePoints.clear();
@@ -576,7 +589,12 @@ void KisToolFreehandHelper::paint(KisPaintInformation &info)
 {
     // Giga Sketch QuickShape.
     if (m_d->quickShapeDone) {
-        return; // the shape is drawn; wait for the pen to lift
+        // The shape is drawn; moving the pen now adjusts it (rotate/scale).
+        m_d->quickShapePen = info.pos();
+        if (!m_d->quickShapeRepaintTimer.isActive()) {
+            m_d->quickShapeRepaintTimer.start();
+        }
+        return;
     }
     if (m_d->quickShapeEnabled && m_d->strokeId) {
         m_d->quickShapePoints << info.pos();
@@ -817,6 +835,12 @@ void KisToolFreehandHelper::endPaint()
 {
     if (m_d->curveTailPending) return; // already ending
 
+    // QuickShape: make sure the last adjustment is painted before committing.
+    if (m_d->quickShapeDone && m_d->quickShapeRepaintTimer.isActive()) {
+        m_d->quickShapeRepaintTimer.stop();
+        quickShapeRepaintTimeout();
+    }
+
     // Smooth Curve: paint the rest of the line (with catch-up) before the
     // generic end-of-stroke handling in endPaintImpl().
     if (m_d->usingCurveSmoother) {
@@ -915,6 +939,7 @@ void KisToolFreehandHelper::cancelPaint()
     }
 
     m_d->quickShapeTimer.stop();
+    m_d->quickShapeRepaintTimer.stop();
 
     // Smooth Curve: drop the pending tail, nothing more gets painted.
     m_d->curveRestTimer.stop();
@@ -1154,9 +1179,12 @@ void KisToolFreehandHelper::quickShapeTimeout()
     if (!m_d->strokeId || m_d->quickShapeDone || m_d->curveTailPending || !m_d->quickShapeFacade) return;
     if (m_d->quickShapePoints.size() < 5) return;
 
-    // Shift while snapping = "perfect" (circle, square, 15-degree lines),
-    // standing in for Procreate's second finger.
-    const bool perfect = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier);
+    // Only snap on purpose: Ctrl held (unless "Require Ctrl" is off).
+    // Shift as well = "perfect" (circle, square, 15-degree lines).
+    const Qt::KeyboardModifiers mods = QGuiApplication::queryKeyboardModifiers();
+    if (m_d->quickShapeNeedsModifier && !mods.testFlag(Qt::ControlModifier)) return;
+    const bool perfect = mods.testFlag(Qt::ShiftModifier);
+
     const KisQuickShapeRecognizer::Result shape = KisQuickShapeRecognizer::recognize(m_d->quickShapePoints, perfect);
     if (!shape.isValid()) return; // keep the stroke as drawn
 
@@ -1165,9 +1193,20 @@ void KisToolFreehandHelper::quickShapeTimeout()
     // Pressure for the shape: the stroke's typical (median) pressure.
     QVector<qreal> pressures = m_d->quickShapePressures;
     std::sort(pressures.begin(), pressures.end());
-    const qreal pressure = pressures.isEmpty() ? 1.0 : pressures[pressures.size() / 2];
+    m_d->quickShapePressure = pressures.isEmpty() ? 1.0 : pressures[pressures.size() / 2];
 
-    // 1. Stop all smoothing machinery of the freehand stroke.
+    // Remember what's needed to adjust the shape while the pen stays down.
+    m_d->quickShapePath = shape.path;
+    m_d->quickShapeIsLine = shape.type == KisQuickShapeRecognizer::Line;
+    const bool closed = shape.type == KisQuickShapeRecognizer::Ellipse
+                     || shape.type == KisQuickShapeRecognizer::Rectangle
+                     || shape.type == KisQuickShapeRecognizer::Polygon;
+    m_d->quickShapeAnchor = closed ? shape.path.boundingRect().center()
+                                   : QPointF(shape.path.elementAt(0));
+    m_d->quickShapeGrab = m_d->quickShapeLastInfo.pos();
+    m_d->quickShapePen = m_d->quickShapeGrab;
+
+    // Stop all smoothing machinery of the freehand stroke.
     m_d->strokeTimeoutTimer.stop();
     m_d->curveRestTimer.stop();
     m_d->usingCurveSmoother = false;
@@ -1176,42 +1215,83 @@ void KisToolFreehandHelper::quickShapeTimeout()
     if (m_d->stabilizerDelayedPaintHelper.running()) m_d->stabilizerDelayedPaintHelper.cancel();
     m_d->usingStabilizer = false;
     if (m_d->airbrushingTimer.isActive()) m_d->airbrushingTimer.stop();
-    if (m_d->asyncUpdateHelper.isActive()) m_d->asyncUpdateHelper.cancelUpdateStream();
 
-    // 2. Cancel the freehand stroke: Krita rolls back everything it painted
+    quickShapeReplaceStroke(shape.path);
+}
+
+void KisToolFreehandHelper::quickShapeRepaintTimeout()
+{
+    if (!m_d->quickShapeDone || !m_d->strokeId) return;
+
+    // Similarity transform about the anchor that carries the grab point to
+    // the pen: the end of a line follows the pen; closed shapes scale and
+    // rotate around their centre.
+    const QPointF from = m_d->quickShapeGrab - m_d->quickShapeAnchor;
+    QPointF to = m_d->quickShapePen - m_d->quickShapeAnchor;
+    const qreal fromLength = std::hypot(from.x(), from.y());
+    qreal toLength = std::hypot(to.x(), to.y());
+    if (fromLength < 1e-3 || toLength < 1e-3) return;
+
+    qreal angle = std::atan2(to.y(), to.x()) - std::atan2(from.y(), from.x());
+    if (m_d->quickShapeIsLine && QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier)) {
+        // Perfect line: snap its absolute direction to 15-degree steps.
+        const QPointF lineDir = QPointF(m_d->quickShapePath.elementAt(1)) - QPointF(m_d->quickShapePath.elementAt(0));
+        const qreal step = M_PI / 12.0;
+        const qreal absolute = std::atan2(lineDir.y(), lineDir.x()) + angle;
+        angle += std::round(absolute / step) * step - absolute;
+    }
+
+    QTransform t;
+    t.translate(m_d->quickShapeAnchor.x(), m_d->quickShapeAnchor.y());
+    t.rotateRadians(angle);
+    t.scale(toLength / fromLength, toLength / fromLength);
+    t.translate(-m_d->quickShapeAnchor.x(), -m_d->quickShapeAnchor.y());
+
+    quickShapeReplaceStroke(t.map(m_d->quickShapePath));
+}
+
+void KisToolFreehandHelper::quickShapeReplaceStroke(const QPainterPath &path)
+{
+    if (!m_d->strokeId || !m_d->quickShapeFacade || path.elementCount() == 0) return;
+
+    // 1. Cancel the current stroke: Krita rolls back everything it painted
     //    (the same path as pressing Esc mid-stroke).
+    if (m_d->asyncUpdateHelper.isActive()) m_d->asyncUpdateHelper.cancelUpdateStream();
     m_d->strokeInfos.clear();
     m_d->strokesFacade->cancelStroke(m_d->strokeId);
     m_d->strokeId.clear();
 
-    // 3. Start a fresh stroke and paint the shape with the same brush.
+    // 2. Start a fresh stroke and paint the path with the same brush.
+    const qreal pressure = m_d->quickShapePressure;
     auto infoAt = [this, pressure](const QPointF &pos) {
         KisPaintInformation pi = m_d->quickShapeLastInfo;
         pi.setPos(pos);
         pi.setPressure(pressure);
         return pi;
     };
-    const QPointF startPos = shape.path.elementCount() > 0 ? QPointF(shape.path.elementAt(0)) : m_d->quickShapePoints.first();
-    KisPaintInformation first = infoAt(startPos);
+    const QPointF startPos = path.elementAt(0);
 
     m_d->quickShapeRepainting = true;
-    initPaintImpl(0.0, first, m_d->resourceManager, m_d->quickShapeImage, m_d->quickShapeNode,
+    initPaintImpl(0.0, infoAt(startPos), m_d->resourceManager, m_d->quickShapeImage, m_d->quickShapeNode,
                   m_d->quickShapeFacade, m_d->quickShapeOverrideNode, m_d->quickShapeBounds);
     m_d->quickShapeRepainting = false;
+    // Airbrush-type brushes restart their timer in initPaintImpl; it would
+    // feed the shape's end point back in as if it were the pen. The shape
+    // is painted explicitly, so it isn't needed.
+    m_d->airbrushingTimer.stop();
 
-    // Walk the path: straight segments and cubic curves.
     QPointF current = startPos;
-    for (int i = 0; i < shape.path.elementCount(); i++) {
-        const QPainterPath::Element e = shape.path.elementAt(i);
+    for (int i = 0; i < path.elementCount(); i++) {
+        const QPainterPath::Element e = path.elementAt(i);
         if (e.isMoveTo()) {
             current = e;
         } else if (e.isLineTo()) {
             paintLine(infoAt(current), infoAt(e));
             current = e;
-        } else if (e.isCurveTo() && i + 2 < shape.path.elementCount()) {
+        } else if (e.isCurveTo() && i + 2 < path.elementCount()) {
             const QPointF c1 = e;
-            const QPointF c2 = shape.path.elementAt(i + 1);
-            const QPointF end = shape.path.elementAt(i + 2);
+            const QPointF c2 = path.elementAt(i + 1);
+            const QPointF end = path.elementAt(i + 2);
             paintBezierCurve(infoAt(current), c1, c2, infoAt(end));
             current = end;
             i += 2;

@@ -696,7 +696,7 @@ QWidget * KisToolBrush::createOptionWidget()
         KisConfig quickCfg(true);
         QCheckBox *quickShape = new QCheckBox(optionsWidget);
         quickShape->setMinimumHeight(m_cmbSmoothingType->sizeHint().height()-3);
-        quickShape->setToolTip(i18nc("@info:tooltip", "Hold the pen still at the end of a stroke to turn it into a clean line, arc, ellipse, rectangle or polygon. Hold Shift while it snaps for a perfect circle, square or 15° line."));
+        quickShape->setToolTip(i18nc("@info:tooltip", "Hold Ctrl and keep the pen still at the end of a stroke to turn it into a clean line, arc, ellipse, rectangle or polygon. Add Shift for a perfect circle, square or 15° line. Keep the pen down and drag to rotate or resize the shape before lifting."));
         quickShape->setChecked(quickCfg.readEntry<bool>("gigaQuickShape", true));
         connect(quickShape, &QCheckBox::toggled, this, [](bool on) {
             KisConfig(false).writeEntry<bool>("gigaQuickShape", on);
@@ -708,13 +708,24 @@ QWidget * KisToolBrush::createOptionWidget()
         quickDelay->setSingleStep(50);
         quickDelay->setSuffix(i18n(" ms"));
         quickDelay->setToolTip(i18nc("@info:tooltip", "How long to hold the pen still before the stroke snaps to a shape."));
-        quickDelay->setValue(quickCfg.readEntry<int>("gigaQuickShapeDelay", 500));
+        quickDelay->setValue(quickCfg.readEntry<int>("gigaQuickShapeDelay", 300));
         connect(quickDelay, QOverload<int>::of(&KisSliderSpinBox::valueChanged), this, [](int ms) {
             KisConfig(false).writeEntry<int>("gigaQuickShapeDelay", ms);
         });
         connect(quickShape, &QCheckBox::toggled, quickDelay, &QWidget::setEnabled);
         quickDelay->setEnabled(quickShape->isChecked());
         addOptionWidgetOption(quickDelay, new QLabel(i18n("Hold Time:"), optionsWidget));
+
+        QCheckBox *needsCtrl = new QCheckBox(optionsWidget);
+        needsCtrl->setMinimumHeight(m_cmbSmoothingType->sizeHint().height()-3);
+        needsCtrl->setToolTip(i18nc("@info:tooltip", "Only snap while Ctrl is held. Turn off to snap whenever the pen is held still."));
+        needsCtrl->setChecked(quickCfg.readEntry<bool>("gigaQuickShapeNeedsCtrl", true));
+        connect(needsCtrl, &QCheckBox::toggled, this, [](bool on) {
+            KisConfig(false).writeEntry<bool>("gigaQuickShapeNeedsCtrl", on);
+        });
+        connect(quickShape, &QCheckBox::toggled, needsCtrl, &QWidget::setEnabled);
+        needsCtrl->setEnabled(quickShape->isChecked());
+        addOptionWidgetOption(needsCtrl, new QLabel(i18n("Require Ctrl:"), optionsWidget));
     }
 
     // add a line spacer so we know that the next set of options are for different settings

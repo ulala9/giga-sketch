@@ -9,6 +9,7 @@
 
 #include <QObject>
 #include "KisCurveSmoother.h"
+#include <QPainterPath>
 #include <QVector>
 
 #include "kis_types.h"
@@ -149,6 +150,8 @@ private:
     void curveStart(const KisPaintInformation &firstPaintInfo);
     void curveEnd();
     void curvePaintSegments(const QVector<KisCurveSmoother::Segment> &segments);
+    /// Giga Sketch QuickShape: replace the current stroke with @p path.
+    void quickShapeReplaceStroke(const QPainterPath &path);
     void endPaintImpl();
     KisPaintInformation getStabilizedPaintInfo(const QQueue<KisPaintInformation> &queue,
                                                const KisPaintInformation &lastPaintInfo);
@@ -166,6 +169,8 @@ private Q_SLOTS:
     void curveTailTimeout();
     /// Giga Sketch QuickShape: the pen has been held still; try to snap.
     void quickShapeTimeout();
+    /// Giga Sketch QuickShape: repaint the snapped shape after the pen moved.
+    void quickShapeRepaintTimeout();
 
 private:
     struct Private;
