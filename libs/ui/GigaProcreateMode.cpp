@@ -68,11 +68,11 @@ GigaProcreateMode::GigaProcreateMode(KisMainWindow *mainWindow)
 {
     m_toggle = new QAction(i18nc("@action:inmenu", "Procreate Mode"), this);
     m_toggle->setCheckable(true);
-    m_toggle->setShortcut(QKeySequence(Qt::Key_F12));
+    m_toggle->setShortcut(QKeySequence(Qt::Key_F9)); // F12 is often user-bound (e.g. Show Canvas Only)
     m_toggle->setShortcutContext(Qt::WindowShortcut);
-    m_toggle->setToolTip(i18nc("@info:tooltip", "Switch between the Studio layout and a minimal, Procreate-style layout (F12)"));
+    m_toggle->setToolTip(i18nc("@info:tooltip", "Switch between the Studio layout and a minimal, Procreate-style layout (F9)"));
     connect(m_toggle, &QAction::toggled, this, &GigaProcreateMode::setActive);
-    // Also on the window itself, so F12 works while the menu bar is hidden.
+    // Also on the window itself, so F9 works while the menu bar is hidden.
     m_mainWindow->addAction(m_toggle);
 
     m_studioState = QByteArray::fromBase64(KisConfig(true).readEntry<QByteArray>("gigaStudioState", QByteArray()));

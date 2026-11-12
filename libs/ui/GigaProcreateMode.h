@@ -18,7 +18,7 @@ class KisMainWindow;
 
 /**
  * Giga Sketch: a Procreate-style mode for the main window, switched with
- * View > Procreate Mode (F12).
+ * View > Procreate Mode (F9).
  *
  * Entering it saves the current ("Studio") window layout and hides all
  * panels, toolbars, the menu bar and the status bar. In their place:
