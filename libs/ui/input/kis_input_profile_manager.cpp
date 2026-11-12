@@ -6,6 +6,7 @@
  */
 
 #include "kis_input_profile_manager.h"
+#include <GigaBranding.h>
 #include "kis_input_profile.h"
 
 #include <QMap>
@@ -332,6 +333,10 @@ void KisInputProfileManager::loadProfiles()
     if (d->profiles.size() > 0) {
         if (currentProfile.isEmpty() || !d->profiles.contains(currentProfile)) {
             QString kritaDefault = QStringLiteral("Krita Default");
+            // Giga Sketch: Photoshop-compatible canvas navigation by default.
+            if (d->profiles.contains(GigaBranding::defaultInputProfile())) {
+                kritaDefault = GigaBranding::defaultInputProfile();
+            }
             if (d->profiles.contains(kritaDefault)) {
                 d->currentProfile = d->profiles.value(kritaDefault);
             } else {

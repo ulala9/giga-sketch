@@ -19,12 +19,22 @@ public:
     void attachAction(QAction *action);
     void setHighlightColor();
 
+    KoToolAction *toolAction() const { return m_toolAction; }
+
+    /// Giga Sketch: draw a small corner triangle meaning "more tools here
+    /// (press and hold or right-click)", like Photoshop's grouped tools.
+    void setGroupIndicator(bool show);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
 private:
     void setDataFromToolAction(QAction *action); // Generates tooltips.
 private Q_SLOTS:
     void slotUpdateActionData();
 private:
     KoToolAction *m_toolAction;
+    bool m_groupIndicator {false};
 };
 
 #endif // _KO_TOOLBOXBUTTON_H_

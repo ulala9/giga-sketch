@@ -4,6 +4,7 @@
     SPDX-License-Identifier: LGPL-2.0-or-later
 */
 #include "kshortcutschemeseditor.h"
+#include <GigaBranding.h>
 #include "KisShortcutsDialog_p.h"
 
 #include <QLabel>
@@ -41,7 +42,7 @@ KisKShortcutSchemesEditor::KisKShortcutSchemesEditor(KisShortcutsDialog *parent)
     auto schemeFileLocations = KisKShortcutSchemesHelper::schemeFileLocations();
     schemes << schemeFileLocations.keys();
 
-    QString currentScheme = group.readEntry("Current Scheme", "Default");
+    QString currentScheme = group.readEntry("Current Scheme", GigaBranding::defaultShortcutScheme());
     QString schemeFileName = KisKShortcutSchemesHelper::schemeFileLocations().value(currentScheme);
     if (!QFileInfo(schemeFileName).exists()) {
         currentScheme = "Default";

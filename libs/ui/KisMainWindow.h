@@ -421,6 +421,36 @@ private Q_SLOTS:
 
     void restoreWorkspace();
 
+    /**
+     * Giga Sketch: arrange the dockers in a Photoshop-like layout: slim
+     * toolbox on the left; on the right, Color/Palette, then Tool Options/
+     * Brush Presets/Text Properties, then Layers/Channels/History, each as
+     * tabs; everything else hidden. Applied automatically when there is no
+     * saved window layout yet, and available as Window > Workspace >
+     * Giga Sketch Layout.
+     */
+    void applyGigaLayout();
+
+private:
+    /**
+     * Giga Sketch: a slim vertical strip of panel icons on the right edge
+     * (like Photoshop's collapsed panel icons). Clicking an icon shows,
+     * brings to front, or hides that panel; the top button collapses or
+     * restores all panels at once. Panels stay docked, which also works on
+     * Wayland, where apps can't position floating windows.
+     */
+    void createGigaPanelStrip();
+    /// Giga Sketch: move the active document view into a new window
+    /// (used when a document tab is dragged off the tab bar).
+    void gigaDetachActiveView();
+protected:
+    /// Giga Sketch: watches the document tab bar for "drag a tab out".
+    bool eventFilter(QObject *watched, QEvent *event) override;
+private:
+    void gigaTogglePanel(const QString &dockId);
+    void gigaToggleCollapseAll();
+public Q_SLOTS:
+
     void openCommandBar();
 
     void slotStoragesWarning(const QString &location = QString());

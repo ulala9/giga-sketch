@@ -151,6 +151,11 @@ private Q_SLOTS:
     void slotSlider4Changed();
     void slotSlider5Changed();
     void slotToolChanged(KoCanvasController* canvas);
+private:
+    /// Giga Sketch: show brush-only controls in the top bar only while a
+    /// painting tool is active, like Photoshop's tool-specific options bar.
+    void gigaUpdateBarForTool(bool paintTool);
+private Q_SLOTS:
     void slotPreviousFavoritePreset();
     void slotNextFavoritePreset();
     void slotSwitchToPreviousPreset();

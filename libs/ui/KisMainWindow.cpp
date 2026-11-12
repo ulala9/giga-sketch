@@ -60,6 +60,7 @@
 #include "dialogs/KisDlgCreateNewDocument.h"
 #include "kis_selection_manager.h"
 #include "kis_icon_utils.h"
+#include <QToolBar>
 #include <krecentfilesaction.h>
 #include "krita_utils.h"
 #include <ktoggleaction.h>
@@ -299,6 +300,9 @@ public:
     QString lastExportLocation;
 
     QMap<QString, QDockWidget *> dockWidgetsMap;
+
+    // Giga Sketch: dragging a document tab out of the tab bar.
+    bool gigaTabPressed {false};
     QByteArray dockerStateBeforeHiding;
     KoToolDocker *toolOptionsDocker {nullptr};
 
@@ -682,6 +686,7 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     setAcceptDrops(true);
     QTabBar *tabBar = d->findTabBarHACK();
     if (tabBar) {
+        tabBar->installEventFilter(this); // Giga Sketch: drag a tab out to its own window
         tabBar->setElideMode(Qt::ElideRight);
         // load customized tab style
         customizeTabBar();
@@ -690,7 +695,203 @@ KisMainWindow::KisMainWindow(QUuid uuid)
         tabBar->setChangeCurrentOnDrag(true);
     }
 
+    createGigaPanelStrip();
+
     applyMainWindowSettings(d->windowStateConfig);
+
+    // Giga Sketch: first start (no saved layout): use the Photoshop-like one.
+    if (!d->windowStateConfig.hasKey("State")) {
+        applyGigaLayout();
+    }
+}
+
+namespace {
+struct GigaPanelEntry {
+    const char *dockId;
+    const char *icon;
+};
+// Order matches the Giga layout: colour, brushes/tools, layers.
+const GigaPanelEntry GIGA_PANELS[] = {
+    {"ColorSelectorNg", "extended_color_selector"},
+    {"PaletteDocker", "config-popup-palette"},
+    {"PresetDocker", "paintop_settings_01"},
+    {"sharedtooldocker", "configure"},
+    {"TextProperties", "format-text-color"},
+    {"KisLayerBox", "all-layers"},
+    {"ChannelDocker", "color-adjustment-mode-channels"},
+    {"History", "edit-undo"},
+};
+}
+
+void KisMainWindow::createGigaPanelStrip()
+{
+    QToolBar *strip = new QToolBar(i18nc("@title:window", "Panel Icons"), this);
+    strip->setObjectName(QStringLiteral("GigaPanelStrip")); // needed to save/restore its position
+    strip->setOrientation(Qt::Vertical);
+    strip->setIconSize(QSize(22, 22));
+    strip->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    strip->setMovable(false);
+
+    QAction *collapse = strip->addAction(KisIconUtils::loadIcon("view-fullscreen"), i18nc("@action", "Collapse / Expand Panels"));
+    collapse->setToolTip(i18nc("@info:tooltip", "Hide all panels to make room for the canvas, or bring them back"));
+    connect(collapse, &QAction::triggered, this, &KisMainWindow::gigaToggleCollapseAll);
+    strip->addSeparator();
+
+    for (const GigaPanelEntry &entry : GIGA_PANELS) {
+        const QString id = QString::fromLatin1(entry.dockId);
+        QDockWidget *dock = dockWidget(id);
+        if (!dock) continue; // e.g. Tool Options docker when options are in the toolbar
+        QAction *action = strip->addAction(KisIconUtils::loadIcon(entry.icon), dock->windowTitle());
+        action->setToolTip(dock->windowTitle());
+        connect(action, &QAction::triggered, this, [this, id]() { gigaTogglePanel(id); });
+    }
+
+    addToolBar(Qt::RightToolBarArea, strip);
+}
+
+bool KisMainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    QTabBar *tabBar = qobject_cast<QTabBar *>(watched);
+    if (tabBar && tabBar == d->findTabBarHACK()) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            d->gigaTabPressed = static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton;
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            d->gigaTabPressed = false;
+        } else if (event->type() == QEvent::MouseMove && d->gigaTabPressed) {
+            const QPoint pos = static_cast<QMouseEvent *>(event)->position().toPoint();
+            // Dragged well above or below the tab bar: tear the tab out,
+            // like Photoshop. Only when there's another document to keep.
+            const int margin = 40;
+            const bool pulledOut = pos.y() < -margin || pos.y() > tabBar->height() + margin;
+            if (pulledOut && d->mdiArea->subWindowList().size() > 1) {
+                d->gigaTabPressed = false;
+                // Do it after this event is handled, not while Qt is still
+                // inside the tab bar's mouse handling.
+                QTimer::singleShot(0, this, [this]() { gigaDetachActiveView(); });
+                return true;
+            }
+        }
+    }
+    return KXmlGuiWindow::eventFilter(watched, event);
+}
+
+void KisMainWindow::gigaDetachActiveView()
+{
+    KisView *view = activeView();
+    QPointer<QMdiSubWindow> subWindow = d->mdiArea->currentSubWindow();
+    if (!view || !subWindow || d->mdiArea->subWindowList().size() < 2) return;
+
+    KisDocument *document = view->document();
+    if (!document) return;
+
+    // Open the document in a new window first, then close this view. The
+    // document keeps a view the whole time, so nothing asks to save.
+    KisMainWindow *newWindow = KisPart::instance()->createMainWindow();
+    newWindow->initializeGeometry();
+    newWindow->show();
+    newWindow->addViewAndNotifyLoadingCompleted(document);
+
+    if (subWindow) {
+        subWindow->close();
+    }
+}
+
+void KisMainWindow::gigaTogglePanel(const QString &dockId)
+{
+    QDockWidget *dock = dockWidget(dockId);
+    if (!dock) return;
+    // Visible and actually on screen (not hidden behind another tab): hide it.
+    // Otherwise show it and bring its tab to the front.
+    const bool onScreen = dock->isVisible() && !dock->visibleRegion().isEmpty();
+    if (onScreen) {
+        dock->hide();
+    } else {
+        dock->show();
+        dock->raise();
+    }
+}
+
+void KisMainWindow::gigaToggleCollapseAll()
+{
+    static const char *const COLLAPSED_KEY = "gigaCollapsedPanels";
+    QStringList collapsed = d->windowStateConfig.readEntry(COLLAPSED_KEY, QStringList());
+
+    if (collapsed.isEmpty()) {
+        // Collapse: remember and hide every visible docked panel except the toolbox.
+        for (auto it = d->dockWidgetsMap.constBegin(); it != d->dockWidgetsMap.constEnd(); ++it) {
+            QDockWidget *dock = it.value();
+            if (dock && dock->isVisible() && !dock->isFloating() && it.key() != QLatin1String("ToolBox")) {
+                collapsed << it.key();
+                dock->hide();
+            }
+        }
+        d->windowStateConfig.writeEntry(COLLAPSED_KEY, collapsed);
+    } else {
+        // Expand: bring back exactly what was hidden.
+        Q_FOREACH (const QString &id, collapsed) {
+            if (QDockWidget *dock = dockWidget(id)) dock->show();
+        }
+        d->windowStateConfig.writeEntry(COLLAPSED_KEY, QStringList());
+    }
+}
+
+void KisMainWindow::applyGigaLayout()
+{
+    // Each inner list becomes one tabbed group, stacked top to bottom on the
+    // right. The first docker of a group is the tab shown in front.
+    const QList<QStringList> rightGroups = {
+        {QStringLiteral("ColorSelectorNg"), QStringLiteral("PaletteDocker")},
+        {QStringLiteral("sharedtooldocker"), QStringLiteral("PresetDocker"), QStringLiteral("TextProperties")},
+        {QStringLiteral("KisLayerBox"), QStringLiteral("ChannelDocker"), QStringLiteral("History")},
+    };
+
+    // Start clean: everything docked and hidden.
+    Q_FOREACH (QDockWidget *dock, dockWidgets()) {
+        dock->setFloating(false);
+        dock->hide();
+    }
+
+    QDockWidget *toolBox = dockWidget(QStringLiteral("ToolBox"));
+    if (toolBox) {
+        addDockWidget(Qt::LeftDockWidgetArea, toolBox);
+        toolBox->show();
+    }
+
+    QList<QDockWidget *> groupHeads;
+    QDockWidget *previousHead = nullptr;
+    Q_FOREACH (const QStringList &group, rightGroups) {
+        QDockWidget *head = nullptr;
+        Q_FOREACH (const QString &id, group) {
+            QDockWidget *dock = dockWidget(id);
+            if (!dock) continue;
+            if (!head) {
+                head = dock;
+                addDockWidget(Qt::RightDockWidgetArea, head);
+                if (previousHead) {
+                    splitDockWidget(previousHead, head, Qt::Vertical);
+                }
+            } else {
+                tabifyDockWidget(head, dock);
+            }
+            dock->show();
+        }
+        if (head) {
+            head->raise(); // first docker of the group in front
+            groupHeads << head;
+            previousHead = head;
+        }
+    }
+
+    // Slim toolbox, comfortable panel column; Layers gets the most height.
+    if (toolBox) {
+        resizeDocks({toolBox}, {56}, Qt::Horizontal);
+    }
+    if (!groupHeads.isEmpty()) {
+        resizeDocks({groupHeads.first()}, {320}, Qt::Horizontal);
+    }
+    if (groupHeads.size() == 3) {
+        resizeDocks(groupHeads, {260, 280, 420}, Qt::Vertical);
+    }
 }
 
 KisMainWindow::~KisMainWindow()
@@ -2729,6 +2930,10 @@ void KisMainWindow::updateWindowMenu()
     menu->addAction(d->workspaceMenu);
     QMenu *workspaceMenu = d->workspaceMenu->menu();
     workspaceMenu->clear();
+    // Giga Sketch: built-in Photoshop-like docker layout.
+    connect(workspaceMenu->addAction(i18nc("@action:inmenu", "Giga Sketch Layout")),
+            &QAction::triggered, this, &KisMainWindow::applyGigaLayout);
+    workspaceMenu->addSeparator();
     KisResourceModel resourceModel(ResourceType::Workspaces);
     KisResourceIterator resourceIterator(&resourceModel);
     KisMainWindow *m_this = this;

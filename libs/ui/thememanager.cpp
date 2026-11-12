@@ -13,6 +13,7 @@
  * ============================================================ */
 
 #include "thememanager.h"
+#include <GigaBranding.h>
 // Qt includes
 
 #include <QStringList>
@@ -109,7 +110,7 @@ QString ThemeManager::currentThemeName() const
     }
     if (themeName.isEmpty()) {
         //qDebug() << "\tfallback";
-        themeName = "Krita dark";
+        themeName = GigaBranding::defaultTheme();
     }
     //qDebug() << "\tresult" << themeName;
     return themeName;

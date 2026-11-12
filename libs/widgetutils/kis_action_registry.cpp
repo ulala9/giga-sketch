@@ -188,7 +188,8 @@ KisActionRegistry::KisActionRegistry()
     : d(new KisActionRegistry::Private(this))
 {
     KConfigGroup cg = KSharedConfig::openConfig()->group("Shortcut Schemes");
-    QString schemeName = cg.readEntry("Current Scheme", "Default");
+    // Giga Sketch: Photoshop-compatible shortcuts unless the user picked a scheme.
+    QString schemeName = cg.readEntry("Current Scheme", GigaBranding::defaultShortcutScheme());
     QString schemeFileName = KisKShortcutSchemesHelper::schemeFileLocations().value(schemeName);
     if (!QFileInfo(schemeFileName).exists()) {
         schemeName = "Default";

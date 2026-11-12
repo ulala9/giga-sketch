@@ -15,6 +15,8 @@
 #include <klocalizedstring.h>
 #include <QKeySequence>
 #include <KoIcon.h>
+#include <QPainter>
+#include <QPainterPath>
 
 KoToolBoxButton::KoToolBoxButton(KoToolAction *toolAction, QWidget *parent)
     : QToolButton(parent)
@@ -64,6 +66,33 @@ void KoToolBoxButton::setDataFromToolAction(QAction *action)
         return;
     }
     setToolTip(action->toolTip());
+}
+
+void KoToolBoxButton::setGroupIndicator(bool show)
+{
+    if (m_groupIndicator == show) return;
+    m_groupIndicator = show;
+    update();
+}
+
+void KoToolBoxButton::paintEvent(QPaintEvent *event)
+{
+    QToolButton::paintEvent(event);
+    if (!m_groupIndicator) return;
+
+    // Small filled triangle in the bottom-right corner.
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    const qreal s = qMax(3.0, width() / 7.0);
+    const QPointF corner(width() - 2.0, height() - 2.0);
+    QPainterPath triangle;
+    triangle.moveTo(corner);
+    triangle.lineTo(corner - QPointF(s, 0));
+    triangle.lineTo(corner - QPointF(0, s));
+    triangle.closeSubpath();
+    QColor c = palette().color(QPalette::ButtonText);
+    c.setAlphaF(0.7);
+    p.fillPath(triangle, c);
 }
 
 void KoToolBoxButton::slotUpdateActionData()
