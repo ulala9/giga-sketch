@@ -431,6 +431,11 @@ private Q_SLOTS:
      */
     void applyGigaLayout();
 
+public:
+    /// Giga Sketch: show a hidden panel as a flyout over the canvas (a
+    /// popup next to @p anchor); it closes when you click elsewhere.
+    void gigaShowPanelFlyout(const QString &dockId, QWidget *anchor);
+
 private:
     /**
      * Giga Sketch: a slim vertical strip of panel icons on the right edge
@@ -450,9 +455,6 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 private:
     void gigaTogglePanel(const QString &dockId, QWidget *anchor = nullptr);
-    /// Giga Sketch: show a hidden panel as a flyout over the canvas (a
-    /// popup next to its strip icon); it closes when you click elsewhere.
-    void gigaShowPanelFlyout(const QString &dockId, QWidget *anchor);
     /// Giga Sketch: let key panels shrink narrower (content scrolls).
     void gigaMakePanelsNarrowFriendly();
     /// Giga Sketch: compact interface (smaller toolbar icons, tighter panels).
