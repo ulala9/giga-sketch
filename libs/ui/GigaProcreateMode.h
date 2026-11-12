@@ -57,6 +57,10 @@ private:
     void smudgeClicked(QToolButton *button);
     void eraserClicked(QToolButton *button);
     void connectResources();
+    /// Open a Procreate-style popover with @p content under @p anchor.
+    void showPopover(QWidget *content, QWidget *anchor);
+    /// Brush library popover (second tap on Paint / Smudge / Erase).
+    void showBrushLibrary(QWidget *anchor);
 
     KisMainWindow *m_mainWindow {nullptr};
     QAction *m_toggle {nullptr};
@@ -64,7 +68,7 @@ private:
     QByteArray m_studioState;
 
     QPointer<QToolBar> m_topBar;
-    QPointer<QToolBar> m_sideBar;
+    QPointer<class GigaSideBarPill> m_sideBar; ///< floating pill over the canvas
     QSlider *m_sizeSlider {nullptr};
     QSlider *m_opacitySlider {nullptr};
     QToolButton *m_colorDot {nullptr};

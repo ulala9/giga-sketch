@@ -28,6 +28,7 @@
 #include <brushengine/kis_paintop_preset.h>
 
 #include "KisMainWindow.h"
+#include "GigaProcreateWidgets.h"
 #include "KisViewManager.h"
 #include "KisResourceServerProvider.h"
 #include "kis_canvas_resource_provider.h"
@@ -114,6 +115,13 @@ void GigaProcreateMode::buildBars()
     m_topBar->setObjectName(QStringLiteral("GigaProcreateTopBar"));
     m_topBar->setMovable(false);
     m_topBar->setIconSize(QSize(22, 22));
+    // Procreate-like: thin, dark, borderless; text buttons on the left,
+    // frameless icons on the right.
+    m_topBar->setStyleSheet(QStringLiteral(
+        "QToolBar#GigaProcreateTopBar{background:#1c1c1e;border:0;padding:2px 8px;spacing:4px;}"
+        "QToolBar#GigaProcreateTopBar QToolButton{border:0;color:#e8e8e8;padding:4px 8px;border-radius:7px;}"
+        "QToolBar#GigaProcreateTopBar QToolButton:hover{background:rgba(255,255,255,22);}"
+        "QToolBar#GigaProcreateTopBar QToolButton::menu-indicator{image:none;}"));
 
     auto menuButton = [this](const QString &text, QMenu *menu) {
         QToolButton *button = addButton(m_topBar, QString(), text, QString());
@@ -172,58 +180,51 @@ void GigaProcreateMode::buildBars()
     connect(eraser, &QToolButton::clicked, this, [this, eraser]() { eraserClicked(eraser); });
     QToolButton *layers = addButton(m_topBar, QStringLiteral("all-layers"), QString(), i18nc("@info:tooltip", "Layers"));
     connect(layers, &QToolButton::clicked, this, [this, layers]() {
-        m_mainWindow->gigaShowPanelFlyout(QStringLiteral("KisLayerBox"), layers);
+        showPopover(new GigaLayersPanel(m_mainWindow->viewManager()), layers);
     });
     m_colorDot = addButton(m_topBar, QString(), QString(), i18nc("@info:tooltip", "Colors"));
     m_colorDot->setToolButtonStyle(Qt::ToolButtonIconOnly);
     connect(m_colorDot, &QToolButton::clicked, this, [this]() {
-        m_mainWindow->gigaShowPanelFlyout(QStringLiteral("WideGamutColorSelector"), m_colorDot);
+        showPopover(new GigaColorPanel(m_mainWindow->viewManager()), m_colorDot);
     });
 
     m_mainWindow->addToolBarBreak(Qt::TopToolBarArea);
     m_mainWindow->addToolBar(Qt::TopToolBarArea, m_topBar);
 
-    // ---------------- Side bar ----------------
-    m_sideBar = new QToolBar(i18nc("@title:window", "Procreate Side Bar"), m_mainWindow);
-    m_sideBar->setObjectName(QStringLiteral("GigaProcreateSideBar"));
-    m_sideBar->setOrientation(Qt::Vertical);
-    m_sideBar->setMovable(false);
+    // ---------------- Side bar: floating pill over the canvas ----------------
+    QWidget *overlayHost = m_mainWindow->centralWidget();
+    m_sideBar = new GigaSideBarPill(overlayHost);
+    m_sizeSlider = m_sideBar->sizeSlider();
+    m_opacitySlider = m_sideBar->opacitySlider();
 
-    auto makeSlider = [this](const QString &toolTip) {
-        QSlider *slider = new QSlider(Qt::Vertical, m_sideBar);
-        slider->setMinimumHeight(170);
-        slider->setToolTip(toolTip);
-        m_sideBar->addWidget(slider);
-        return slider;
-    };
-
-    m_sizeSlider = makeSlider(i18nc("@info:tooltip", "Brush size"));
     m_sizeSlider->setRange(0, SLIDER_STEPS);
     connect(m_sizeSlider, &QSlider::valueChanged, this, [this](int value) {
         if (m_updatingSliders || !m_mainWindow->viewManager()) return;
         m_mainWindow->viewManager()->canvasResourceProvider()->setSize(sliderToSize(value));
     });
-
-    QToolButton *sampler = addButton(m_sideBar, QStringLiteral("krita_tool_color_sampler"), QString(),
-                                     i18nc("@info:tooltip", "Pick a colour from the canvas"));
-    connect(sampler, &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_SAMPLER)); });
-
-    m_opacitySlider = makeSlider(i18nc("@info:tooltip", "Brush opacity"));
     m_opacitySlider->setRange(1, 100);
     connect(m_opacitySlider, &QSlider::valueChanged, this, [this](int value) {
         if (m_updatingSliders || !m_mainWindow->viewManager()) return;
         m_mainWindow->viewManager()->canvasResourceProvider()->setOpacity(value / 100.0);
     });
-
-    QToolButton *undo = addButton(m_sideBar, QStringLiteral("edit-undo"), QString(), i18nc("@info:tooltip", "Undo"));
-    connect(undo, &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_undo")); });
-    QToolButton *redo = addButton(m_sideBar, QStringLiteral("edit-redo"), QString(), i18nc("@info:tooltip", "Redo"));
-    connect(redo, &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_redo")); });
-
-    m_mainWindow->addToolBar(Qt::LeftToolBarArea, m_sideBar);
+    connect(m_sideBar->samplerButton(), &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_SAMPLER)); });
+    connect(m_sideBar->undoButton(), &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_undo")); });
+    connect(m_sideBar->redoButton(), &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_redo")); });
 
     m_topBar->hide();
     m_sideBar->hide();
+}
+
+void GigaProcreateMode::showPopover(QWidget *content, QWidget *anchor)
+{
+    GigaPopover *popover = new GigaPopover(m_mainWindow);
+    popover->setContent(content);
+    popover->showBelow(anchor);
+}
+
+void GigaProcreateMode::showBrushLibrary(QWidget *anchor)
+{
+    showPopover(new GigaBrushLibrary(m_mainWindow->viewManager()), anchor);
 }
 
 void GigaProcreateMode::connectResources()
@@ -255,13 +256,13 @@ void GigaProcreateMode::updateColorDot()
 {
     if (!m_colorDot || !m_mainWindow->viewManager()) return;
     const QColor color = m_mainWindow->viewManager()->canvasResourceProvider()->fgColor().toQColor();
-    QPixmap pixmap(22, 22);
+    QPixmap pixmap(26, 26);
     pixmap.fill(Qt::transparent);
     QPainter p(&pixmap);
     p.setRenderHint(QPainter::Antialiasing);
     p.setPen(QPen(QColor(200, 200, 200), 1.5));
     p.setBrush(color);
-    p.drawEllipse(QRectF(1.5, 1.5, 19, 19));
+    p.drawEllipse(QRectF(1.5, 1.5, 23, 23));
     m_colorDot->setIcon(QIcon(pixmap));
 }
 
@@ -316,7 +317,7 @@ void GigaProcreateMode::brushClicked(QToolButton *button)
 
     if (brushToolActive && s_slot == Slot::Paint && !(erase && erase->isChecked())) {
         // Already painting: tapping again opens the brush library.
-        m_mainWindow->gigaShowPanelFlyout(QStringLiteral("PresetDocker"), button);
+        showBrushLibrary(button);
         return;
     }
     if (s_slot == Slot::Smudge) {
@@ -335,7 +336,7 @@ void GigaProcreateMode::smudgeClicked(QToolButton *button)
     const bool brushToolActive = KoToolManager::instance()->activeToolId() == QLatin1String(TOOL_BRUSH);
 
     if (brushToolActive && s_slot == Slot::Smudge) {
-        m_mainWindow->gigaShowPanelFlyout(QStringLiteral("PresetDocker"), button);
+        showBrushLibrary(button);
         return;
     }
     if (erase && erase->isChecked()) erase->setChecked(false); // back to the paint brush first
@@ -353,7 +354,7 @@ void GigaProcreateMode::eraserClicked(QToolButton *button)
     const bool brushToolActive = KoToolManager::instance()->activeToolId() == QLatin1String(TOOL_BRUSH);
 
     if (brushToolActive && erase->isChecked()) {
-        m_mainWindow->gigaShowPanelFlyout(QStringLiteral("PresetDocker"), button);
+        showBrushLibrary(button);
         return;
     }
     if (s_slot == Slot::Smudge) {
@@ -382,12 +383,13 @@ void GigaProcreateMode::setActive(bool active)
             dock->hide();
         }
         Q_FOREACH (QToolBar *bar, m_mainWindow->findChildren<QToolBar *>()) {
-            if (bar != m_topBar && bar != m_sideBar) bar->hide();
+            if (bar != m_topBar) bar->hide();
         }
         m_mainWindow->menuBar()->hide();
         m_mainWindow->statusBar()->hide();
         m_topBar->show();
         m_sideBar->show();
+        m_sideBar->reposition();
         updateSideBar();
         updateColorDot();
     } else {
