@@ -569,6 +569,14 @@ void KoSvgTextProperties::parseSvgTextAttribute(const SvgLoadingContext &context
         setProperty(LineHeightId, QVariant::fromValue(KoSvgText::parseLineHeight(value, context)));
     } else if (command == "text-indent") {
         setProperty(TextIndentId, QVariant::fromValue(KoSvgText::parseTextIndent(value, context)));
+    } else if (command == "-giga-space-before") {
+        setProperty(GigaSpaceBeforeId, SvgUtil::parseUnitXY(context.currentGC(), context.resolvedProperties(), value));
+    } else if (command == "-giga-space-after") {
+        setProperty(GigaSpaceAfterId, SvgUtil::parseUnitXY(context.currentGC(), context.resolvedProperties(), value));
+    } else if (command == "-giga-indent-start") {
+        setProperty(GigaIndentStartId, SvgUtil::parseUnitXY(context.currentGC(), context.resolvedProperties(), value));
+    } else if (command == "-giga-indent-end") {
+        setProperty(GigaIndentEndId, SvgUtil::parseUnitXY(context.currentGC(), context.resolvedProperties(), value));
     } else if (command == "hanging-punctuation") {
         KoSvgText::HangingPunctuations hang;
         Q_FOREACH (const QString &param, value.split(' ', Qt::SkipEmptyParts)) {
@@ -1004,6 +1012,19 @@ QMap<QString, QString> KoSvgTextProperties::convertParagraphProperties() const
     if (hasProperty(TextIndentId)) {
         result.insert("text-indent", writeTextIndent(propertyOrDefault(TextIndentId).value<TextIndentInfo>()));
     }
+    // Giga Sketch paragraph properties (see KoSvgTextProperties.h).
+    if (hasProperty(GigaSpaceBeforeId)) {
+        result.insert("-giga-space-before", QString::number(property(GigaSpaceBeforeId).toReal()));
+    }
+    if (hasProperty(GigaSpaceAfterId)) {
+        result.insert("-giga-space-after", QString::number(property(GigaSpaceAfterId).toReal()));
+    }
+    if (hasProperty(GigaIndentStartId)) {
+        result.insert("-giga-indent-start", QString::number(property(GigaIndentStartId).toReal()));
+    }
+    if (hasProperty(GigaIndentEndId)) {
+        result.insert("-giga-indent-end", QString::number(property(GigaIndentEndId).toReal()));
+    }
     if (hasProperty(TextAlignAllId)) {
         TextAlign all = TextAlign(property(TextAlignAllId).toInt());
         result.insert("text-align", writeTextAlign(all));
@@ -1269,6 +1290,10 @@ const KoSvgTextProperties &KoSvgTextProperties::defaultProperties()
 
         s_defaultProperties->setProperty(FontOpticalSizingId, true);
         s_defaultProperties->setProperty(TextRenderingId, RenderingAuto);
+        s_defaultProperties->setProperty(GigaSpaceBeforeId, 0.0);
+        s_defaultProperties->setProperty(GigaSpaceAfterId, 0.0);
+        s_defaultProperties->setProperty(GigaIndentStartId, 0.0);
+        s_defaultProperties->setProperty(GigaIndentEndId, 0.0);
         {
             using namespace KoSvgText;
             TextDecorations deco = DecorationNone;
@@ -1302,6 +1327,10 @@ bool KoSvgTextProperties::propertyIsBlockOnly(PropertyId id)
             id == TextAlignAllId ||
             id == TextAlignLastId ||
             id == TextIndentId ||
+            id == GigaSpaceBeforeId ||
+            id == GigaSpaceAfterId ||
+            id == GigaIndentStartId ||
+            id == GigaIndentEndId ||
             id == HangingPunctuationId ||
             id == TextRenderingId;
 }

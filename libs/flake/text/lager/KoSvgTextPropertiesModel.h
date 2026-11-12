@@ -216,6 +216,16 @@ public:
     LAGER_QT_CURSOR(qreal, fontSizeAdjust);
     LAGER_QT_CURSOR(PropertyState, fontSizeAdjustState);
 
+    // Giga Sketch paragraph spacing and indents (pt).
+    LAGER_QT_CURSOR(qreal, gigaSpaceBefore);
+    LAGER_QT_CURSOR(PropertyState, gigaSpaceBeforeState);
+    LAGER_QT_CURSOR(qreal, gigaSpaceAfter);
+    LAGER_QT_CURSOR(PropertyState, gigaSpaceAfterState);
+    LAGER_QT_CURSOR(qreal, gigaIndentStart);
+    LAGER_QT_CURSOR(PropertyState, gigaIndentStartState);
+    LAGER_QT_CURSOR(qreal, gigaIndentEnd);
+    LAGER_QT_CURSOR(PropertyState, gigaIndentEndState);
+
     LAGER_QT_CURSOR(int, textCollapse);
     LAGER_QT_CURSOR(PropertyState, textCollapseState);
     LAGER_QT_CURSOR(int, textWrap);

@@ -684,6 +684,17 @@ QVector<LineBox> flowTextInShapes(const KoSvgTextProperties &properties,
         if (charResult.breakType == BreakType::HardBreak) {
             finalizeLine(result, currentPos, currentLine, lineOffset, anchor, writingMode, ltr, true, true, resHandler);
             lineBoxes.append(currentLine);
+            // Giga Sketch: space between paragraphs. The next line is placed
+            // by searching the shape from lineOffset, so moving it is enough.
+            {
+                const qreal gap = properties.propertyOrDefault(KoSvgTextProperties::GigaSpaceAfterId).toReal()
+                                + properties.propertyOrDefault(KoSvgTextProperties::GigaSpaceBeforeId).toReal();
+                if (!qFuzzyIsNull(gap)) {
+                    lineOffset += resHandler.adjust(isHorizontal ? QPointF(0, gap)
+                                                                 : QPointF(writingMode == KoSvgText::VerticalRL ? -gap : gap, 0));
+                    currentPos = lineOffset;
+                }
+            }
             currentLine = LineBox();
             indentLine = textIndentInfo.hanging? false: textIndentInfo.eachLine;
         }

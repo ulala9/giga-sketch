@@ -120,6 +120,14 @@ public:
         KraTextStyleType, ///< string, used to identify the style preset type (character or paragraph).
         KraTextStyleResolution, ///< Int, used to scale style presets to be pixel-relative.
 
+        // Giga Sketch paragraph properties (Photoshop-style). qreal, in user
+        // units (pt). Saved as "-giga-*" style entries, which stock Krita
+        // silently ignores, so files still open there.
+        GigaSpaceBeforeId, ///< Extra space above each paragraph after the first.
+        GigaSpaceAfterId,  ///< Extra space below each paragraph (after a line break).
+        GigaIndentStartId, ///< Indent on the inline-start side (left for LTR).
+        GigaIndentEndId,   ///< Indent on the inline-end side (right for LTR).
+
         LastPropertyId ///< Last Property ID, used for iteration.
     };
 

@@ -284,6 +284,14 @@ KoSvgTextPropertiesModel::KoSvgTextPropertiesModel(lager::cursor<KoSvgTextProper
     , LAGER_QT(languageState) {textData.zoom(propertyModifyState(KoSvgTextProperties::TextLanguage))}
     , LAGER_QT(fontSizeAdjust) {textData.zoom(createTextProperty(KoSvgTextProperties::FontSizeAdjustId)).zoom(autoValueSimplified)}
     , LAGER_QT(fontSizeAdjustState) {textData.zoom(propertyModifyState(KoSvgTextProperties::FontSizeAdjustId))}
+    , LAGER_QT(gigaSpaceBefore) {textData.zoom(createTextProperty(KoSvgTextProperties::GigaSpaceBeforeId)).zoom(variant_to<qreal>)}
+    , LAGER_QT(gigaSpaceBeforeState) {textData.zoom(propertyModifyState(KoSvgTextProperties::GigaSpaceBeforeId))}
+    , LAGER_QT(gigaSpaceAfter) {textData.zoom(createTextProperty(KoSvgTextProperties::GigaSpaceAfterId)).zoom(variant_to<qreal>)}
+    , LAGER_QT(gigaSpaceAfterState) {textData.zoom(propertyModifyState(KoSvgTextProperties::GigaSpaceAfterId))}
+    , LAGER_QT(gigaIndentStart) {textData.zoom(createTextProperty(KoSvgTextProperties::GigaIndentStartId)).zoom(variant_to<qreal>)}
+    , LAGER_QT(gigaIndentStartState) {textData.zoom(propertyModifyState(KoSvgTextProperties::GigaIndentStartId))}
+    , LAGER_QT(gigaIndentEnd) {textData.zoom(createTextProperty(KoSvgTextProperties::GigaIndentEndId)).zoom(variant_to<qreal>)}
+    , LAGER_QT(gigaIndentEndState) {textData.zoom(propertyModifyState(KoSvgTextProperties::GigaIndentEndId))}
     , LAGER_QT(textCollapse){textData.zoom(createTextProperty(KoSvgTextProperties::TextCollapseId)).zoom(variant_to<int>)}
     , LAGER_QT(textCollapseState) {textData.zoom(propertyModifyState(KoSvgTextProperties::TextCollapseId))}
     , LAGER_QT(textWrap){textData.zoom(createTextProperty(KoSvgTextProperties::TextWrapId)).zoom(variant_to<int>)}

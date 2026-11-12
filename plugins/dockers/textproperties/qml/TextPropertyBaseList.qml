@@ -172,6 +172,10 @@ ColumnLayout {
                     dpi: canvasDPI;
                     properties: propertiesModel;
                 }
+                ParagraphSpacing {
+                    dpi: canvasDPI;
+                    properties: propertiesModel;
+                }
                 TextAlign{
                     dpi: canvasDPI;
                     properties: propertiesModel;

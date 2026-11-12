@@ -179,7 +179,7 @@ void TextPropertyConfigModel::addProperty(const QString &name, const int propert
         QStringLiteral("line-height"), QStringLiteral("font-kerning"), QStringLiteral("letter-spacing"),
         QStringLiteral("baseline-shift"), QStringLiteral("text-transform"), QStringLiteral("text-decoration"),
         // Paragraph
-        QStringLiteral("text-align"), QStringLiteral("text-indent"),
+        QStringLiteral("text-align"), QStringLiteral("text-indent"), QStringLiteral("giga-paragraph-spacing"),
     };
     if (data.visibilityState == FollowDefault && gigaAlwaysVisible.contains(name)) {
         data.visibilityState = AlwaysVisible;

@@ -440,6 +440,24 @@ void finalizeLine(QVector<CharacterResult> &result,
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+
+/**
+ * Giga Sketch: the gap between two paragraphs (lines separated by a hard
+ * line break), as an offset in the block (line-stacking) direction.
+ * Space after the paragraph + space before the next one, like Photoshop.
+ */
+static QPointF gigaParagraphGap(const KoSvgTextProperties &properties,
+                                KoSvgText::WritingMode writingMode,
+                                const KoSvgText::ResolutionHandler &resHandler)
+{
+    const qreal gap = properties.propertyOrDefault(KoSvgTextProperties::GigaSpaceAfterId).toReal()
+                    + properties.propertyOrDefault(KoSvgTextProperties::GigaSpaceBeforeId).toReal();
+    if (qFuzzyIsNull(gap)) return QPointF();
+    if (writingMode == KoSvgText::HorizontalTB) return resHandler.adjust(QPointF(0, gap));
+    // Vertical text stacks lines right-to-left (vertical-rl) or left-to-right.
+    return resHandler.adjust(QPointF(writingMode == KoSvgText::VerticalRL ? -gap : gap, 0));
+}
+
 QVector<LineBox> breakLines(const KoSvgTextProperties &properties,
                             const QMap<int, int> &logicalToVisual,
                             QVector<CharacterResult> &result,
@@ -453,6 +471,30 @@ QVector<LineBox> breakLines(const KoSvgTextProperties &properties,
 
     bool ltr = direction == KoSvgText::DirectionLeftToRight;
     bool isHorizontal = writingMode == KoSvgText::HorizontalTB;
+
+    // Giga Sketch: Photoshop-style left/right (inline start/end) paragraph
+    // indents. The text's x (or y) is the anchor of each line: its start
+    // edge, centre or end edge depending on text-anchor. Move that anchor
+    // inward and, for wrapped text, narrow the wrap width by both indents.
+    {
+        const qreal indentStart = properties.propertyOrDefault(KoSvgTextProperties::GigaIndentStartId).toReal();
+        const qreal indentEnd = properties.propertyOrDefault(KoSvgTextProperties::GigaIndentEndId).toReal();
+        if (!qFuzzyIsNull(indentStart) || !qFuzzyIsNull(indentEnd)) {
+            // "Low" = left (horizontal) or top (vertical) side.
+            const qreal lowIndent = ltr ? indentStart : indentEnd;
+            const qreal highIndent = ltr ? indentEnd : indentStart;
+            const bool anchoredAtLowEdge = (anchor == KoSvgText::AnchorStart && ltr) || (anchor == KoSvgText::AnchorEnd && !ltr);
+            const bool anchoredAtHighEdge = (anchor == KoSvgText::AnchorEnd && ltr) || (anchor == KoSvgText::AnchorStart && !ltr);
+            const qreal shift = anchoredAtLowEdge ? lowIndent
+                              : anchoredAtHighEdge ? -highIndent
+                              : (lowIndent - highIndent) * 0.5;
+            startPos += isHorizontal ? QPointF(shift, 0) : QPointF(0, shift);
+            if (!inlineSize.isAuto) {
+                inlineSize.customValue = qMax(1.0, inlineSize.customValue - indentStart - indentEnd);
+            }
+        }
+    }
+    const QPointF paragraphGap = gigaParagraphGap(properties, writingMode, resHandler);
 
     QVector<LineBox> lineBoxes;
 
@@ -603,6 +645,7 @@ QVector<LineBox> breakLines(const KoSvgTextProperties &properties,
                          false,
                          resHandler);
             lineBoxes.append(currentLine);
+            lineOffset += paragraphGap; // Giga Sketch: space between paragraphs
             bool indentLine = textIndentInfo.hanging? false: textIndentInfo.eachLine;
             currentLine.clearAndAdjust(isHorizontal, lineOffset, indentLine? textIndent: QPointF());
             if (!inlineSize.isAuto) {

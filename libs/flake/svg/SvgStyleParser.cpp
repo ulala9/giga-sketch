@@ -72,6 +72,8 @@ public:
                        << "white-space"
                        << "text-transform"
                        << "text-indent"
+                       << "-giga-space-before" << "-giga-space-after"
+                       << "-giga-indent-start" << "-giga-indent-end"
                        << "word-break"
                        << "line-break"
                        << "hanging-punctuation"
@@ -343,6 +345,8 @@ void SvgStyleParser::parsePA(SvgGraphicsContext *gc, const QString &command, con
             gc->markerEndId = gc->markerStartId;
         }
     } else if (command == "font-kerning" || command == "line-height" || command == "white-space" || command == "xml:space" || command == "text-transform" || command == "text-indent"
+               || command == "-giga-space-before" || command == "-giga-space-after"
+               || command == "-giga-indent-start" || command == "-giga-indent-end"
                || command == "word-break" || command == "line-break" || command == "hanging-punctuation" || command == "text-align"
                || command == "text-align-all" || command == "text-align-last" || command == "inline-size" || command == "overflow" || command == "text-overflow"
                || command == "tab-size" || command == "overflow-wrap" || command == "word-wrap" || command == "vertical-align"

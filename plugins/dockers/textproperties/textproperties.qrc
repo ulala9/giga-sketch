@@ -10,6 +10,7 @@
         <file alias="TextAlign.qml">qml/TextAlign.qml</file>
         <file alias="Direction.qml">qml/Direction.qml</file>
         <file alias="TextIndent.qml">qml/TextIndent.qml</file>
+        <file alias="ParagraphSpacing.qml">qml/ParagraphSpacing.qml</file>
         <file alias="LetterSpacing.qml">qml/LetterSpacing.qml</file>
         <file alias="WordSpacing.qml">qml/WordSpacing.qml</file>
         <file alias="LineBreak.qml">qml/LineBreak.qml</file>
