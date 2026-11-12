@@ -8,6 +8,8 @@
 #include <QAction>
 #include <QDockWidget>
 #include <QMenu>
+#include <QLabel>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QMenuBar>
 #include <QPainter>
@@ -39,7 +41,6 @@
 namespace {
 
 const char *TOOL_BRUSH = "KritaShape/KisToolBrush";
-const char *TOOL_SAMPLER = "KritaSelected/KisToolColorSampler";
 const char *TOOL_SELECT = "KisToolSelectOutline";
 const char *TOOL_TRANSFORM = "KisToolTransform";
 
@@ -203,44 +204,47 @@ void GigaProcreateMode::buildBars()
     m_mainWindow->addToolBarBreak(Qt::TopToolBarArea);
     m_mainWindow->addToolBar(Qt::TopToolBarArea, m_topBar);
 
-    // ---------------- Right bar: brush controls below the menus ----------------
-    m_rightBar->addSeparator();
-    auto makeSlider = [this](const QString &toolTip) {
-        QSlider *slider = new QSlider(Qt::Vertical, m_rightBar);
-        slider->setMinimumHeight(160);
-        slider->setToolTip(toolTip);
-        QWidget *holder = new QWidget(m_rightBar); // centres the slider in the bar
-        QHBoxLayout *row = new QHBoxLayout(holder);
-        row->setContentsMargins(0, 0, 0, 0);
-        row->addStretch(1);
-        row->addWidget(slider);
-        row->addStretch(1);
-        m_rightBar->addWidget(holder);
-        return slider;
-    };
+    // Brush size and opacity live in their own popover (one button), so the
+    // bar stays small. Undo/redo: Ctrl+Z / Ctrl+Shift+Z. Picker: Alt+click.
+    QToolButton *brushSettings = addButton(m_rightBar, QStringLiteral("brushsize-increase"), QString(),
+                                           i18nc("@info:tooltip", "Brush size and opacity"));
+    connect(brushSettings, &QToolButton::clicked, this, [this, brushSettings]() {
+        if (!m_mainWindow->viewManager()) return;
+        KisCanvasResourceProvider *provider = m_mainWindow->viewManager()->canvasResourceProvider();
 
-    m_sizeSlider = makeSlider(i18nc("@info:tooltip", "Brush size"));
-    m_sizeSlider->setRange(0, SLIDER_STEPS);
-    connect(m_sizeSlider, &QSlider::valueChanged, this, [this](int value) {
-        if (m_updatingSliders || !m_mainWindow->viewManager()) return;
-        m_mainWindow->viewManager()->canvasResourceProvider()->setSize(sliderToSize(value));
+        QWidget *panel = new QWidget();
+        panel->setMinimumWidth(260);
+        QFormLayout *form = new QFormLayout(panel);
+        form->setContentsMargins(0, 0, 0, 0);
+
+        QSlider *size = new QSlider(Qt::Horizontal, panel);
+        size->setRange(0, SLIDER_STEPS);
+        size->setValue(sizeToSlider(provider->size()));
+        QLabel *sizeValue = new QLabel(QStringLiteral("%1 px").arg(qRound(provider->size())), panel);
+        connect(size, &QSlider::valueChanged, panel, [provider, sizeValue](int value) {
+            provider->setSize(sliderToSize(value));
+            sizeValue->setText(QStringLiteral("%1 px").arg(qRound(sliderToSize(value))));
+        });
+        QHBoxLayout *sizeRow = new QHBoxLayout();
+        sizeRow->addWidget(size, 1);
+        sizeRow->addWidget(sizeValue);
+        form->addRow(i18nc("brush setting", "Size"), sizeRow);
+
+        QSlider *opacity = new QSlider(Qt::Horizontal, panel);
+        opacity->setRange(1, 100);
+        opacity->setValue(qRound(provider->opacity() * 100));
+        QLabel *opacityValue = new QLabel(QStringLiteral("%1%").arg(opacity->value()), panel);
+        connect(opacity, &QSlider::valueChanged, panel, [provider, opacityValue](int value) {
+            provider->setOpacity(value / 100.0);
+            opacityValue->setText(QStringLiteral("%1%").arg(value));
+        });
+        QHBoxLayout *opacityRow = new QHBoxLayout();
+        opacityRow->addWidget(opacity, 1);
+        opacityRow->addWidget(opacityValue);
+        form->addRow(i18nc("brush setting", "Opacity"), opacityRow);
+
+        showPopover(panel, brushSettings);
     });
-
-    QToolButton *sampler = addButton(m_rightBar, QStringLiteral("krita_tool_color_sampler"), QString(),
-                                     i18nc("@info:tooltip", "Pick a colour from the canvas"));
-    connect(sampler, &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_SAMPLER)); });
-
-    m_opacitySlider = makeSlider(i18nc("@info:tooltip", "Brush opacity"));
-    m_opacitySlider->setRange(1, 100);
-    connect(m_opacitySlider, &QSlider::valueChanged, this, [this](int value) {
-        if (m_updatingSliders || !m_mainWindow->viewManager()) return;
-        m_mainWindow->viewManager()->canvasResourceProvider()->setOpacity(value / 100.0);
-    });
-
-    QToolButton *undo = addButton(m_rightBar, QStringLiteral("edit-undo"), QString(), i18nc("@info:tooltip", "Undo"));
-    connect(undo, &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_undo")); });
-    QToolButton *redo = addButton(m_rightBar, QStringLiteral("edit-redo"), QString(), i18nc("@info:tooltip", "Redo"));
-    connect(redo, &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_redo")); });
 
     m_mainWindow->addToolBar(Qt::RightToolBarArea, m_rightBar);
 
