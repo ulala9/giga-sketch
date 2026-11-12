@@ -7,6 +7,7 @@ set (SvgTextTool_SRCS
     BasicXMLSyntaxHighlighter.cpp
     SvgCreateTextStrategy.cpp
     GigaTextBoxResizeStrategy.cpp
+    GigaFontPicker.cpp
     SvgInlineSizeChangeCommand.cpp
     SvgInlineSizeChangeStrategy.cpp
     SvgSelectTextStrategy.cpp

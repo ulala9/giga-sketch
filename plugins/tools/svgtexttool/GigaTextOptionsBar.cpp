@@ -4,6 +4,7 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "GigaTextOptionsBar.h"
+#include "GigaFontPicker.h"
 
 #include <QButtonGroup>
 #include <QColorDialog>
@@ -105,7 +106,7 @@ GigaTextOptionsBar::GigaTextOptionsBar(QWidget *parent)
     addSeparator();
 
     // Font family: editable so you can type to search, like Photoshop.
-    m_family = new QComboBox(this);
+    m_family = new GigaFontComboBox(this);
     m_family->setEditable(true);
     m_family->setInsertPolicy(QComboBox::NoInsert);
     m_family->setMinimumContentsLength(18);
@@ -115,7 +116,13 @@ GigaTextOptionsBar::GigaTextOptionsBar(QWidget *parent)
     m_family->completer()->setFilterMode(Qt::MatchContains);
     m_family->completer()->setCaseSensitivity(Qt::CaseInsensitive);
     connect(m_family, SIGNAL(activated(int)), SLOT(slotFamilyChosen()));
+    // The dropdown arrow opens the Photoshop-style font menu.
+    connect(m_family, SIGNAL(pickerRequested()), SLOT(slotOpenFontPicker()));
     addWidget(m_family);
+    m_fontPicker = new GigaFontPicker(this);
+    connect(m_fontPicker, SIGNAL(previewRequested(QString)), SLOT(slotFontPreview(QString)));
+    connect(m_fontPicker, SIGNAL(chosen(QString)), SLOT(slotFontPicked(QString)));
+    connect(m_fontPicker, SIGNAL(previewCancelled()), SLOT(slotFontPreviewCancelled()));
 
     m_style = new QComboBox(this);
     m_style->setMinimumContentsLength(10);
@@ -281,6 +288,7 @@ void GigaTextOptionsBar::fillFamilies()
     m_family->blockSignals(true);
     m_family->addItems(names);
     m_family->blockSignals(false);
+    m_familyNames = names;
     m_familiesFilled = true;
 }
 
@@ -394,8 +402,47 @@ void GigaTextOptionsBar::slotFamilyChosen()
     if (m_updating) return;
     const QString family = m_family->currentText().trimmed();
     if (family.isEmpty() || m_family->findText(family, Qt::MatchFixedString) < 0) return;
+    setFamily(family);
+    GigaFontPicker::addRecent(family);
+}
+
+void GigaTextOptionsBar::setFamily(const QString &family)
+{
     applyCharacter({KoSvgTextProperties::FontFamiliesId}, [family](KoSvgTextProperties &p) {
         p.setProperty(KoSvgTextProperties::FontFamiliesId, QStringList{family});
+    });
+}
+
+void GigaTextOptionsBar::slotOpenFontPicker()
+{
+    fillFamilies();
+    const KoSvgTextPropertyData data = isCharacterSelection()
+        ? m_provider->characterTextPropertyData()
+        : (m_provider ? m_provider->textPropertyData() : KoSvgTextPropertyData());
+    // Live preview only when the text uses one font: a mix of fonts can't be
+    // put back by setting a single value.
+    m_previewAllowed = m_provider && !data.tristate.contains(KoSvgTextProperties::FontFamiliesId);
+    m_previewOriginal = currentCharacterProperties().propertyOrDefault(KoSvgTextProperties::FontFamiliesId).toStringList();
+    m_fontPicker->popup(m_family, m_familyNames, m_previewOriginal.value(0));
+}
+
+void GigaTextOptionsBar::slotFontPreview(const QString &family)
+{
+    // Krita merges consecutive font edits on the same text into one undo step.
+    if (m_previewAllowed) setFamily(family);
+}
+
+void GigaTextOptionsBar::slotFontPicked(const QString &family)
+{
+    setFamily(family);
+}
+
+void GigaTextOptionsBar::slotFontPreviewCancelled()
+{
+    if (!m_previewAllowed || m_previewOriginal.isEmpty()) return;
+    const QStringList original = m_previewOriginal;
+    applyCharacter({KoSvgTextProperties::FontFamiliesId}, [original](KoSvgTextProperties &p) {
+        p.setProperty(KoSvgTextProperties::FontFamiliesId, original);
     });
 }
 

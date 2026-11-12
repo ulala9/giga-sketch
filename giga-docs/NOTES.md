@@ -292,3 +292,15 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   Always call `text->gigaContourChanged(box)` after resizing a contour with setSize.
 - Tests: libs/flake/tests/TestGigaTextBox (7). SvgTextCursorTest has 8 pre-existing failures (RTL/vertical word moves).
 - Known small leak: a box from an undone "create box text" with no redo stays parentless until exit.
+
+## Font picker (feature/font-picker → giga-main)
+- `plugins/tools/svgtexttool/GigaFontPicker.{h,cpp}`: `GigaFontComboBox` (QComboBox whose showPopup() emits
+  pickerRequested) + `GigaFontPicker` popup (Qt::Popup QFrame): search field (contains, case-insensitive; top match
+  pre-selected and previewed), sections Favourites / Recent / All Fonts, rows = ☆/★ + name + preview.
+- Previews = the KoFontFamily resource image (black "AaBbGg"-style sample on white 256x256), cropped and tinted to the
+  palette text colour (`tintPreview`), cached per family.
+- Settings: KConfig group `GigaFontPicker`, keys `recent` (max 8, newest first) and `favourites`.
+- Live preview: GigaTextOptionsBar applies the hovered family through the provider; consecutive edits merge into one
+  undo step (SvgTextMergePropertiesRangeCommand::mergeWith). Disabled when the selection mixes fonts. Cancel (Esc /
+  click away) re-applies the original family list → may leave one no-op undo entry.
+- Test: plugins/tools/svgtexttool/tests/GigaFontPickerTest (6).

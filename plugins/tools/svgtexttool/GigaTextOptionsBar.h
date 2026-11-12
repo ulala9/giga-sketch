@@ -16,6 +16,8 @@
 #include <functional>
 
 class QComboBox;
+class GigaFontComboBox;
+class GigaFontPicker;
 class QToolButton;
 class KisCanvasResourceProvider;
 class KoCanvasResourceProvider;
@@ -60,6 +62,10 @@ private Q_SLOTS:
     void slotOrientationClicked();
     void slotColorClicked();
     void slotOpenPanels();
+    void slotOpenFontPicker();
+    void slotFontPreview(const QString &family);
+    void slotFontPicked(const QString &family);
+    void slotFontPreviewCancelled();
 
 private:
     /// Properties of the current target: selected characters if a range is
@@ -76,6 +82,7 @@ private:
                         const std::function<void(KoSvgTextProperties &)> &change);
 
     void fillFamilies();
+    void setFamily(const QString &family);
     void fillStyles(const QString &family);
 
 private:
@@ -86,7 +93,12 @@ private:
     bool m_familiesFilled {false};
 
     QToolButton *m_orientation {nullptr};
-    QComboBox *m_family {nullptr};
+    GigaFontComboBox *m_family {nullptr};
+    GigaFontPicker *m_fontPicker {nullptr};
+    QStringList m_familyNames;
+    /// Font(s) before the live preview started; restored on cancel.
+    QStringList m_previewOriginal;
+    bool m_previewAllowed {false};
     QComboBox *m_style {nullptr};
     QComboBox *m_size {nullptr};
     QComboBox *m_antiAlias {nullptr};
