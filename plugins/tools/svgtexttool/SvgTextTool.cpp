@@ -23,6 +23,8 @@
 #include "SvgTextShortCuts.h"
 #include "SvgTextToolOptionsModel.h"
 #include <kis_shape_layer.h>
+#include "GigaTextOptionsBar.h"
+#include <KisMainWindow.h>
 #include "SvgTextTypeSettingStrategy.h"
 #include "SvgTextChangeTransformsOnRange.h"
 #include "SvgChangeTextPathInfoStrategy.h"
@@ -188,6 +190,23 @@ void SvgTextTool::activate(const QSet<KoShape *> &shapes)
         if (docker && m_optionManager) {
             m_optionManager->setTextPropertiesOpen(docker->isVisible());
         }
+
+        // Giga Sketch: show the Photoshop-style options bar. One bar per
+        // main window, shared by all documents; it follows the active canvas.
+        KisMainWindow *mainWindow = canvas2->viewManager()->mainWindow();
+        if (mainWindow) {
+            m_optionsBar = mainWindow->findChild<GigaTextOptionsBar *>(QStringLiteral("GigaTextOptionsBar"));
+            if (!m_optionsBar) {
+                m_optionsBar = new GigaTextOptionsBar(mainWindow);
+                // Own row under the menu/toolbars, like Photoshop's options bar.
+                mainWindow->addToolBarBreak(Qt::TopToolBarArea);
+                mainWindow->addToolBar(Qt::TopToolBarArea, m_optionsBar);
+            }
+            m_optionsBar->show();
+            m_optionsBar->setResourceProviders(canvas2->viewManager()->canvasResourceProvider(),
+                                               canvas()->resourceManager());
+            connect(m_optionsBar, SIGNAL(commitRequested()), this, SLOT(slotCommitText()), Qt::UniqueConnection);
+        }
     }
 
     connect(m_textTypeSignalsMapper.data(), SIGNAL(mapped(int)), this, SLOT(slotConvertType(int)));
@@ -203,6 +222,11 @@ void SvgTextTool::deactivate()
 {
     KoToolBase::deactivate();
     m_canvasConnections.clear();
+    if (m_optionsBar) {
+        disconnect(m_optionsBar, nullptr, this, nullptr);
+        m_optionsBar->setResourceProviders(nullptr, nullptr);
+        m_optionsBar->hide();
+    }
     updateAutoLayerName(m_textCursor.shape());
     m_textCursor.setShape(nullptr);
     const KisCanvas2 *canvas2 = qobject_cast<const KisCanvas2 *>(this->canvas());
@@ -473,6 +497,16 @@ void SvgTextTool::slotShapeSelectionChanged()
         }
     }
     slotTextTypeUpdated();
+}
+
+void SvgTextTool::slotCommitText()
+{
+    // Like Photoshop's checkmark: stop editing this text. Deselecting it
+    // ends editing (and lets the layer pick up its name from the text).
+    if (koSelection()) {
+        koSelection()->deselectAll();
+    }
+    repaintDecorations();
 }
 
 bool SvgTextTool::newLayerPerText() const

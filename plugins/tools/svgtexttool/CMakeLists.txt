@@ -19,6 +19,7 @@ set (SvgTextTool_SRCS
     SvgTextEditor.cpp
     SvgTextCursor.cpp
     SvgTextTool.cpp
+    GigaTextOptionsBar.cpp
     SvgTextToolFactory.cpp
     SvgTextShapeManagerBlocker.cpp
     SvgTextShortCuts.cpp

@@ -125,6 +125,8 @@ private:
     bool nodeEditable();
 
 private Q_SLOTS:
+    /// Giga Sketch: options bar "commit" button: finish editing.
+    void slotCommitText();
 
     void showEditor();
     void textUpdated(KoSvgTextShape *shape, const QString &svg, const QString &defs);
@@ -233,6 +235,8 @@ private:
 
     QScopedPointer<SvgTextToolOptionsManager>m_optionManager;
     QPointer<SvgTextEditor> m_editor;
+    /// Giga Sketch: Photoshop-style options bar (shared per main window).
+    QPointer<class GigaTextOptionsBar> m_optionsBar;
     QPointer<GlyphPaletteDialog> m_glyphPalette;
     QPointF m_lastMousePos;
     DragMode m_dragging {DragMode::None};
