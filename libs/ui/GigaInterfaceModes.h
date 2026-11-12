@@ -50,16 +50,31 @@ public Q_SLOTS:
     void setMode(int mode);
     void nextMode();
 
+protected:
+    /// Watches the main window for Qt's docking drop indicator, so Photoshop
+    /// mode can draw it as a clear blue highlight.
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
     void setPhotoshopPanels(bool on);
     /// Switch modes. @p atStartup: the window already shows this mode's
     /// layout (Krita restored it), so don't save or restore layouts.
     void switchTo(int mode, bool atStartup);
     void applyModeTheme(int mode);
+    /// Menu bar, status bar and options bar back on (Procreate mode hides
+    /// them, and that hidden state can get saved).
+    void showStandardBars();
+    /// Write the window's current layout and bar visibility to the saved
+    /// window settings. Krita re-applies those whenever a document opens or
+    /// the menus are rebuilt, which would otherwise undo the mode switch.
+    void syncSavedWindowSettings();
+    /// "Photoshop mode" message on the canvas, like the zoom message.
+    void showModeMessage(int mode);
 
     KisMainWindow *m_mainWindow {nullptr};
     GigaProcreateMode *m_procreate {nullptr};
     QMenu *m_menu {nullptr};
+    QString m_names[ModeCount];
     QActionGroup *m_group {nullptr};
     QAction *m_modeActions[ModeCount] {};
     QAction *m_next {nullptr};

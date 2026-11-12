@@ -8,6 +8,7 @@
 
 #include <QByteArray>
 #include <QObject>
+#include <QList>
 #include <QPointer>
 
 class QAction;
@@ -73,6 +74,7 @@ private:
 
     QPointer<QToolBar> m_topBar;
     QPointer<QToolBar> m_rightBar; ///< vertical bar on the right edge
+    QList<QPointer<QToolBar>> m_hiddenBars; ///< toolbars we hid, shown again on leaving
     QSlider *m_sizeSlider {nullptr};
     QSlider *m_opacitySlider {nullptr};
     QToolButton *m_colorDot {nullptr};

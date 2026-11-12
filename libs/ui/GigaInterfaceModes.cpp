@@ -9,13 +9,22 @@
 #include <QActionGroup>
 #include <QDockWidget>
 #include <QMenu>
+#include <QMenuBar>
+#include <QPainter>
+#include <QRubberBand>
+#include <QStatusBar>
+#include <QToolBar>
 #include <QTabWidget>
 
+#include <KConfigGroup>
+#include <KSharedConfig>
 #include <klocalizedstring.h>
 
 #include "GigaPanelTitleBar.h"
 #include "GigaProcreateMode.h"
 #include "KisMainWindow.h"
+#include "KisViewManager.h"
+#include "kis_floating_message.h"
 #include "kis_config.h"
 
 namespace {
@@ -50,13 +59,11 @@ GigaInterfaceModes::GigaInterfaceModes(KisMainWindow *mainWindow)
     m_menu = new QMenu(i18nc("@title:menu", "Interface Mode"), m_mainWindow);
     m_group = new QActionGroup(this);
     m_group->setExclusive(true);
-    const QString names[ModeCount] = {
-        i18nc("interface mode", "Studio"),
-        i18nc("interface mode", "Photoshop"),
-        i18nc("interface mode", "Procreate"),
-    };
+    m_names[Studio] = i18nc("interface mode", "Studio");
+    m_names[Photoshop] = i18nc("interface mode", "Photoshop");
+    m_names[Procreate] = i18nc("interface mode", "Procreate");
     for (int mode = 0; mode < ModeCount; mode++) {
-        QAction *action = m_menu->addAction(names[mode]);
+        QAction *action = m_menu->addAction(m_names[mode]);
         action->setCheckable(true);
         action->setChecked(mode == Studio);
         m_group->addAction(action);
@@ -67,6 +74,62 @@ GigaInterfaceModes::GigaInterfaceModes(KisMainWindow *mainWindow)
     m_menu->addAction(m_next);
 
     m_procreate = new GigaProcreateMode(m_mainWindow, m_next);
+
+    // Qt creates its docking drop indicator as a child of the main window
+    // the first time a panel is dragged; catch it then (see eventFilter).
+    m_mainWindow->installEventFilter(this);
+}
+
+bool GigaInterfaceModes::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_mainWindow && event->type() == QEvent::ChildAdded) {
+        QObject *child = static_cast<QChildEvent *>(event)->child();
+        if (QRubberBand *band = qobject_cast<QRubberBand *>(child)) {
+            band->installEventFilter(this);
+        }
+    } else if (event->type() == QEvent::Paint && m_mode == Photoshop) {
+        // Photoshop mode: while dragging a panel, the spot where it will
+        // land is drawn as a clear blue box instead of Qt's faint outline.
+        QRubberBand *band = qobject_cast<QRubberBand *>(watched);
+        if (band) {
+            QPainter p(band);
+            const QRect r = band->rect().adjusted(1, 1, -2, -2);
+            p.fillRect(r, QColor(49, 140, 231, 70));
+            p.setPen(QPen(QColor(49, 140, 231), 2));
+            p.drawRect(r);
+            return true; // we painted it; skip Qt's own drawing
+        }
+    }
+    return QObject::eventFilter(watched, event);
+}
+
+void GigaInterfaceModes::showStandardBars()
+{
+    m_mainWindow->menuBar()->show();
+    m_mainWindow->statusBar()->show();
+    // The options bar is the toolbar that holds the brush/tool controls.
+    Q_FOREACH (QToolBar *bar, m_mainWindow->findChildren<QToolBar *>()) {
+        if (bar->objectName() == QLatin1String("BrushesAndStuff")) bar->show();
+    }
+}
+
+void GigaInterfaceModes::syncSavedWindowSettings()
+{
+    // Same group and keys KMainWindow uses (see kmainwindow.cpp).
+    KConfigGroup cg = KSharedConfig::openConfig()->group(QStringLiteral("MainWindow"));
+    cg.writeEntry("State", m_mainWindow->saveState().toBase64());
+    cg.writeEntry("MenuBar", m_mainWindow->menuBar()->isHidden() ? "Disabled" : "Enabled");
+    cg.writeEntry("StatusBar", m_mainWindow->statusBar()->isHidden() ? "Disabled" : "Enabled");
+}
+
+void GigaInterfaceModes::showModeMessage(int mode)
+{
+    // Same floating message as zooming. Needs an open document (the
+    // message is drawn over the canvas).
+    KisViewManager *viewManager = m_mainWindow->viewManager();
+    if (!viewManager) return;
+    viewManager->showFloatingMessage(i18nc("floating message after switching interface mode", "%1 mode", m_names[mode]),
+                                     QIcon(), 1500, KisFloatingMessage::Medium);
 }
 
 int GigaInterfaceModes::savedMode()
@@ -133,8 +196,11 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
             m_mainWindow->applyGigaLayout(); // first visit: start from the Photoshop-like arrangement
         }
         m_procreate->hideBars(); // a restored layout may not know about them
+        showStandardBars();
     }
     applyModeTheme(mode);
+    syncSavedWindowSettings();
+    if (!atStartup) showModeMessage(mode);
 
     m_mode = mode;
     m_modeActions[mode]->setChecked(true);

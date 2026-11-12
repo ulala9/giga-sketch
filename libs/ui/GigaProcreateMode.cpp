@@ -419,8 +419,12 @@ void GigaProcreateMode::setActive(bool active)
         Q_FOREACH (QDockWidget *dock, m_mainWindow->dockWidgets()) {
             dock->hide();
         }
+        m_hiddenBars.clear();
         Q_FOREACH (QToolBar *bar, m_mainWindow->findChildren<QToolBar *>()) {
-            if (bar != m_topBar && bar != m_rightBar) bar->hide();
+            if (bar != m_topBar && bar != m_rightBar && bar->isVisible()) {
+                m_hiddenBars << bar;
+                bar->hide();
+            }
         }
         m_mainWindow->menuBar()->hide();
         m_mainWindow->statusBar()->hide();
@@ -431,6 +435,10 @@ void GigaProcreateMode::setActive(bool active)
     } else {
         m_topBar->hide();
         m_rightBar->hide();
+        for (const QPointer<QToolBar> &bar : m_hiddenBars) {
+            if (bar) bar->show();
+        }
+        m_hiddenBars.clear();
         m_mainWindow->menuBar()->show();
         m_mainWindow->statusBar()->show();
     }

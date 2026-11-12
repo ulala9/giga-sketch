@@ -215,7 +215,11 @@ void KisShadeSelectorLine::resizeEvent(QResizeEvent *e)
     int m_nWidth = m_new.width();
     int m_oWidth = m_old.width();
     m_width = width();
-    m_mouseX = m_mouseX * m_nWidth / m_oWidth;
+    // Giga Sketch: the old width is 0 the first time the widget is shown
+    // (e.g. when a saved layout floats this docker): integer divide by zero.
+    if (m_oWidth > 0) {
+        m_mouseX = m_mouseX * m_nWidth / m_oWidth;
+    }
 }
 void KisShadeSelectorLine::mousePressEvent(QMouseEvent* e)
 {
