@@ -60,6 +60,7 @@
 #include "dialogs/KisDlgCreateNewDocument.h"
 #include "kis_selection_manager.h"
 #include "kis_icon_utils.h"
+#include <QToolBar>
 #include <krecentfilesaction.h>
 #include "krita_utils.h"
 #include <ktoggleaction.h>
@@ -690,11 +691,96 @@ KisMainWindow::KisMainWindow(QUuid uuid)
         tabBar->setChangeCurrentOnDrag(true);
     }
 
+    createGigaPanelStrip();
+
     applyMainWindowSettings(d->windowStateConfig);
 
     // Giga Sketch: first start (no saved layout): use the Photoshop-like one.
     if (!d->windowStateConfig.hasKey("State")) {
         applyGigaLayout();
+    }
+}
+
+namespace {
+struct GigaPanelEntry {
+    const char *dockId;
+    const char *icon;
+};
+// Order matches the Giga layout: colour, brushes/tools, layers.
+const GigaPanelEntry GIGA_PANELS[] = {
+    {"ColorSelectorNg", "extended_color_selector"},
+    {"PaletteDocker", "config-popup-palette"},
+    {"PresetDocker", "paintop_settings_01"},
+    {"sharedtooldocker", "configure"},
+    {"TextProperties", "format-text-color"},
+    {"KisLayerBox", "all-layers"},
+    {"ChannelDocker", "color-adjustment-mode-channels"},
+    {"History", "edit-undo"},
+};
+}
+
+void KisMainWindow::createGigaPanelStrip()
+{
+    QToolBar *strip = new QToolBar(i18nc("@title:window", "Panel Icons"), this);
+    strip->setObjectName(QStringLiteral("GigaPanelStrip")); // needed to save/restore its position
+    strip->setOrientation(Qt::Vertical);
+    strip->setIconSize(QSize(22, 22));
+    strip->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    strip->setMovable(false);
+
+    QAction *collapse = strip->addAction(KisIconUtils::loadIcon("view-fullscreen"), i18nc("@action", "Collapse / Expand Panels"));
+    collapse->setToolTip(i18nc("@info:tooltip", "Hide all panels to make room for the canvas, or bring them back"));
+    connect(collapse, &QAction::triggered, this, &KisMainWindow::gigaToggleCollapseAll);
+    strip->addSeparator();
+
+    for (const GigaPanelEntry &entry : GIGA_PANELS) {
+        const QString id = QString::fromLatin1(entry.dockId);
+        QDockWidget *dock = dockWidget(id);
+        if (!dock) continue; // e.g. Tool Options docker when options are in the toolbar
+        QAction *action = strip->addAction(KisIconUtils::loadIcon(entry.icon), dock->windowTitle());
+        action->setToolTip(dock->windowTitle());
+        connect(action, &QAction::triggered, this, [this, id]() { gigaTogglePanel(id); });
+    }
+
+    addToolBar(Qt::RightToolBarArea, strip);
+}
+
+void KisMainWindow::gigaTogglePanel(const QString &dockId)
+{
+    QDockWidget *dock = dockWidget(dockId);
+    if (!dock) return;
+    // Visible and actually on screen (not hidden behind another tab): hide it.
+    // Otherwise show it and bring its tab to the front.
+    const bool onScreen = dock->isVisible() && !dock->visibleRegion().isEmpty();
+    if (onScreen) {
+        dock->hide();
+    } else {
+        dock->show();
+        dock->raise();
+    }
+}
+
+void KisMainWindow::gigaToggleCollapseAll()
+{
+    static const char *const COLLAPSED_KEY = "gigaCollapsedPanels";
+    QStringList collapsed = d->windowStateConfig.readEntry(COLLAPSED_KEY, QStringList());
+
+    if (collapsed.isEmpty()) {
+        // Collapse: remember and hide every visible docked panel except the toolbox.
+        for (auto it = d->dockWidgetsMap.constBegin(); it != d->dockWidgetsMap.constEnd(); ++it) {
+            QDockWidget *dock = it.value();
+            if (dock && dock->isVisible() && !dock->isFloating() && it.key() != QLatin1String("ToolBox")) {
+                collapsed << it.key();
+                dock->hide();
+            }
+        }
+        d->windowStateConfig.writeEntry(COLLAPSED_KEY, collapsed);
+    } else {
+        // Expand: bring back exactly what was hidden.
+        Q_FOREACH (const QString &id, collapsed) {
+            if (QDockWidget *dock = dockWidget(id)) dock->show();
+        }
+        d->windowStateConfig.writeEntry(COLLAPSED_KEY, QStringList());
     }
 }
 

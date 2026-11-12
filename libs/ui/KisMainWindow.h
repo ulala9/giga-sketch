@@ -431,6 +431,19 @@ private Q_SLOTS:
      */
     void applyGigaLayout();
 
+private:
+    /**
+     * Giga Sketch: a slim vertical strip of panel icons on the right edge
+     * (like Photoshop's collapsed panel icons). Clicking an icon shows,
+     * brings to front, or hides that panel; the top button collapses or
+     * restores all panels at once. Panels stay docked, which also works on
+     * Wayland, where apps can't position floating windows.
+     */
+    void createGigaPanelStrip();
+    void gigaTogglePanel(const QString &dockId);
+    void gigaToggleCollapseAll();
+public Q_SLOTS:
+
     void openCommandBar();
 
     void slotStoragesWarning(const QString &location = QString());
