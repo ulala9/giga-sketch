@@ -15,6 +15,7 @@
 #include <QSignalBlocker>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QTabBar>
 #include <QTabWidget>
 
 #include <KConfigGroup>
@@ -38,13 +39,12 @@ QString statusBarKey(int mode) { return QStringLiteral("gigaModeStatusBar%1").ar
 
 // Photoshop-style panel chrome: compact dark tabs on top of each group,
 // the active tab lighter, thin dark splitters between panels.
-const char *PHOTOSHOP_PANEL_CSS =
-    "QMainWindow > QTabBar{background:#232325;}"
-    "QMainWindow > QTabBar::tab{background:#2b2b2d;color:#a9a9a9;padding:3px 10px;margin:0;"
+const char *PHOTOSHOP_TAB_CSS =
+    "QTabBar{background:#232325;}"
+    "QTabBar::tab{background:#2b2b2d;color:#a9a9a9;padding:3px 10px;margin:0;"
     "border:0;border-right:1px solid #1b1b1d;}"
-    "QMainWindow > QTabBar::tab:selected{background:#3a3a3d;color:#f0f0f0;}"
-    "QMainWindow > QTabBar::tab:hover{color:#e0e0e0;}"
-    "QMainWindow::separator{background:#1b1b1d;width:3px;height:3px;}";
+    "QTabBar::tab:selected{background:#3a3a3d;color:#f0f0f0;}"
+    "QTabBar::tab:hover{color:#e0e0e0;}";
 
 } // namespace
 
@@ -86,10 +86,15 @@ GigaInterfaceModes::GigaInterfaceModes(KisMainWindow *mainWindow)
 
 bool GigaInterfaceModes::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_mainWindow && event->type() == QEvent::ChildAdded) {
+    if (watched == m_mainWindow && event->type() == QEvent::ChildPolished) {
+        // A new child of the window is ready (fully built, about to show).
+        // (ChildAdded comes too early: the child isn't constructed yet.)
         QObject *child = static_cast<QChildEvent *>(event)->child();
         if (QRubberBand *band = qobject_cast<QRubberBand *>(child)) {
-            band->installEventFilter(this);
+            band->removeEventFilter(this);
+            band->installEventFilter(this); // Qt's docking drop indicator
+        } else if (m_photoshopPanelsOn && qobject_cast<QTabBar *>(child)) {
+            styleTabBars(); // a new panel group got its tabs
         }
     } else if (event->type() == QEvent::Paint && m_mode == Photoshop) {
         // Photoshop mode: while dragging a panel, the spot where it will
@@ -189,6 +194,8 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
         m_modeActions[mode]->setChecked(true);
         return;
     }
+    // One clean change instead of several partial redraws.
+    m_mainWindow->setUpdatesEnabled(false);
     KisConfig cfg(false);
     // On the Welcome page Krita hides every panel, so what's on screen is not
     // the real layout. Then work with the saved layouts instead: the one in
@@ -253,6 +260,7 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
     m_mode = mode;
     m_modeActions[mode]->setChecked(true);
     cfg.writeEntry<int>("gigaInterfaceMode", mode);
+    m_mainWindow->setUpdatesEnabled(true);
 }
 
 void GigaInterfaceModes::applyModeTheme(int mode)
@@ -274,35 +282,79 @@ void GigaInterfaceModes::setPhotoshopPanels(bool on)
 
     if (on) {
         m_originalDockOptions = int(m_mainWindow->dockOptions());
-        m_originalStyleSheet = m_mainWindow->styleSheet();
 
         // Tabs on top of each group, like Photoshop; dragging a group's header
         // moves the whole group.
         m_mainWindow->setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
         m_mainWindow->setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowTabbedDocks
                                      | QMainWindow::AllowNestedDocks | QMainWindow::GroupedDragging);
-        m_mainWindow->setStyleSheet(m_originalStyleSheet + QString::fromLatin1(PHOTOSHOP_PANEL_CSS));
+        styleTabBars();
 
         Q_FOREACH (QDockWidget *dock, m_mainWindow->dockWidgets()) {
             if (dock->objectName() == QLatin1String("ToolBox")) continue; // keep the toolbox slim
             m_originalTitleBars.insert(dock, dock->titleBarWidget());
-            dock->setTitleBarWidget(new GigaPanelTitleBar(dock, m_mainWindow));
+            if (dock->isVisible()) {
+                attachHeader(dock);
+            } else {
+                // Most panels are hidden: give them a header when first shown.
+                m_pendingHeaders.insert(dock, connect(dock, &QDockWidget::visibilityChanged, this, [this, dock](bool visible) {
+                    if (visible && m_photoshopPanelsOn) attachHeader(dock);
+                }));
+            }
         }
     } else {
-        // Put Krita's own title bars back exactly as they were.
+        for (auto it = m_pendingHeaders.begin(); it != m_pendingHeaders.end(); ++it) disconnect(it.value());
+        m_pendingHeaders.clear();
+
+        // Put Krita's own title bars back exactly as they were; keep ours
+        // (hidden) for next time.
         for (auto it = m_originalTitleBars.begin(); it != m_originalTitleBars.end(); ++it) {
             QDockWidget *dock = it.key();
             if (!dock) continue;
-            GigaPanelTitleBar *ours = dynamic_cast<GigaPanelTitleBar *>(dock->titleBarWidget());
-            if (ours) ours->setCollapsed(false);
-            dock->setTitleBarWidget(it.value());
-            if (it.value()) it.value()->show();
-            delete ours;
+            QWidget *ours = m_ourTitleBars.value(dock);
+            if (ours && dock->titleBarWidget() == ours) {
+                static_cast<GigaPanelTitleBar *>(ours)->setCollapsed(false);
+                dock->setTitleBarWidget(it.value());
+                if (it.value()) it.value()->show();
+                ours->hide();
+            }
         }
         m_originalTitleBars.clear();
 
+        for (const auto &styled : m_styledTabBars) {
+            if (styled.first) styled.first->setStyleSheet(styled.second);
+        }
+        m_styledTabBars.clear();
+
         m_mainWindow->setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::South);
         m_mainWindow->setDockOptions(QMainWindow::DockOptions(m_originalDockOptions));
-        m_mainWindow->setStyleSheet(m_originalStyleSheet);
+    }
+}
+
+void GigaInterfaceModes::attachHeader(QDockWidget *dock)
+{
+    if (!dock || !m_photoshopPanelsOn) return;
+    QWidget *header = m_ourTitleBars.value(dock);
+    if (!header) {
+        header = new GigaPanelTitleBar(dock, m_mainWindow);
+        m_ourTitleBars.insert(dock, header);
+    }
+    if (dock->titleBarWidget() != header) {
+        dock->setTitleBarWidget(header);
+        header->show();
+    }
+    if (m_pendingHeaders.contains(dock)) disconnect(m_pendingHeaders.take(dock));
+}
+
+void GigaInterfaceModes::styleTabBars()
+{
+    // The panel group tab bars are direct children of the main window (the
+    // document tabs live inside the canvas area and aren't touched).
+    Q_FOREACH (QTabBar *bar, m_mainWindow->findChildren<QTabBar *>(QString(), Qt::FindDirectChildrenOnly)) {
+        bool done = false;
+        for (const auto &styled : m_styledTabBars) done = done || styled.first == bar;
+        if (done) continue;
+        m_styledTabBars.append({QPointer<QWidget>(bar), bar->styleSheet()});
+        bar->setStyleSheet(QString::fromLatin1(PHOTOSHOP_TAB_CSS));
     }
 }

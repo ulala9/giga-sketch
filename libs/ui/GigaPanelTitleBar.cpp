@@ -25,6 +25,11 @@ GigaPanelTitleBar::GigaPanelTitleBar(QDockWidget *dock, QMainWindow *mainWindow)
     , m_dock(dock)
     , m_mainWindow(mainWindow)
 {
+    // One style sheet for the header's buttons (cheaper than one each).
+    setStyleSheet(QStringLiteral(
+        "QToolButton{color:#bdbdbd;border:0;border-radius:3px;font-size:11px;}"
+        "QToolButton:hover{background:rgba(255,255,255,30);}"
+        "QToolButton::menu-indicator{image:none;}"));
     QHBoxLayout *layout = new QHBoxLayout(this);
     layout->setContentsMargins(8, 0, 2, 0);
     layout->setSpacing(0);
@@ -34,7 +39,9 @@ GigaPanelTitleBar::GigaPanelTitleBar(QDockWidget *dock, QMainWindow *mainWindow)
     f.setPointSizeF(f.pointSizeF() * 0.92);
     f.setBold(true);
     m_title->setFont(f);
-    m_title->setStyleSheet(QStringLiteral("color:#d6d6d6;background:transparent;"));
+    QPalette titlePalette = m_title->palette();
+    titlePalette.setColor(QPalette::WindowText, QColor(0xd6, 0xd6, 0xd6));
+    m_title->setPalette(titlePalette); // (a palette is cheaper than a style sheet)
     m_title->setAttribute(Qt::WA_TransparentForMouseEvents); // drags reach the dock
     layout->addWidget(m_title);
     layout->addStretch(1);
@@ -46,10 +53,6 @@ GigaPanelTitleBar::GigaPanelTitleBar(QDockWidget *dock, QMainWindow *mainWindow)
         b->setToolTip(tip);
         b->setAutoRaise(true);
         b->setFixedSize(20, 18);
-        b->setStyleSheet(QStringLiteral(
-            "QToolButton{color:#bdbdbd;border:0;border-radius:3px;font-size:11px;}"
-            "QToolButton:hover{background:rgba(255,255,255,30);}"
-            "QToolButton::menu-indicator{image:none;}"));
         return b;
     };
 

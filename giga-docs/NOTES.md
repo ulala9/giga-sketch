@@ -279,6 +279,12 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
     the SAVED layouts (leaving mode <- [MainWindow] State; entering mode -> written to [MainWindow] State, applied when a
     document opens) and only records MenuBar/StatusBar. Before this fix the startup sync saved the hidden-panel layout
     over the user's real one ("layout resets after restart").
+  - Mode switch speed (measured with temporary timers): never setStyleSheet on the QMainWindow (repolishes every widget,
+    ~400 ms each way). Photoshop styling = style sheet on the panel QTabBars only (direct children of the window, found
+    again on ChildPolished); headers created only for visible docks (others on first visibilityChanged) and kept/reused.
+    Use ChildPolished, not ChildAdded: at ChildAdded the child isn't constructed, so qobject_cast fails (this had broken
+    the blue drop indicator). Remaining cost: theme swap (Krita's updateTheme reloads all icons, ~0.5-0.8 s) and the
+    Studio menu rebuild (~0.1 s). setUpdatesEnabled(false) around the switch avoids partial redraws.
   - Smoke-test gotcha: config's ResourceDirectory is absolute; point it at the temp HOME or the test waits on the running app's lock.
 
 ## Text boxes (feature/text-boxes → giga-main)

@@ -57,6 +57,11 @@ protected:
 
 private:
     void setPhotoshopPanels(bool on);
+    /// Photoshop mode: give @p dock our header (creating it the first time).
+    void attachHeader(QDockWidget *dock);
+    /// Photoshop mode: style the panel group tab bars (not the whole window,
+    /// which would make Qt restyle every widget).
+    void styleTabBars();
     /// Switch modes. @p atStartup: the window already shows this mode's
     /// layout (Krita restored it), so don't save or restore layouts.
     void switchTo(int mode, bool atStartup);
@@ -82,7 +87,11 @@ private:
 
     // Photoshop panels: Krita's own title bars, to put back afterwards.
     QHash<QDockWidget *, QPointer<QWidget>> m_originalTitleBars;
-    QString m_originalStyleSheet;
+    /// Our headers, kept and reused across switches (building them is slow).
+    QHash<QDockWidget *, QPointer<QWidget>> m_ourTitleBars;
+    QHash<QDockWidget *, QMetaObject::Connection> m_pendingHeaders;
+    /// Panel tab bars we styled, with their previous style sheets.
+    QList<QPair<QPointer<QWidget>, QString>> m_styledTabBars;
     int m_originalDockOptions {0};
     bool m_photoshopPanelsOn {false};
 };
