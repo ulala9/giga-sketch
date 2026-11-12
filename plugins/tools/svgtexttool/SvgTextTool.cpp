@@ -100,6 +100,20 @@ static bool debugEnabled()
     return debugEnabled;
 }
 
+namespace {
+// Giga Sketch: width (screen pixels) of the zone around a selected text in
+// which dragging moves the text, like Photoshop's move cursor near a text.
+// Krita's own zone is 2x the grab sensitivity, only a few pixels.
+constexpr int GIGA_MOVE_ZONE_PX = 24;
+
+// Giga Sketch: Ctrl (Cmd on macOS, which Qt also reports as Control) +
+// drag moves the selected text from anywhere, like Photoshop.
+bool isGigaMoveModifier(Qt::KeyboardModifiers modifiers)
+{
+    return modifiers.testFlag(Qt::ControlModifier);
+}
+}
+
 SvgTextTool::SvgTextTool(KoCanvasBase *canvas)
     : KoToolBase(canvas)
     , m_optionManager(new SvgTextToolOptionsManager(this))
@@ -858,6 +872,14 @@ void SvgTextTool::mousePressEvent(KoPointerEvent *event)
     KoSvgTextShape *selectedShape = this->selectedShape();
 
     if (selectedShape) {
+        // Giga Sketch: Ctrl+drag moves the selected text from anywhere.
+        if (isGigaMoveModifier(event->modifiers())) {
+            m_interactionStrategy.reset(new SvgMoveTextStrategy(this, selectedShape, event->point));
+            m_dragging = DragMode::Move;
+            event->accept();
+            return;
+        }
+
         if (m_textOutlineHelper->contourModeButtonHovered(event->point)) {
             m_textOutlineHelper->toggleTextContourMode(selectedShape);
             event->accept();
@@ -1034,8 +1056,10 @@ void SvgTextTool::mouseMoveEvent(KoPointerEvent *event)
 
             if (m_highlightItem == HighlightItem::None) {
                 const QPolygonF textOutline = selectedShape->absoluteTransformation().map(selectedShape->outlineRect());
+                // Giga Sketch: a much wider move zone (constant on screen at any zoom).
+                const qreal moveZone = qMax(sensitivity * 2, canvas()->viewConverter()->viewToDocumentX(GIGA_MOVE_ZONE_PX));
                 const QPolygonF moveBorderRegion = selectedShape->absoluteTransformation().map(kisGrowRect(selectedShape->outlineRect(),
-                                                                                                           sensitivity * 2));
+                                                                                                           moveZone));
                 if (moveBorderRegion.containsPoint(event->point, Qt::OddEvenFill) && !textOutline.containsPoint(event->point, Qt::OddEvenFill)) {
                     m_highlightItem = HighlightItem::MoveBorder;
                     cursor = Qt::SizeAllCursor;
@@ -1090,6 +1114,11 @@ void SvgTextTool::mouseMoveEvent(KoPointerEvent *event)
             }
         }
         m_textOutlineHelper->setTextAreasHovered(textAreasHovered);
+        // Giga Sketch: with Ctrl held, a click-drag will move the text.
+        if (selectedShape && isGigaMoveModifier(event->modifiers())) {
+            m_highlightItem = HighlightItem::MoveBorder;
+            cursor = Qt::SizeAllCursor;
+        }
         useCursor(cursor);
         event->ignore();
     }
@@ -1133,6 +1162,10 @@ void SvgTextTool::keyPressEvent(QKeyEvent *event)
     } else if (event->key() == Qt::Key_Escape) {
         requestStrokeEnd();
     } else if (selectedShape()) {
+        // Giga Sketch: show the move cursor as soon as Ctrl goes down.
+        if (event->key() == Qt::Key_Control && !m_interactionStrategy) {
+            useCursor(Qt::SizeAllCursor);
+        }
         m_textCursor.keyPressEvent(event);
     }
 
@@ -1142,6 +1175,11 @@ void SvgTextTool::keyPressEvent(QKeyEvent *event)
 void SvgTextTool::keyReleaseEvent(QKeyEvent *event)
 {
     m_textCursor.updateModifiers(event->modifiers());
+    // Giga Sketch: Ctrl released: back to the normal text cursor until the
+    // next mouse move works out the exact one.
+    if (event->key() == Qt::Key_Control && !m_interactionStrategy && selectedShape()) {
+        useCursor(selectedShape()->writingMode() == KoSvgText::HorizontalTB ? m_ibeam_horizontal : m_ibeam_vertical);
+    }
     if (m_interactionStrategy
             && (event->key() == Qt::Key_Control || event->key() == Qt::Key_Alt || event->key() == Qt::Key_Shift
                 || event->key() == Qt::Key_Meta)) {
@@ -1189,6 +1227,7 @@ void SvgTextTool::mouseTripleClickEvent(KoPointerEvent *event)
         event->accept();
     }
 }
+
 
 qreal SvgTextTool::grabSensitivityInPt() const
 {
