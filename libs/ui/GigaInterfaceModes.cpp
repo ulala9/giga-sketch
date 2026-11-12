@@ -25,12 +25,15 @@
 #include "KisMainWindow.h"
 #include "KisViewManager.h"
 #include "kis_floating_message.h"
+#include "kis_action.h"
+#include "kis_action_manager.h"
 #include "kis_config.h"
 
 namespace {
 
 QString stateKey(int mode) { return QStringLiteral("gigaModeState%1").arg(mode); }
 QString themeKey(int mode) { return QStringLiteral("gigaModeTheme%1").arg(mode); }
+QString statusBarKey(int mode) { return QStringLiteral("gigaModeStatusBar%1").arg(mode); }
 
 // Photoshop-style panel chrome: compact dark tabs on top of each group,
 // the active tab lighter, thin dark splitters between panels.
@@ -103,10 +106,21 @@ bool GigaInterfaceModes::eventFilter(QObject *watched, QEvent *event)
     return QObject::eventFilter(watched, event);
 }
 
-void GigaInterfaceModes::showStandardBars()
+void GigaInterfaceModes::showStandardBars(int mode)
 {
     m_mainWindow->menuBar()->show();
-    m_mainWindow->statusBar()->show();
+
+    // Status bar: each mode remembers View > Show Status Bar; off in Studio
+    // by default. Krita keeps this in its own setting too (it re-applies it
+    // when a document opens), so set that and the menu check mark as well.
+    const bool statusBarOn = KisConfig(true).readEntry<bool>(statusBarKey(mode), mode == Photoshop);
+    KisConfig(false).setShowStatusBar(statusBarOn);
+    m_mainWindow->statusBar()->setVisible(statusBarOn);
+    if (KisViewManager *viewManager = m_mainWindow->viewManager()) {
+        if (QAction *toggle = viewManager->actionManager()->actionByName(QStringLiteral("showStatusBar"))) {
+            toggle->setChecked(statusBarOn);
+        }
+    }
     // The options bar is the toolbar that holds the brush/tool controls.
     Q_FOREACH (QToolBar *bar, m_mainWindow->findChildren<QToolBar *>()) {
         if (bar->objectName() == QLatin1String("BrushesAndStuff")) bar->show();
@@ -175,6 +189,9 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
     if (!atStartup && m_mode >= 0) {
         cfg.writeEntry<QByteArray>(stateKey(m_mode), m_mainWindow->saveState().toBase64());
         cfg.writeEntry<QString>(themeKey(m_mode), m_mainWindow->gigaCurrentThemeName());
+        if (m_mode != Procreate) {
+            cfg.writeEntry<bool>(statusBarKey(m_mode), cfg.showStatusBar());
+        }
     }
 
     // 2. Leave it.
@@ -196,7 +213,7 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
             m_mainWindow->applyGigaLayout(); // first visit: start from the Photoshop-like arrangement
         }
         m_procreate->hideBars(); // a restored layout may not know about them
-        showStandardBars();
+        showStandardBars(mode);
     }
     applyModeTheme(mode);
     syncSavedWindowSettings();

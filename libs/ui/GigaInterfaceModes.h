@@ -63,7 +63,7 @@ private:
     void applyModeTheme(int mode);
     /// Menu bar, status bar and options bar back on (Procreate mode hides
     /// them, and that hidden state can get saved).
-    void showStandardBars();
+    void showStandardBars(int mode);
     /// Write the window's current layout and bar visibility to the saved
     /// window settings. Krita re-applies those whenever a document opens or
     /// the menus are rebuilt, which would otherwise undo the mode switch.
