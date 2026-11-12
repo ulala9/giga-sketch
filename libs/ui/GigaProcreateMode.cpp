@@ -139,7 +139,7 @@ void GigaProcreateMode::buildBars()
         "QToolBar#GigaProcreateRightBar QSlider::handle:vertical{background:#f0f0f0;height:16px;width:18px;margin:0 -6px;border-radius:8px;}"));
 
     auto menuButton = [this](const QString &text, QMenu *menu) {
-        QToolButton *button = addButton(m_rightBar, QString(), text, QString());
+        QToolButton *button = addButton(m_topBar, QString(), text, QString());
         button->setMenu(menu);
         button->setPopupMode(QToolButton::InstantPopup);
         return button;
@@ -175,29 +175,26 @@ void GigaProcreateMode::buildBars()
         menuButton(i18nc("Procreate-style top bar", "Adjustments"), filters);
     }
 
-    QToolButton *selection = addButton(m_rightBar, QString(), i18nc("Procreate-style top bar", "Selection"), QString());
+    QToolButton *selection = addButton(m_topBar, QString(), i18nc("Procreate-style top bar", "Selection"), QString());
     connect(selection, &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_SELECT)); });
-    QToolButton *transform = addButton(m_rightBar, QString(), i18nc("Procreate-style top bar", "Transform"), QString());
+    QToolButton *transform = addButton(m_topBar, QString(), i18nc("Procreate-style top bar", "Transform"), QString());
     connect(transform, &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_TRANSFORM)); });
 
-    QWidget *spacer = new QWidget(m_topBar);
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    m_topBar->addWidget(spacer);
 
-    QToolButton *brush = addButton(m_topBar, QStringLiteral("krita_tool_freehand"), QString(),
+    QToolButton *brush = addButton(m_rightBar, QStringLiteral("krita_tool_freehand"), QString(),
                                    i18nc("@info:tooltip", "Paint (tap again for the brush library)"));
     connect(brush, &QToolButton::clicked, this, [this, brush]() { brushClicked(brush); });
-    QToolButton *smudge = addButton(m_topBar, QStringLiteral("colorsmudge"), QString(),
+    QToolButton *smudge = addButton(m_rightBar, QStringLiteral("colorsmudge"), QString(),
                                     i18nc("@info:tooltip", "Smudge (tap again for the brush library)"));
     connect(smudge, &QToolButton::clicked, this, [this, smudge]() { smudgeClicked(smudge); });
-    QToolButton *eraser = addButton(m_topBar, QStringLiteral("draw-eraser"), QString(),
+    QToolButton *eraser = addButton(m_rightBar, QStringLiteral("draw-eraser"), QString(),
                                     i18nc("@info:tooltip", "Erase (tap again for the brush library)"));
     connect(eraser, &QToolButton::clicked, this, [this, eraser]() { eraserClicked(eraser); });
-    QToolButton *layers = addButton(m_topBar, QStringLiteral("all-layers"), QString(), i18nc("@info:tooltip", "Layers"));
+    QToolButton *layers = addButton(m_rightBar, QStringLiteral("all-layers"), QString(), i18nc("@info:tooltip", "Layers"));
     connect(layers, &QToolButton::clicked, this, [this, layers]() {
         showPopover(new GigaLayersPanel(m_mainWindow->viewManager()), layers);
     });
-    m_colorDot = addButton(m_topBar, QString(), QString(), i18nc("@info:tooltip", "Colors"));
+    m_colorDot = addButton(m_rightBar, QString(), QString(), i18nc("@info:tooltip", "Colors"));
     m_colorDot->setToolButtonStyle(Qt::ToolButtonIconOnly);
     connect(m_colorDot, &QToolButton::clicked, this, [this]() {
         showPopover(new GigaColorPanel(m_mainWindow->viewManager()), m_colorDot);
@@ -255,7 +252,11 @@ void GigaProcreateMode::showPopover(QWidget *content, QWidget *anchor)
 {
     GigaPopover *popover = new GigaPopover(m_mainWindow);
     popover->setContent(content);
-    popover->showBelow(anchor);
+    if (anchor && m_rightBar && m_rightBar->isAncestorOf(anchor)) {
+        popover->showLeftOf(anchor); // right-edge bar: open towards the canvas
+    } else {
+        popover->showBelow(anchor);
+    }
 }
 
 void GigaProcreateMode::showBrushLibrary(QWidget *anchor)

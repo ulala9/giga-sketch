@@ -34,6 +34,8 @@ public:
     void setContent(QWidget *content);
     /// Show under @p anchor (arrow pointing up at it).
     void showBelow(QWidget *anchor);
+    /// Show to the left of @p anchor (arrow pointing right at it).
+    void showLeftOf(QWidget *anchor);
     std::function<void()> onHide;
 
 protected:
@@ -43,6 +45,8 @@ protected:
 private:
     QVBoxLayout *m_layout {nullptr};
     int m_arrowX {40};
+    int m_arrowY {40};
+    bool m_arrowOnRight {false};
 };
 
 /// Procreate-like colour disc: hue ring around a saturation/brightness square.

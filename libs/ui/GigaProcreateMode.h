@@ -17,9 +17,9 @@ class QToolButton;
 class KisMainWindow;
 
 /**
- * Layout: a top bar with Paint/Smudge/Erase/Layers/colour on the right, and a
- * vertical bar on the right edge with Gallery/Actions/Adjustments/Selection/
- * Transform above the size and opacity sliders, colour picker, undo, redo.
+ * Layout: a top bar with Gallery/Actions/Adjustments/Selection/Transform on
+ * the left, and a vertical bar on the right edge with Paint/Smudge/Erase/
+ * Layers/colour above the size and opacity sliders, colour picker, undo, redo.
  *
  * Giga Sketch: a Procreate-style mode for the main window, switched with
  * View > Procreate Mode (F9).

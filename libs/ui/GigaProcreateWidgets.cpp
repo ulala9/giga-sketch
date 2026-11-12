@@ -90,11 +90,32 @@ void GigaPopover::showBelow(QWidget *anchor)
     show();
 }
 
+void GigaPopover::showLeftOf(QWidget *anchor)
+{
+    m_arrowOnRight = true;
+    m_layout->setContentsMargins(14, 14, 14 + ARROW_H, 14);
+    adjustSize();
+    QPoint pos(100, 100);
+    if (anchor) {
+        const QPoint anchorLeft = anchor->mapToGlobal(QPoint(0, anchor->height() / 2));
+        int y = anchorLeft.y() - 40;
+        if (QScreen *screen = anchor->screen()) {
+            const QRect area = screen->availableGeometry();
+            y = qBound(area.top() + 8, y, area.bottom() - height() - 8);
+        }
+        pos = QPoint(anchorLeft.x() - width() - 2, y);
+        m_arrowY = qBound(RADIUS + 8, anchorLeft.y() - y, height() - RADIUS - 8);
+    }
+    move(pos);
+    show();
+}
+
 void GigaPopover::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    const QRectF card = QRectF(rect()).adjusted(4, 4 + ARROW_H, -4, -4);
+    const QRectF card = m_arrowOnRight ? QRectF(rect()).adjusted(4, 4, -4 - ARROW_H, -4)
+                                       : QRectF(rect()).adjusted(4, 4 + ARROW_H, -4, -4);
 
     // Soft shadow: a few faint, growing rounded rectangles.
     for (int i = 4; i >= 1; i--) {
@@ -106,9 +127,15 @@ void GigaPopover::paintEvent(QPaintEvent *)
     QPainterPath shape;
     shape.addRoundedRect(card, RADIUS, RADIUS);
     QPainterPath arrow;
-    arrow.moveTo(m_arrowX - ARROW_H, card.top() + 1);
-    arrow.lineTo(m_arrowX, card.top() - ARROW_H);
-    arrow.lineTo(m_arrowX + ARROW_H, card.top() + 1);
+    if (m_arrowOnRight) {
+        arrow.moveTo(card.right() - 1, m_arrowY - ARROW_H);
+        arrow.lineTo(card.right() + ARROW_H, m_arrowY);
+        arrow.lineTo(card.right() - 1, m_arrowY + ARROW_H);
+    } else {
+        arrow.moveTo(m_arrowX - ARROW_H, card.top() + 1);
+        arrow.lineTo(m_arrowX, card.top() - ARROW_H);
+        arrow.lineTo(m_arrowX + ARROW_H, card.top() + 1);
+    }
     arrow.closeSubpath();
     shape = shape.united(arrow);
 
