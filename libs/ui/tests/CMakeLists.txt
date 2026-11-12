@@ -23,6 +23,7 @@ kis_add_tests(
     KisCurveSmootherTest.cpp
     KisQuickShapeRecognizerTest.cpp
     TestGigaSaveDated.cpp
+    TestGigaZoomOption.cpp
 
     LINK_LIBRARIES kritaui kritalibkis kritatestsdk
     )

@@ -345,3 +345,12 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   appears in Configure Shortcuts and keeps custom shortcuts; created via actionManager->createAction();
   `KisMainWindow::gigaAddFileMenuItems()` inserts it after file_save_as (also after menu rebuilds).
 - Test: libs/ui/tests/TestGigaSaveDated.
+
+## Ctrl+Space zoom toward pointer (feature/zoom-toward-pointer → giga-main)
+- KisZoomAction modes: ZoomModeShortcut(0) zooms around the canvas centre; RelativeZoomModeShortcut(7) zooms toward the
+  press point (like the wheel); Discrete(1) / RelativeDiscrete(8) the same for stepped zoom.
+- Default gigasketch.profile now uses 7 for Ctrl+Space drag and 8 for Ctrl+Alt+Space drag (Krita default did too).
+- `libs/ui/GigaZoomOption.{h,cpp}`: View > "Ctrl+Space Zooms Toward Pointer" flips the Space-key zoom bindings of the
+  current profile (`modeFor()`, tested) and calls KisInputProfileManager::saveProfiles() (writes the user's copy in
+  data/input/, emits currentProfileChanged so the canvas reloads bindings). The checkbox follows currentProfileChanged.
+- KisInputProfile / KisShortcutConfiguration aren't exported from kritaui, so tests only cover modeFor().

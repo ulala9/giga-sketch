@@ -63,6 +63,7 @@
 #include "dialogs/GigaNewDocumentDialog.h"
 #include "GigaInterfaceModes.h"
 #include "GigaSaveDated.h"
+#include "GigaZoomOption.h"
 #include <QToolBar>
 #include <QGuiApplication>
 #include <QFrame>
@@ -317,6 +318,7 @@ public:
     QHash<QString, QString> gigaKritaWording; ///< original menu texts
     QPointer<QToolBar> gigaPanelStrip;
     QPointer<QAction> gigaCompactAction;
+    QPointer<QAction> gigaZoomTowardPointer; ///< View > Ctrl+Space Zooms Toward Pointer
     QPointer<QMenu> gigaModesMenu;
     QHash<QWidget *, QMargins> gigaOriginalMargins; ///< panel margins before compact mode
     QByteArray dockerStateBeforeHiding;
@@ -876,6 +878,8 @@ void KisMainWindow::gigaAddViewMenuItems()
     if (!viewMenu) return;
     viewMenu->addSeparator();
     if (d->gigaCompactAction) viewMenu->addAction(d->gigaCompactAction);
+    if (!d->gigaZoomTowardPointer) d->gigaZoomTowardPointer = GigaZoomOption::createAction(this);
+    viewMenu->addAction(d->gigaZoomTowardPointer);
     if (d->gigaModesMenu) viewMenu->addMenu(d->gigaModesMenu);
 }
 
