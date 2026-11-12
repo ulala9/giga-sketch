@@ -169,6 +169,22 @@ void TextPropertyConfigModel::addProperty(const QString &name, const int propert
     data.searchTerms = searchTerms.split(",");
     data.visibilityState = VisibilityState(qMax(visibilityState, 0));
 
+    // Giga Sketch: like Photoshop's Character and Paragraph panels, always
+    // show the core controls instead of only once they are set. Only applies
+    // while the property follows the default; loadFromConfiguration() still
+    // applies any visibility the user chose in the docker settings.
+    static const QStringList gigaAlwaysVisible = {
+        // Character
+        QStringLiteral("font-family"), QStringLiteral("font-sub-style"), QStringLiteral("font-size"),
+        QStringLiteral("line-height"), QStringLiteral("font-kerning"), QStringLiteral("letter-spacing"),
+        QStringLiteral("baseline-shift"), QStringLiteral("text-transform"), QStringLiteral("text-decoration"),
+        // Paragraph
+        QStringLiteral("text-align"), QStringLiteral("text-indent"),
+    };
+    if (data.visibilityState == FollowDefault && gigaAlwaysVisible.contains(name)) {
+        data.visibilityState = AlwaysVisible;
+    }
+
     d->propertyData.insert(name, data);
     d->propertyNames.append(name);
     endInsertRows();
