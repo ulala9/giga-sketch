@@ -195,7 +195,8 @@ public:
         , id(id)
         , styleMenu(new KActionMenu(i18nc("@action:inmenu", "Styles"), parent))
         , dockWidgetMenu(new KActionMenu(i18nc("@action:inmenu", "&Dockers"), parent))
-        , windowMenu(new KActionMenu(i18nc("@action:inmenu", "&Window"), parent))
+        // Giga Sketch: lives inside our Window menu, so name what it holds.
+        , windowMenu(new KActionMenu(i18nc("@action:inmenu", "&Arrange && Documents"), parent))
         , documentMenu(new KActionMenu(i18nc("@action:inmenu", "New &View"), parent))
         , workspaceMenu(new KActionMenu(i18nc("@action:inmenu", "Wor&kspace"), parent))
         , welcomePage(new KisWelcomePageWidget(parent))
@@ -598,8 +599,9 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     KisPart::instance()->notifyMainWindowIsBeingCreated(this);
 
     // If we have customized the toolbars, load that first
-    setLocalXMLFile(KoResourcePaths::locateLocal("data", "krita5.xmlgui"));
-    setXMLFile(":/kxmlgui5/krita5.xmlgui");
+    // Giga Sketch: Photoshop-like menu layout (krita/gigasketch.xmlgui).
+    setLocalXMLFile(KoResourcePaths::locateLocal("data", "gigasketch.xmlgui"));
+    setXMLFile(":/kxmlgui5/gigasketch.xmlgui");
 
     guiFactory()->addClient(this);
     applyActionIconOverridesFromLocalXML();
@@ -696,6 +698,8 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     }
 
     createGigaPanelStrip();
+    // After construction, when plugins have added their actions too.
+    QTimer::singleShot(0, this, &KisMainWindow::gigaApplyWording);
 
     applyMainWindowSettings(d->windowStateConfig);
 
@@ -800,6 +804,34 @@ void KisMainWindow::gigaDetachActiveView()
 
     if (subWindow) {
         subWindow->close();
+    }
+}
+
+void KisMainWindow::gigaApplyWording()
+{
+    // Only the visible label changes; the actions, their behaviour and their
+    // shortcuts stay Krita's, so nothing else is affected.
+    const QList<QPair<const char *, QString>> wording = {
+        {"imagesize",            i18nc("@action:inmenu", "Image Size...")},
+        {"canvassize",           i18nc("@action:inmenu", "Canvas Size...")},
+        {"options_configure",    i18nc("@action:inmenu", "Preferences...")},
+        {"settings_dockers_menu", i18nc("@action:inmenu", "Panels")},
+        {"view_toggledockers",   i18nc("@action:inmenu", "Show Panels")},
+        {"view_show_canvas_only", i18nc("@action:inmenu", "Full Screen Canvas")},
+        {"layer_properties",     i18nc("@action:inmenu", "Layer Properties...")},
+        {"duplicatelayer",       i18nc("@action:inmenu", "Duplicate Layer")},
+        {"create_quick_group",   i18nc("@action:inmenu", "Group Layers")},
+        {"merge_layer",          i18nc("@action:inmenu", "Merge Down")},
+        {"isolate_active_layer", i18nc("@action:inmenu", "Isolate Layer")},
+        {"add_new_paint_layer",  i18nc("@action:inmenu", "Layer...")},
+        {"add_new_shape_layer",  i18nc("@action:inmenu", "Shape Layer...")},
+        {"manage_resources",     i18nc("@action:inmenu", "Preset Manager...")},
+        {"manage_bundles",       i18nc("@action:inmenu", "Resource Libraries...")},
+    };
+    for (const auto &entry : wording) {
+        if (QAction *action = actionCollection()->action(QString::fromLatin1(entry.first))) {
+            action->setText(entry.second);
+        }
     }
 }
 
@@ -3570,7 +3602,7 @@ bool KisMainWindow::checkPaintOpAvailable()
 // This function will rerender the actions with icons in UI (toolbars, shortcuts options etc.)
 void KisMainWindow::applyActionIconOverridesFromLocalXML()
 {
-    QString xmlPath = KoResourcePaths::locateLocal("data", "krita5.xmlgui");
+    QString xmlPath = KoResourcePaths::locateLocal("data", "gigasketch.xmlgui");
     QFile file(xmlPath);
     if (!file.exists()) {
         return;

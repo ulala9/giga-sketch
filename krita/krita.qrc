@@ -8,5 +8,6 @@
     </qresource>
     <qresource prefix="/kxmlgui5">
         <file alias="krita5.xmlgui">@KRITA5_XMLGUI_PATH@</file>
+        <file alias="gigasketch.xmlgui">@GIGA_XMLGUI_PATH@</file>
     </qresource>
 </RCC>

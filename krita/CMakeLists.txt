@@ -168,6 +168,12 @@ set(KRITA5_XMLGUI_PATH "${CMAKE_CURRENT_BINARY_DIR}/krita5.xmlgui")
 set(KRITA_QRC_PATH "${CMAKE_CURRENT_BINARY_DIR}/krita.qrc")
 set(KRITARC_PATH "${CMAKE_CURRENT_SOURCE_DIR}/data/kritarc")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/krita5.xmlgui" "${KRITA5_XMLGUI_PATH}" @ONLY)
+
+# Giga Sketch menu layout (Photoshop-like order). Bump the version whenever
+# gigasketch.xmlgui changes, so a customised local copy gets replaced.
+set(GIGA_XMLGUI_VERSION 1)
+set(GIGA_XMLGUI_PATH "${CMAKE_CURRENT_BINARY_DIR}/gigasketch.xmlgui")
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/gigasketch.xmlgui" "${GIGA_XMLGUI_PATH}" @ONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/krita.qrc" "${KRITA_QRC_PATH}" @ONLY)
 
 # separate listing, both used by Krita and KritaSketch

@@ -443,6 +443,8 @@ private:
     /// Giga Sketch: move the active document view into a new window
     /// (used when a document tab is dragged off the tab bar).
     void gigaDetachActiveView();
+    /// Giga Sketch: rename menu items to Photoshop-style wording.
+    void gigaApplyWording();
 protected:
     /// Giga Sketch: watches the document tab bar for "drag a tab out".
     bool eventFilter(QObject *watched, QEvent *event) override;
