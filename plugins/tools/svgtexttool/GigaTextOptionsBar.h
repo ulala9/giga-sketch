@@ -18,6 +18,7 @@
 class QComboBox;
 class GigaFontComboBox;
 class GigaFontPicker;
+class GigaTextPropertyAccess;
 class QToolButton;
 class KisCanvasResourceProvider;
 class KoCanvasResourceProvider;
@@ -86,6 +87,7 @@ private:
     void fillStyles(const QString &family);
 
 private:
+    GigaTextPropertyAccess *m_access {nullptr}; ///< shared with the Character/Paragraph panels
     QPointer<KisCanvasResourceProvider> m_provider;
     QPointer<KoCanvasResourceProvider> m_canvasResources;
     KisSignalAutoConnectionsStore m_connections;
@@ -96,9 +98,7 @@ private:
     GigaFontComboBox *m_family {nullptr};
     GigaFontPicker *m_fontPicker {nullptr};
     QStringList m_familyNames;
-    /// Font(s) before the live preview started; restored on cancel.
-    QStringList m_previewOriginal;
-    bool m_previewAllowed {false};
+
     QComboBox *m_style {nullptr};
     QComboBox *m_size {nullptr};
     QComboBox *m_antiAlias {nullptr};

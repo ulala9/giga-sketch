@@ -304,3 +304,19 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   undo step (SvgTextMergePropertiesRangeCommand::mergeWith). Disabled when the selection mixes fonts. Cancel (Esc /
   click away) re-applies the original family list → may leave one no-op undo entry.
 - Test: plugins/tools/svgtexttool/tests/GigaFontPickerTest (6).
+
+## Character / Paragraph panels (feature/character-panel → giga-main)
+- `plugins/tools/svgtexttool/GigaTextPropertyAccess.{h,cpp}`: shared read/apply of text properties via the canvas
+  resource provider (textPropertyData / characterTextPropertyData), font live preview, font lists/styles, and unit
+  conversions: tracking (1/1000 em) <-> LetterSpacingId (AutoLengthPercentage, em), leading (pt, <0 = Auto) <->
+  LineHeightId (LineHeightInfo), baseline shift (pt) <-> BaselineShiftMode/Value. GigaTextOptionsBar now delegates to it.
+- `GigaCharacterPanel`: family (GigaFontComboBox + picker), style, size, leading, kerning (Metrics=AutoValue auto,
+  0=AutoValue(0)), tracking, baseline, colour, toggles (weight 700, italic, TextTransform uppercase, FontVariantCaps
+  small, FontVariantPosition super/sub, TextDecorationLine underline/line-through), anti-aliasing.
+- `GigaParagraphPanel`: 7 align buttons (justify variants = TextAlignAll justify + TextAlignLast), Giga indents/spaces,
+  first line = TextIndentId (eachLine=true).
+- `GigaTextPanelDock` + factories ("GigaCharacter", "GigaParagraph", DockMinimized) registered in the tool plugin's
+  Plugin ctor (tool plugins load before the main window creates docks). Options bar Panels button tabs+shows them;
+  applyGigaLayout puts them in the Tool Options/Presets group.
+- Not supported by the engine (no property): character scale, hyphenation.
+- Tests: tests/GigaTextPanelsTest (9) uses KisCanvasResourceProvider(nullptr) + a bare KoCanvasResourceProvider.

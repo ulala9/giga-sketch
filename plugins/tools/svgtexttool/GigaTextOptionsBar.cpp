@@ -5,6 +5,7 @@
  */
 #include "GigaTextOptionsBar.h"
 #include "GigaFontPicker.h"
+#include "GigaTextPropertyAccess.h"
 
 #include <QButtonGroup>
 #include <QColorDialog>
@@ -95,6 +96,7 @@ GigaTextOptionsBar::GigaTextOptionsBar(QWidget *parent)
     : QToolBar(i18nc("@title:window", "Text Options"), parent)
 {
     setObjectName(QStringLiteral("GigaTextOptionsBar"));
+    m_access = new GigaTextPropertyAccess(this);
     setIconSize(QSize(16, 16));
 
     m_orientation = new QToolButton(this);
@@ -207,67 +209,36 @@ void GigaTextOptionsBar::setResourceProviders(KisCanvasResourceProvider *provide
     m_connections.clear();
     m_provider = provider;
     m_canvasResources = canvasResources;
-    if (m_provider) {
-        m_connections.addConnection(m_provider, SIGNAL(sigTextPropertiesChanged()), this, SLOT(updateFromProperties()));
-        m_connections.addConnection(m_provider, SIGNAL(sigCharacterPropertiesChanged()), this, SLOT(updateFromProperties()));
-    }
-    if (m_canvasResources) {
-        // Foreground colour = colour of new text; keep the swatch in sync.
-        m_connections.addConnection(m_canvasResources, SIGNAL(canvasResourceChanged(int,QVariant)), this, SLOT(updateFromProperties()));
-    }
+    m_access->setProviders(provider, canvasResources);
+    m_connections.addConnection(m_access, SIGNAL(changed()), this, SLOT(updateFromProperties()));
     updateFromProperties();
 }
 
 bool GigaTextOptionsBar::isCharacterSelection() const
 {
-    if (!m_provider) return false;
-    const KoSvgTextPropertyData chr = m_provider->characterTextPropertyData();
-    return chr.enabled && chr.spanSelection;
+    return m_access->isCharacterSelection();
 }
 
 KoSvgTextProperties GigaTextOptionsBar::currentParagraphProperties() const
 {
-    if (!m_provider) return KoSvgTextProperties::defaultProperties();
-    KoSvgTextProperties props = m_provider->textPropertyData().commonProperties;
-    props.inheritFrom(KoSvgTextProperties::defaultProperties(), true);
-    return props;
+    return m_access->paragraphProperties();
 }
 
 KoSvgTextProperties GigaTextOptionsBar::currentCharacterProperties() const
 {
-    if (!m_provider) return KoSvgTextProperties::defaultProperties();
-    if (!isCharacterSelection()) return currentParagraphProperties();
-    const KoSvgTextPropertyData chr = m_provider->characterTextPropertyData();
-    KoSvgTextProperties props = chr.commonProperties;
-    props.inheritFrom(chr.inheritedProperties, true);
-    props.inheritFrom(KoSvgTextProperties::defaultProperties(), true);
-    return props;
+    return m_access->characterProperties();
 }
 
 void GigaTextOptionsBar::applyCharacter(const QSet<KoSvgTextProperties::PropertyId> &ids,
                                         const std::function<void(KoSvgTextProperties &)> &change)
 {
-    if (!m_provider) return;
-    // A selected range gets the change; otherwise the whole text does (or,
-    // with no text, the next new text). Photoshop behaves the same way.
-    if (isCharacterSelection()) {
-        KoSvgTextPropertyData data = m_provider->characterTextPropertyData();
-        change(data.commonProperties);
-        Q_FOREACH (KoSvgTextProperties::PropertyId id, ids) data.tristate.remove(id);
-        m_provider->setCharacterPropertyData(data);
-    } else {
-        applyParagraph(ids, change);
-    }
+    m_access->applyCharacter(ids, change);
 }
 
 void GigaTextOptionsBar::applyParagraph(const QSet<KoSvgTextProperties::PropertyId> &ids,
                                         const std::function<void(KoSvgTextProperties &)> &change)
 {
-    if (!m_provider) return;
-    KoSvgTextPropertyData data = m_provider->textPropertyData();
-    change(data.commonProperties);
-    Q_FOREACH (KoSvgTextProperties::PropertyId id, ids) data.tristate.remove(id);
-    m_provider->setTextPropertyData(data);
+    m_access->applyParagraph(ids, change);
 }
 
 void GigaTextOptionsBar::fillFamilies()
@@ -408,28 +379,19 @@ void GigaTextOptionsBar::slotFamilyChosen()
 
 void GigaTextOptionsBar::setFamily(const QString &family)
 {
-    applyCharacter({KoSvgTextProperties::FontFamiliesId}, [family](KoSvgTextProperties &p) {
-        p.setProperty(KoSvgTextProperties::FontFamiliesId, QStringList{family});
-    });
+    m_access->setFamily(family);
 }
 
 void GigaTextOptionsBar::slotOpenFontPicker()
 {
     fillFamilies();
-    const KoSvgTextPropertyData data = isCharacterSelection()
-        ? m_provider->characterTextPropertyData()
-        : (m_provider ? m_provider->textPropertyData() : KoSvgTextPropertyData());
-    // Live preview only when the text uses one font: a mix of fonts can't be
-    // put back by setting a single value.
-    m_previewAllowed = m_provider && !data.tristate.contains(KoSvgTextProperties::FontFamiliesId);
-    m_previewOriginal = currentCharacterProperties().propertyOrDefault(KoSvgTextProperties::FontFamiliesId).toStringList();
-    m_fontPicker->popup(m_family, m_familyNames, m_previewOriginal.value(0));
+    m_access->beginFontPreview();
+    m_fontPicker->popup(m_family, m_familyNames, currentCharacterProperties().propertyOrDefault(KoSvgTextProperties::FontFamiliesId).toStringList().value(0));
 }
 
 void GigaTextOptionsBar::slotFontPreview(const QString &family)
 {
-    // Krita merges consecutive font edits on the same text into one undo step.
-    if (m_previewAllowed) setFamily(family);
+    m_access->previewFamily(family);
 }
 
 void GigaTextOptionsBar::slotFontPicked(const QString &family)
@@ -439,11 +401,7 @@ void GigaTextOptionsBar::slotFontPicked(const QString &family)
 
 void GigaTextOptionsBar::slotFontPreviewCancelled()
 {
-    if (!m_previewAllowed || m_previewOriginal.isEmpty()) return;
-    const QStringList original = m_previewOriginal;
-    applyCharacter({KoSvgTextProperties::FontFamiliesId}, [original](KoSvgTextProperties &p) {
-        p.setProperty(KoSvgTextProperties::FontFamiliesId, original);
-    });
+    m_access->cancelFontPreview();
 }
 
 void GigaTextOptionsBar::slotStyleChosen(int index)
@@ -543,10 +501,16 @@ void GigaTextOptionsBar::slotColorClicked()
 
 void GigaTextOptionsBar::slotOpenPanels()
 {
+    // Photoshop's Character and Paragraph panels, as tabs of one group.
     QMainWindow *mainWindow = qobject_cast<QMainWindow *>(window());
     if (!mainWindow) return;
-    QDockWidget *dock = mainWindow->findChild<QDockWidget *>(QStringLiteral("TextProperties"));
-    if (!dock) return;
-    dock->show();
-    dock->raise();
+    QDockWidget *character = mainWindow->findChild<QDockWidget *>(QStringLiteral("GigaCharacter"));
+    QDockWidget *paragraph = mainWindow->findChild<QDockWidget *>(QStringLiteral("GigaParagraph"));
+    if (!character || !paragraph) return;
+    if (!character->isVisible() && !paragraph->isVisible() && !mainWindow->tabifiedDockWidgets(character).contains(paragraph)) {
+        mainWindow->tabifyDockWidget(character, paragraph);
+    }
+    paragraph->show();
+    character->show();
+    character->raise();
 }

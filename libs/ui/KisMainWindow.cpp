@@ -1154,7 +1154,8 @@ void KisMainWindow::applyGigaLayout()
     const QList<QStringList> rightGroups = {
         // Colour square + hue (Wide Gamut selector), colour sliders/hex, swatches.
         {QStringLiteral("WideGamutColorSelector"), QStringLiteral("SpecificColorSelector"), QStringLiteral("PaletteDocker")},
-        {QStringLiteral("sharedtooldocker"), QStringLiteral("PresetDocker"), QStringLiteral("TextProperties")},
+        {QStringLiteral("sharedtooldocker"), QStringLiteral("PresetDocker"), QStringLiteral("GigaCharacter"),
+         QStringLiteral("GigaParagraph"), QStringLiteral("TextProperties")},
         {QStringLiteral("KisLayerBox"), QStringLiteral("ChannelDocker"), QStringLiteral("History")},
     };
 

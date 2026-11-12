@@ -15,6 +15,8 @@
 
 #include <KisStaticInitializer.h>
 #include "SvgTextToolFactory.h"
+#include "GigaTextPanelDock.h"
+#include <KoDockRegistry.h>
 
 #include "glyphpalette/GlyphPaletteProxyModel.h"
 #include "SvgTextToolOptionsModel.h"
@@ -32,6 +34,11 @@ Plugin::Plugin(QObject *parent, const QVariantList &)
     : QObject(parent)
 {
     KoToolRegistry::instance()->add(new SvgTextToolFactory());
+    // Giga Sketch: Photoshop-style Character and Paragraph panels. This
+    // plugin loads before the main window builds its panels, so they appear
+    // in Window > Panels like any other.
+    KoDockRegistry::instance()->add(new GigaTextPanelDockFactory(GigaTextPanelDock::Character));
+    KoDockRegistry::instance()->add(new GigaTextPanelDockFactory(GigaTextPanelDock::Paragraph));
 }
 
 #include <Plugin.moc>

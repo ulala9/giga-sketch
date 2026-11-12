@@ -8,6 +8,10 @@ set (SvgTextTool_SRCS
     SvgCreateTextStrategy.cpp
     GigaTextBoxResizeStrategy.cpp
     GigaFontPicker.cpp
+    GigaTextPropertyAccess.cpp
+    GigaCharacterPanel.cpp
+    GigaParagraphPanel.cpp
+    GigaTextPanelDock.cpp
     SvgInlineSizeChangeCommand.cpp
     SvgInlineSizeChangeStrategy.cpp
     SvgSelectTextStrategy.cpp
