@@ -49,6 +49,9 @@
 #include "kis_tool_freehand_helper.h"
 #include "strokes/freehand_stroke.h"
 #include "kis_tool_utils.h"
+#include <KisDocument.h>
+#include <KisView.h>
+#include <kundo2stack.h>
 
 using namespace std::placeholders; // For _1 placeholder
 
@@ -78,6 +81,10 @@ KisToolFreehand::KisToolFreehand(KoCanvasBase * canvas, const QCursor & cursor,
     connect(provider, SIGNAL(sigEffectiveCompositeOpChanged()), SLOT(resetCursorStyle()));
     connect(provider, SIGNAL(sigPaintOpPresetChanged(KisPaintOpPresetSP)), SLOT(explicitUpdateOutline()));
     connect(provider, SIGNAL(sigPaintOpPresetChanged(KisPaintOpPresetSP)), SLOT(resetCursorStyle()));
+
+    // Giga Sketch: see requestUndoDuringStroke().
+    m_owedUndoTimer.setInterval(10);
+    connect(&m_owedUndoTimer, SIGNAL(timeout()), SLOT(slotOwedUndoTick()));
 }
 
 KisToolFreehand::~KisToolFreehand()
@@ -194,10 +201,91 @@ void KisToolFreehand::requestStrokeCancellation()
 
 void KisToolFreehand::requestUndoDuringStroke()
 {
-    // Without this, Ctrl+Z pressed during the ~0.1 s tail would be ignored,
-    // because undo is refused while a stroke is still open.
+    /**
+     * Giga Sketch: Ctrl+Z during a Smooth Curve catch-up tail.
+     *
+     * KisDocument's undo first calls this, then tries to lock the image. If
+     * the image is still busy painting, the undo is silently dropped. Ending
+     * the tail here closes the stroke, but its last dabs are still being
+     * painted by the worker threads, so the lock would fail and the Ctrl+Z
+     * would be lost. Instead, the tool remembers that it owes an undo and a
+     * small GUI-thread timer performs it once the image is idle. Nothing
+     * waits on (or blocks) the painting threads.
+     */
+    const bool tailWasPending = m_helper->isTailPending();
+    const bool alreadyOwing = m_owedUndoTimer.isActive();
+
+    if (tailWasPending && !alreadyOwing) {
+        KisCanvas2 *kisCanvas = dynamic_cast<KisCanvas2*>(canvas());
+        KisDocument *doc = (kisCanvas && kisCanvas->imageView())
+                ? kisCanvas->imageView()->document() : nullptr;
+
+        if (doc && doc->undoStack()) {
+            m_owedUndoDocument = doc;
+            m_owedUndos = 1;
+            m_owedStrokeLanded = false;
+            m_owedSettleTick = false;
+            m_owedUndoClock.start();
+            // The stroke's undo command is pushed from a painting thread
+            // when the stroke finishes; this queued connection tells us it
+            // landed (it also fires when the command is merged with the
+            // previous one by "cumulative undo"). If Krita's instant-preview
+            // path undoes the unfinished stroke itself, nothing is pushed,
+            // the flag stays false, and we don't undo a second time.
+            m_owedUndoConnection = connect(doc->undoStack(), &KUndo2QStack::indexChanged,
+                                           this, [this]() { m_owedStrokeLanded = true; },
+                                           Qt::QueuedConnection);
+            m_owedUndoTimer.start();
+        }
+    } else if (alreadyOwing && image() && !image()->isIdle()) {
+        // Another Ctrl+Z while we are still waiting: the document will drop
+        // this one too (image busy), so owe it as well. If the image is
+        // already idle the document performs this press itself.
+        m_owedUndos++;
+    }
+
     m_helper->finishPendingTail();
     KisToolPaint::requestUndoDuringStroke();
+}
+
+void KisToolFreehand::slotOwedUndoTick()
+{
+    auto stop = [this]() {
+        m_owedUndoTimer.stop();
+        disconnect(m_owedUndoConnection);
+        m_owedUndos = 0;
+        m_owedUndoDocument.clear();
+    };
+
+    if (!m_owedUndoDocument || !image() || m_owedUndos <= 0) {
+        stop();
+        return;
+    }
+
+    if (!image()->isIdle()) {
+        // Still painting. Give up after a few seconds, like Krita would
+        // have done immediately.
+        if (m_owedUndoClock.elapsed() > 3000) stop();
+        return;
+    }
+
+    if (!m_owedStrokeLanded && !m_owedSettleTick) {
+        // Idle, but the "command pushed" notification is delivered through
+        // the event loop; allow one more tick for it to arrive.
+        m_owedSettleTick = true;
+        return;
+    }
+
+    const bool landed = m_owedStrokeLanded;
+    const int count = m_owedUndos;
+    QPointer<KisDocument> doc = m_owedUndoDocument;
+    stop(); // disconnect first, so our own undo doesn't count as "landed"
+
+    if (landed && doc) {
+        for (int i = 0; i < count; i++) {
+            doc->undoStack()->undo();
+        }
+    }
 }
 
 void KisToolFreehand::initStroke(KoPointerEvent *event)

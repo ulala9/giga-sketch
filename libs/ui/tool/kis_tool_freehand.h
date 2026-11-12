@@ -19,11 +19,16 @@
 
 #include "kritaui_export.h"
 
+#include <QElapsedTimer>
+#include <QPointer>
+#include <QTimer>
+
 class KoPointerEvent;
 class KoCanvasBase;
 
 class KisPaintingInformationBuilder;
 class KisToolFreehandHelper;
+class KisDocument;
 
 
 class KRITAUI_EXPORT KisToolFreehand : public KisToolPaint
@@ -109,6 +114,7 @@ private:
 
 private Q_SLOTS:
     void updateMaskSyntheticEventsFromTouch();
+    void slotOwedUndoTick();
 
 protected:
     friend class KisViewManager;
@@ -132,6 +138,18 @@ private:
     KisSignalCompressorWithParam<qreal> m_brushResizeCompressor;
 
     std::optional<KoPointerEventWrapper> m_beginAlternateActionEvent;
+
+    // Giga Sketch: Ctrl+Z pressed while a Smooth Curve tail was landing.
+    // Krita drops an undo while the image is still busy painting, so the
+    // tool "owes" that undo and performs it as soon as the stroke has
+    // finished painting (see requestUndoDuringStroke()).
+    QTimer m_owedUndoTimer;            ///< polls (GUI thread) until the image is idle
+    QPointer<KisDocument> m_owedUndoDocument;
+    QMetaObject::Connection m_owedUndoConnection;
+    int m_owedUndos {0};               ///< Ctrl+Z presses still to perform
+    bool m_owedStrokeLanded {false};   ///< the stroke reached the undo history
+    bool m_owedSettleTick {false};     ///< one extra tick before giving up
+    QElapsedTimer m_owedUndoClock;     ///< gives up after a few seconds
 };
 
 

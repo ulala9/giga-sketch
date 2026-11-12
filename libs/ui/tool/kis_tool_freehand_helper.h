@@ -77,6 +77,9 @@ public:
      */
     void finishPendingTail();
 
+    /// Giga Sketch: true while a Smooth Curve catch-up tail is still landing.
+    bool isTailPending() const;
+
     KisOptimizedBrushOutline paintOpOutline(const QPointF &savedCursorPos,
                                             const KoPointerEvent *event,
                                             const KisPaintOpSettingsSP globalSettings,

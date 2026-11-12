@@ -1327,6 +1327,11 @@ void KisToolFreehandHelper::curveTailTimeout()
     }
 }
 
+bool KisToolFreehandHelper::isTailPending() const
+{
+    return m_d->curveTailPending;
+}
+
 void KisToolFreehandHelper::finishPendingTail()
 {
     if (!m_d->curveTailPending) return;
