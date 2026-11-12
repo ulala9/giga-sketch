@@ -300,6 +300,9 @@ public:
     QString lastExportLocation;
 
     QMap<QString, QDockWidget *> dockWidgetsMap;
+
+    // Giga Sketch: dragging a document tab out of the tab bar.
+    bool gigaTabPressed {false};
     QByteArray dockerStateBeforeHiding;
     KoToolDocker *toolOptionsDocker {nullptr};
 
@@ -683,6 +686,7 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     setAcceptDrops(true);
     QTabBar *tabBar = d->findTabBarHACK();
     if (tabBar) {
+        tabBar->installEventFilter(this); // Giga Sketch: drag a tab out to its own window
         tabBar->setElideMode(Qt::ElideRight);
         // load customized tab style
         customizeTabBar();
@@ -743,6 +747,53 @@ void KisMainWindow::createGigaPanelStrip()
     }
 
     addToolBar(Qt::RightToolBarArea, strip);
+}
+
+bool KisMainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    QTabBar *tabBar = qobject_cast<QTabBar *>(watched);
+    if (tabBar && tabBar == d->findTabBarHACK()) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            d->gigaTabPressed = static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton;
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            d->gigaTabPressed = false;
+        } else if (event->type() == QEvent::MouseMove && d->gigaTabPressed) {
+            const QPoint pos = static_cast<QMouseEvent *>(event)->position().toPoint();
+            // Dragged well above or below the tab bar: tear the tab out,
+            // like Photoshop. Only when there's another document to keep.
+            const int margin = 40;
+            const bool pulledOut = pos.y() < -margin || pos.y() > tabBar->height() + margin;
+            if (pulledOut && d->mdiArea->subWindowList().size() > 1) {
+                d->gigaTabPressed = false;
+                // Do it after this event is handled, not while Qt is still
+                // inside the tab bar's mouse handling.
+                QTimer::singleShot(0, this, [this]() { gigaDetachActiveView(); });
+                return true;
+            }
+        }
+    }
+    return KXmlGuiWindow::eventFilter(watched, event);
+}
+
+void KisMainWindow::gigaDetachActiveView()
+{
+    KisView *view = activeView();
+    QPointer<QMdiSubWindow> subWindow = d->mdiArea->currentSubWindow();
+    if (!view || !subWindow || d->mdiArea->subWindowList().size() < 2) return;
+
+    KisDocument *document = view->document();
+    if (!document) return;
+
+    // Open the document in a new window first, then close this view. The
+    // document keeps a view the whole time, so nothing asks to save.
+    KisMainWindow *newWindow = KisPart::instance()->createMainWindow();
+    newWindow->initializeGeometry();
+    newWindow->show();
+    newWindow->addViewAndNotifyLoadingCompleted(document);
+
+    if (subWindow) {
+        subWindow->close();
+    }
 }
 
 void KisMainWindow::gigaTogglePanel(const QString &dockId)

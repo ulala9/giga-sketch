@@ -440,6 +440,13 @@ private:
      * Wayland, where apps can't position floating windows.
      */
     void createGigaPanelStrip();
+    /// Giga Sketch: move the active document view into a new window
+    /// (used when a document tab is dragged off the tab bar).
+    void gigaDetachActiveView();
+protected:
+    /// Giga Sketch: watches the document tab bar for "drag a tab out".
+    bool eventFilter(QObject *watched, QEvent *event) override;
+private:
     void gigaTogglePanel(const QString &dockId);
     void gigaToggleCollapseAll();
 public Q_SLOTS:
