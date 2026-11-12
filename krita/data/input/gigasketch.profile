@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Giga Sketch canvas input: Krita's Photoshop-compatible profile, except
 # Shift+drag changes brush size (as in Krita) and straight lines are
-# hold S + click/drag instead of Shift+click.
+# hold S + click/drag instead of Shift+click, and Ctrl / Ctrl+Shift + pen-down
+# paint (for QuickShape, which snaps while Ctrl is held).
 [Alternate Invocation]
 0={1;2;[1000023,1000020];1;0;0}
-1={0;2;[1000021,1000020];1;0;0}
+1={0;2;[];0;0;0}
 2={5;2;[];0;0;0}
 3={3;2;[];0;0;0}
 4={2;2;[];0;0;0}
@@ -55,6 +56,8 @@ version=6
 2={0;2;[];1;0;0}
 3={1;1;[1000004];0;0;0}
 4={2;1;[1000000];0;0;0}
+5={0;2;[1000021];1;0;0}
+6={0;2;[1000021,1000020];1;0;0}
 
 [Zoom Canvas]
 0={0;2;[1000021];4;0;0}
