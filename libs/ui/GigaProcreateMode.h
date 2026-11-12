@@ -17,6 +17,10 @@ class QToolButton;
 class KisMainWindow;
 
 /**
+ * Layout: a top bar with Paint/Smudge/Erase/Layers/colour on the right, and a
+ * vertical bar on the right edge with Gallery/Actions/Adjustments/Selection/
+ * Transform above the size and opacity sliders, colour picker, undo, redo.
+ *
  * Giga Sketch: a Procreate-style mode for the main window, switched with
  * View > Procreate Mode (F9).
  *
@@ -68,7 +72,7 @@ private:
     QByteArray m_studioState;
 
     QPointer<QToolBar> m_topBar;
-    QPointer<class GigaSideBarPill> m_sideBar; ///< floating pill over the canvas
+    QPointer<QToolBar> m_rightBar; ///< vertical bar on the right edge
     QSlider *m_sizeSlider {nullptr};
     QSlider *m_opacitySlider {nullptr};
     QToolButton *m_colorDot {nullptr};

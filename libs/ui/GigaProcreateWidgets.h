@@ -104,37 +104,4 @@ private:
     QListWidget *m_brushes {nullptr};
 };
 
-/// The floating, rounded side bar over the canvas (size, colour picker,
-/// opacity, undo, redo). Drag it up/down; double-click to switch sides.
-class GigaSideBarPill : public QFrame
-{
-public:
-    explicit GigaSideBarPill(QWidget *overlayParent);
-    QSlider *sizeSlider() const { return m_size; }
-    QSlider *opacitySlider() const { return m_opacity; }
-    QToolButton *samplerButton() const { return m_sampler; }
-    QToolButton *undoButton() const { return m_undo; }
-    QToolButton *redoButton() const { return m_redo; }
-    /// Place the pill against the parent's edge (call on parent resize).
-    void reposition();
-
-protected:
-    void mousePressEvent(QMouseEvent *event) override;
-    void mouseMoveEvent(QMouseEvent *event) override;
-    void mouseReleaseEvent(QMouseEvent *event) override;
-    void mouseDoubleClickEvent(QMouseEvent *event) override;
-    bool eventFilter(QObject *watched, QEvent *event) override;
-
-private:
-    QSlider *m_size {nullptr};
-    QSlider *m_opacity {nullptr};
-    QToolButton *m_sampler {nullptr};
-    QToolButton *m_undo {nullptr};
-    QToolButton *m_redo {nullptr};
-    bool m_rightSide {false};
-    qreal m_verticalFraction {0.3}; ///< top of the pill, as a fraction of the free height
-    bool m_dragging {false};
-    int m_dragOffsetY {0};
-};
-
 #endif // GIGA_PROCREATE_WIDGETS_H

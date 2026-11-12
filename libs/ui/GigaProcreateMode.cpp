@@ -8,6 +8,7 @@
 #include <QAction>
 #include <QDockWidget>
 #include <QMenu>
+#include <QHBoxLayout>
 #include <QMenuBar>
 #include <QPainter>
 #include <QSlider>
@@ -123,8 +124,22 @@ void GigaProcreateMode::buildBars()
         "QToolBar#GigaProcreateTopBar QToolButton:hover{background:rgba(255,255,255,22);}"
         "QToolBar#GigaProcreateTopBar QToolButton::menu-indicator{image:none;}"));
 
+    // ---------------- Right bar (vertical, right edge) ----------------
+    m_rightBar = new QToolBar(i18nc("@title:window", "Procreate Side Bar"), m_mainWindow);
+    m_rightBar->setObjectName(QStringLiteral("GigaProcreateRightBar"));
+    m_rightBar->setOrientation(Qt::Vertical);
+    m_rightBar->setMovable(false);
+    m_rightBar->setIconSize(QSize(22, 22));
+    m_rightBar->setStyleSheet(QStringLiteral(
+        "QToolBar#GigaProcreateRightBar{background:#1c1c1e;border:0;padding:8px 4px;spacing:6px;}"
+        "QToolBar#GigaProcreateRightBar QToolButton{border:0;color:#e8e8e8;padding:5px 6px;border-radius:7px;}"
+        "QToolBar#GigaProcreateRightBar QToolButton:hover{background:rgba(255,255,255,22);}"
+        "QToolBar#GigaProcreateRightBar QToolButton::menu-indicator{image:none;}"
+        "QToolBar#GigaProcreateRightBar QSlider::groove:vertical{background:rgba(255,255,255,40);width:6px;border-radius:3px;}"
+        "QToolBar#GigaProcreateRightBar QSlider::handle:vertical{background:#f0f0f0;height:16px;width:18px;margin:0 -6px;border-radius:8px;}"));
+
     auto menuButton = [this](const QString &text, QMenu *menu) {
-        QToolButton *button = addButton(m_topBar, QString(), text, QString());
+        QToolButton *button = addButton(m_rightBar, QString(), text, QString());
         button->setMenu(menu);
         button->setPopupMode(QToolButton::InstantPopup);
         return button;
@@ -160,9 +175,9 @@ void GigaProcreateMode::buildBars()
         menuButton(i18nc("Procreate-style top bar", "Adjustments"), filters);
     }
 
-    QToolButton *selection = addButton(m_topBar, QString(), i18nc("Procreate-style top bar", "Selection"), QString());
+    QToolButton *selection = addButton(m_rightBar, QString(), i18nc("Procreate-style top bar", "Selection"), QString());
     connect(selection, &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_SELECT)); });
-    QToolButton *transform = addButton(m_topBar, QString(), i18nc("Procreate-style top bar", "Transform"), QString());
+    QToolButton *transform = addButton(m_rightBar, QString(), i18nc("Procreate-style top bar", "Transform"), QString());
     connect(transform, &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_TRANSFORM)); });
 
     QWidget *spacer = new QWidget(m_topBar);
@@ -191,28 +206,49 @@ void GigaProcreateMode::buildBars()
     m_mainWindow->addToolBarBreak(Qt::TopToolBarArea);
     m_mainWindow->addToolBar(Qt::TopToolBarArea, m_topBar);
 
-    // ---------------- Side bar: floating pill over the canvas ----------------
-    QWidget *overlayHost = m_mainWindow->centralWidget();
-    m_sideBar = new GigaSideBarPill(overlayHost);
-    m_sizeSlider = m_sideBar->sizeSlider();
-    m_opacitySlider = m_sideBar->opacitySlider();
+    // ---------------- Right bar: brush controls below the menus ----------------
+    m_rightBar->addSeparator();
+    auto makeSlider = [this](const QString &toolTip) {
+        QSlider *slider = new QSlider(Qt::Vertical, m_rightBar);
+        slider->setMinimumHeight(160);
+        slider->setToolTip(toolTip);
+        QWidget *holder = new QWidget(m_rightBar); // centres the slider in the bar
+        QHBoxLayout *row = new QHBoxLayout(holder);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->addStretch(1);
+        row->addWidget(slider);
+        row->addStretch(1);
+        m_rightBar->addWidget(holder);
+        return slider;
+    };
 
+    m_sizeSlider = makeSlider(i18nc("@info:tooltip", "Brush size"));
     m_sizeSlider->setRange(0, SLIDER_STEPS);
     connect(m_sizeSlider, &QSlider::valueChanged, this, [this](int value) {
         if (m_updatingSliders || !m_mainWindow->viewManager()) return;
         m_mainWindow->viewManager()->canvasResourceProvider()->setSize(sliderToSize(value));
     });
+
+    QToolButton *sampler = addButton(m_rightBar, QStringLiteral("krita_tool_color_sampler"), QString(),
+                                     i18nc("@info:tooltip", "Pick a colour from the canvas"));
+    connect(sampler, &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_SAMPLER)); });
+
+    m_opacitySlider = makeSlider(i18nc("@info:tooltip", "Brush opacity"));
     m_opacitySlider->setRange(1, 100);
     connect(m_opacitySlider, &QSlider::valueChanged, this, [this](int value) {
         if (m_updatingSliders || !m_mainWindow->viewManager()) return;
         m_mainWindow->viewManager()->canvasResourceProvider()->setOpacity(value / 100.0);
     });
-    connect(m_sideBar->samplerButton(), &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_SAMPLER)); });
-    connect(m_sideBar->undoButton(), &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_undo")); });
-    connect(m_sideBar->redoButton(), &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_redo")); });
+
+    QToolButton *undo = addButton(m_rightBar, QStringLiteral("edit-undo"), QString(), i18nc("@info:tooltip", "Undo"));
+    connect(undo, &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_undo")); });
+    QToolButton *redo = addButton(m_rightBar, QStringLiteral("edit-redo"), QString(), i18nc("@info:tooltip", "Redo"));
+    connect(redo, &QToolButton::clicked, this, [this]() { triggerAction(QStringLiteral("edit_redo")); });
+
+    m_mainWindow->addToolBar(Qt::RightToolBarArea, m_rightBar);
 
     m_topBar->hide();
-    m_sideBar->hide();
+    m_rightBar->hide();
 }
 
 void GigaProcreateMode::showPopover(QWidget *content, QWidget *anchor)
@@ -383,23 +419,22 @@ void GigaProcreateMode::setActive(bool active)
             dock->hide();
         }
         Q_FOREACH (QToolBar *bar, m_mainWindow->findChildren<QToolBar *>()) {
-            if (bar != m_topBar) bar->hide();
+            if (bar != m_topBar && bar != m_rightBar) bar->hide();
         }
         m_mainWindow->menuBar()->hide();
         m_mainWindow->statusBar()->hide();
         m_topBar->show();
-        m_sideBar->show();
-        m_sideBar->reposition();
+        m_rightBar->show();
         updateSideBar();
         updateColorDot();
     } else {
         m_topBar->hide();
-        m_sideBar->hide();
+        m_rightBar->hide();
         if (!m_studioState.isEmpty()) {
             m_mainWindow->restoreState(m_studioState);
         }
         m_topBar->hide(); // the saved Studio state may not know about them
-        m_sideBar->hide();
+        m_rightBar->hide();
         m_mainWindow->menuBar()->show();
         m_mainWindow->statusBar()->show();
     }
