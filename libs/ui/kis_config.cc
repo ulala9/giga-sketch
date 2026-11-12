@@ -2377,7 +2377,9 @@ void KisConfig::setExportMimeType(const QString &defaultExportMimeType)
 
 bool KisConfig::toolOptionsInDocker(bool defaultValue) const
 {
-    return (defaultValue ? true : m_cfg.readEntry("ToolOptionsInDocker", true));
+    // Giga Sketch: default to tool options in the toolbar (a "Tool Settings"
+    // button in the top bar), closer to Photoshop's single options bar.
+    return (defaultValue ? false : m_cfg.readEntry("ToolOptionsInDocker", false));
 }
 
 void KisConfig::setToolOptionsInDocker(bool inDocker)
