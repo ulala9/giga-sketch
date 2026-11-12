@@ -21,6 +21,7 @@ kis_add_tests(
     KisSafeDocumentLoaderTest.cpp
     KisSurfaceColorSpaceWrapperTest.cpp
     KisCurveSmootherTest.cpp
+    KisQuickShapeRecognizerTest.cpp
 
     LINK_LIBRARIES kritaui kritalibkis kritatestsdk
     )

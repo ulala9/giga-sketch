@@ -690,6 +690,33 @@ QWidget * KisToolBrush::createOptionWidget()
     connect(m_btnResetCurveSmoothing, SIGNAL(clicked()), SLOT(resetCurveSmoothing()));
     addOptionWidgetOption(m_btnResetCurveSmoothing);
 
+    // Giga Sketch QuickShape: hold the pen still at the end of a stroke to
+    // snap it to a line/arc/ellipse/rectangle/polygon (Shift = perfect).
+    {
+        KisConfig quickCfg(true);
+        QCheckBox *quickShape = new QCheckBox(optionsWidget);
+        quickShape->setMinimumHeight(m_cmbSmoothingType->sizeHint().height()-3);
+        quickShape->setToolTip(i18nc("@info:tooltip", "Hold the pen still at the end of a stroke to turn it into a clean line, arc, ellipse, rectangle or polygon. Hold Shift while it snaps for a perfect circle, square or 15° line."));
+        quickShape->setChecked(quickCfg.readEntry<bool>("gigaQuickShape", true));
+        connect(quickShape, &QCheckBox::toggled, this, [](bool on) {
+            KisConfig(false).writeEntry<bool>("gigaQuickShape", on);
+        });
+        addOptionWidgetOption(quickShape, new QLabel(i18n("QuickShape:"), optionsWidget));
+
+        KisSliderSpinBox *quickDelay = new KisSliderSpinBox(optionsWidget);
+        quickDelay->setRange(150, 2000);
+        quickDelay->setSingleStep(50);
+        quickDelay->setSuffix(i18n(" ms"));
+        quickDelay->setToolTip(i18nc("@info:tooltip", "How long to hold the pen still before the stroke snaps to a shape."));
+        quickDelay->setValue(quickCfg.readEntry<int>("gigaQuickShapeDelay", 500));
+        connect(quickDelay, QOverload<int>::of(&KisSliderSpinBox::valueChanged), this, [](int ms) {
+            KisConfig(false).writeEntry<int>("gigaQuickShapeDelay", ms);
+        });
+        connect(quickShape, &QCheckBox::toggled, quickDelay, &QWidget::setEnabled);
+        quickDelay->setEnabled(quickShape->isChecked());
+        addOptionWidgetOption(quickDelay, new QLabel(i18n("Hold Time:"), optionsWidget));
+    }
+
     // add a line spacer so we know that the next set of options are for different settings
     QFrame* line = new QFrame(optionsWidget);
     line->setObjectName(QString::fromUtf8("line"));

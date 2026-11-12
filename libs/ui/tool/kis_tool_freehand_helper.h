@@ -164,6 +164,8 @@ private Q_SLOTS:
     void slotSmoothingTypeChanged();
     void curveRestTimeout();
     void curveTailTimeout();
+    /// Giga Sketch QuickShape: the pen has been held still; try to snap.
+    void quickShapeTimeout();
 
 private:
     struct Private;
