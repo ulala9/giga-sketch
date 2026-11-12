@@ -649,6 +649,11 @@ public:
     bool showCanvasMessages(bool defaultValue = false) const;
     void setShowCanvasMessages(bool show);
 
+    /// Giga Sketch: show the "<brush> selected" popup when switching brushes
+    /// with shortcuts (next/previous favourite, previous brush). Off by default.
+    bool gigaShowBrushSwitchMessage(bool defaultValue = false) const;
+    void setGigaShowBrushSwitchMessage(bool show);
+
     bool compressKra(bool defaultValue = false) const;
     void setCompressKra(bool compress);
 

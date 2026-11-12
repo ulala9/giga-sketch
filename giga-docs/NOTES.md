@@ -361,3 +361,12 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   current profile (`modeFor()`, tested) and calls KisInputProfileManager::saveProfiles() (writes the user's copy in
   data/input/, emits currentProfileChanged so the canvas reloads bindings). The checkbox follows currentProfileChanged.
 - KisInputProfile / KisShortcutConfiguration aren't exported from kritaui, so tests only cover modeFor().
+
+## Brush-switch popup (fix/no-brush-switch-popup)
+- The "<preset>\nselected" floating message (with preset thumbnail) comes only from KisPaintopBox::slotPreviousFavoritePreset,
+  slotNextFavoritePreset and slotSwitchToPreviousPreset (shortcut switching). Now guarded by
+  KisConfig::gigaShowBrushSwitchMessage() (key `gigaShowBrushSwitchMessage`, default false).
+- Preferences > General > Window: checkbox added in code under "Show on-canvas popup messages" (QFormLayout::insertRow
+  after m_chkCanvasMessages; enabled only while that one is on), so the .ui file stays untouched.
+- KisFloatingMessage is a top-level window positioned in global coordinates (top-right of the canvas); on Wayland it can
+  land elsewhere (user saw it top-left).

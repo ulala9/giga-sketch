@@ -368,6 +368,19 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
 
     m_chkCanvasMessages->setChecked(cfg.showCanvasMessages());
 
+    // Giga Sketch: "brush selected" popup when switching brushes by shortcut.
+    m_chkGigaBrushSwitchMessage = new QCheckBox(i18n("Show brush name when switching brushes"), this);
+    m_chkGigaBrushSwitchMessage->setToolTip(i18n("Shows the brush picture and name on the canvas when you switch brushes with a shortcut."));
+    m_chkGigaBrushSwitchMessage->setChecked(cfg.gigaShowBrushSwitchMessage());
+    if (QFormLayout *messagesForm = qobject_cast<QFormLayout*>(m_chkCanvasMessages->parentWidget()->layout())) {
+        int row = -1;
+        QFormLayout::ItemRole role;
+        messagesForm->getWidgetPosition(m_chkCanvasMessages, &row, &role);
+        messagesForm->insertRow(row + 1, QString(), m_chkGigaBrushSwitchMessage);
+    }
+    m_chkGigaBrushSwitchMessage->setEnabled(m_chkCanvasMessages->isChecked());
+    connect(m_chkCanvasMessages, &QCheckBox::toggled, m_chkGigaBrushSwitchMessage, &QWidget::setEnabled);
+
     const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     QSettings kritarc(configPath + QLatin1Char('/') + GigaBranding::displayConfigFile(), QSettings::IniFormat);
     m_chkHiDPI->setChecked(kritarc.value("EnableHiDPI", true).toBool());
@@ -818,6 +831,7 @@ void GeneralTab::setDefault()
     m_mdiColor->setColor(mdiColor);
     m_backgroundimage->setText(cfg.getMDIBackgroundImage(true));
     m_chkCanvasMessages->setChecked(cfg.showCanvasMessages(true));
+    m_chkGigaBrushSwitchMessage->setChecked(cfg.gigaShowBrushSwitchMessage(true));
     m_chkCompressKra->setChecked(cfg.compressKra(true));
     m_chkTrimKra->setChecked(cfg.trimKra(true));
     m_chkTrimFramesImport->setChecked(cfg.trimFramesImport(true));
@@ -1001,6 +1015,11 @@ int GeneralTab::mdiMode()
 bool GeneralTab::showCanvasMessages()
 {
     return m_chkCanvasMessages->isChecked();
+}
+
+bool GeneralTab::gigaShowBrushSwitchMessage()
+{
+    return m_chkGigaBrushSwitchMessage && m_chkGigaBrushSwitchMessage->isChecked();
 }
 
 bool GeneralTab::compressKra()
@@ -2916,6 +2935,7 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
 
 
         cfg.setShowCanvasMessages(m_general->showCanvasMessages());
+        cfg.setGigaShowBrushSwitchMessage(m_general->gigaShowBrushSwitchMessage());
         cfg.setCompressKra(m_general->compressKra());
         cfg.setTrimKra(m_general->trimKra());
         cfg.setTrimFramesImport(m_general->trimFramesImport());

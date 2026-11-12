@@ -1409,6 +1409,8 @@ void KisPaintopBox::slotPreviousFavoritePreset()
             //floating message should have least 2 lines, otherwise
             //preset thumbnail will be too small to distinguish
             //(because size of image on floating message depends on amount of lines in msg)
+            // Giga Sketch: only when enabled in Preferences (off by default).
+            if (KisConfig(true).gigaShowBrushSwitchMessage())
             m_viewManager->showFloatingMessage(
                         i18n("%1\nselected",
                              m_resourceProvider->currentPreset()->name()),
@@ -1431,6 +1433,8 @@ void KisPaintopBox::slotNextFavoritePreset()
             } else {
                 m_favoriteResourceManager->slotChangeActivePaintop(0);
             }
+            // Giga Sketch: only when enabled in Preferences (off by default).
+            if (KisConfig(true).gigaShowBrushSwitchMessage())
             m_viewManager->showFloatingMessage(
                         i18n("%1\nselected",
                              m_resourceProvider->currentPreset()->name()),
@@ -1445,6 +1449,8 @@ void KisPaintopBox::slotSwitchToPreviousPreset()
 {
     if (m_resourceProvider->previousPreset()) {
         setCurrentPaintop(m_resourceProvider->previousPreset());
+        // Giga Sketch: only when enabled in Preferences (off by default).
+        if (KisConfig(true).gigaShowBrushSwitchMessage())
         m_viewManager->showFloatingMessage(
                     i18n("%1\nselected",
                          m_resourceProvider->currentPreset()->name()),

@@ -84,6 +84,7 @@ public:
 
     int mdiMode();
     bool showCanvasMessages();
+    bool gigaShowBrushSwitchMessage();
     bool compressKra();
     bool trimKra();
     bool trimFramesImport();
@@ -131,6 +132,10 @@ private Q_SLOTS:
 public:
     QButtonGroup m_pasteFormatGroup;
     KisCumulativeUndoData m_cumulativeUndoData;
+
+private:
+    // Giga Sketch: added in code (not in the .ui) under "Show on-canvas popup messages"
+    QCheckBox *m_chkGigaBrushSwitchMessage {nullptr};
 };
 
 

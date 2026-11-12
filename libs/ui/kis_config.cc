@@ -2337,6 +2337,16 @@ void KisConfig::setShowCanvasMessages(bool show)
     m_cfg.writeEntry("showOnCanvasMessages", show);
 }
 
+bool KisConfig::gigaShowBrushSwitchMessage(bool defaultValue) const
+{
+    return (defaultValue ? false : m_cfg.readEntry("gigaShowBrushSwitchMessage", false));
+}
+
+void KisConfig::setGigaShowBrushSwitchMessage(bool show)
+{
+    m_cfg.writeEntry("gigaShowBrushSwitchMessage", show);
+}
+
 bool KisConfig::compressKra(bool defaultValue) const
 {
     return (defaultValue ? false : m_cfg.readEntry("compressLayersInKra", false));
