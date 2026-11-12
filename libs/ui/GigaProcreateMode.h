@@ -38,10 +38,11 @@ class GigaProcreateMode : public QObject
 {
     Q_OBJECT
 public:
-    explicit GigaProcreateMode(KisMainWindow *mainWindow);
+    /// @p nextModeAction is listed in the Actions menu (to leave the mode).
+    GigaProcreateMode(KisMainWindow *mainWindow, QAction *nextModeAction);
 
-    /// The View-menu action that toggles the mode.
-    QAction *toggleAction() const { return m_toggle; }
+    /// Hide our bars again, e.g. after another mode restored a layout.
+    void hideBars();
 
     bool isActive() const { return m_active; }
 
@@ -69,7 +70,6 @@ private:
     KisMainWindow *m_mainWindow {nullptr};
     QAction *m_toggle {nullptr};
     bool m_active {false};
-    QByteArray m_studioState;
 
     QPointer<QToolBar> m_topBar;
     QPointer<QToolBar> m_rightBar; ///< vertical bar on the right edge

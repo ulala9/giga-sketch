@@ -64,20 +64,11 @@ Slot s_slot = Slot::Paint;
 
 } // namespace
 
-GigaProcreateMode::GigaProcreateMode(KisMainWindow *mainWindow)
+GigaProcreateMode::GigaProcreateMode(KisMainWindow *mainWindow, QAction *nextModeAction)
     : QObject(mainWindow)
     , m_mainWindow(mainWindow)
+    , m_toggle(nextModeAction) // "Next Interface Mode (F9)", owned by GigaInterfaceModes
 {
-    m_toggle = new QAction(i18nc("@action:inmenu", "Procreate Mode"), this);
-    m_toggle->setCheckable(true);
-    m_toggle->setShortcut(QKeySequence(Qt::Key_F9)); // F12 is often user-bound (e.g. Show Canvas Only)
-    m_toggle->setShortcutContext(Qt::WindowShortcut);
-    m_toggle->setToolTip(i18nc("@info:tooltip", "Switch between the Studio layout and a minimal, Procreate-style layout (F9)"));
-    connect(m_toggle, &QAction::toggled, this, &GigaProcreateMode::setActive);
-    // Also on the window itself, so F9 works while the menu bar is hidden.
-    m_mainWindow->addAction(m_toggle);
-
-    m_studioState = QByteArray::fromBase64(KisConfig(true).readEntry<QByteArray>("gigaStudioState", QByteArray()));
 }
 
 QToolButton *GigaProcreateMode::addButton(QToolBar *bar, const QString &icon, const QString &text, const QString &toolTip)
@@ -167,8 +158,10 @@ void GigaProcreateMode::buildBars()
     addNamed(actions, "image_properties");
     actions->addSeparator();
     addNamed(actions, "options_configure");
-    actions->addSeparator();
-    actions->addAction(m_toggle);
+    if (m_toggle) {
+        actions->addSeparator();
+        actions->addAction(m_toggle);
+    }
     menuButton(i18nc("Procreate-style top bar", "Actions"), actions);
 
     QMenu *filters = qobject_cast<QMenu *>(m_mainWindow->guiFactory()->container(QStringLiteral("Filter"), m_mainWindow));
@@ -415,11 +408,9 @@ void GigaProcreateMode::setActive(bool active)
     buildBars();
     connectResources();
 
+    // Saving/restoring each mode's window layout is done by GigaInterfaceModes;
+    // this only clears the stage and shows or hides the Procreate bars.
     if (active) {
-        // Remember the Studio layout, then clear the stage.
-        m_studioState = m_mainWindow->saveState();
-        KisConfig(false).writeEntry<QByteArray>("gigaStudioState", m_studioState.toBase64());
-
         Q_FOREACH (QDockWidget *dock, m_mainWindow->dockWidgets()) {
             dock->hide();
         }
@@ -435,18 +426,15 @@ void GigaProcreateMode::setActive(bool active)
     } else {
         m_topBar->hide();
         m_rightBar->hide();
-        if (!m_studioState.isEmpty()) {
-            m_mainWindow->restoreState(m_studioState);
-        }
-        m_topBar->hide(); // the saved Studio state may not know about them
-        m_rightBar->hide();
         m_mainWindow->menuBar()->show();
         m_mainWindow->statusBar()->show();
     }
 
     m_active = active;
-    if (m_toggle->isChecked() != active) {
-        m_toggle->setChecked(active);
-    }
-    KisConfig(false).writeEntry<bool>("gigaProcreateMode", active);
+}
+
+void GigaProcreateMode::hideBars()
+{
+    if (m_topBar) m_topBar->hide();
+    if (m_rightBar) m_rightBar->hide();
 }

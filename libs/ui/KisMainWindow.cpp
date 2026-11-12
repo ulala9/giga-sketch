@@ -61,7 +61,7 @@
 #include "kis_selection_manager.h"
 #include "kis_icon_utils.h"
 #include "dialogs/GigaNewDocumentDialog.h"
-#include "GigaProcreateMode.h"
+#include "GigaInterfaceModes.h"
 #include <QToolBar>
 #include <QGuiApplication>
 #include <QFrame>
@@ -830,18 +830,17 @@ void KisMainWindow::createGigaPanelStrip()
 
     gigaMakePanelsNarrowFriendly();
 
-    // Procreate mode (View > Procreate Mode, F12).
-    GigaProcreateMode *procreate = new GigaProcreateMode(this);
+    // Interface modes: Studio / Photoshop / Procreate (View > Interface
+    // Mode, F9 cycles).
+    GigaInterfaceModes *modes = new GigaInterfaceModes(this);
     if (QMenu *viewMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("view"), this))) {
-        viewMenu->addAction(procreate->toggleAction());
+        viewMenu->addMenu(modes->menu());
     }
 
     // Toolbars are created from the menu file after this; apply once ready.
-    QTimer::singleShot(0, this, [this, procreate]() {
+    QTimer::singleShot(0, this, [this, modes]() {
         gigaApplyCompactMode(KisConfig(true).readEntry<bool>("gigaCompactUi", true));
-        if (KisConfig(true).readEntry<bool>("gigaProcreateMode", false)) {
-            procreate->setActive(true); // remembered from last time
-        }
+        modes->restoreSavedMode(); // remembered from last time
     });
 }
 

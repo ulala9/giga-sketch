@@ -429,9 +429,10 @@ private Q_SLOTS:
      * saved window layout yet, and available as Window > Workspace >
      * Giga Sketch Layout.
      */
-    void applyGigaLayout();
 
 public:
+    void applyGigaLayout();
+
     /// Giga Sketch: show a hidden panel as a flyout over the canvas (a
     /// popup next to @p anchor); it closes when you click elsewhere.
     void gigaShowPanelFlyout(const QString &dockId, QWidget *anchor);

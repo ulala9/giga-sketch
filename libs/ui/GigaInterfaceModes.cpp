@@ -1,0 +1,162 @@
+/*
+ *  SPDX-FileCopyrightText: 2026 The Giga Sketch contributors
+ *
+ *  SPDX-License-Identifier: GPL-3.0-or-later
+ */
+#include "GigaInterfaceModes.h"
+
+#include <QAction>
+#include <QActionGroup>
+#include <QDockWidget>
+#include <QMenu>
+#include <QTabWidget>
+
+#include <klocalizedstring.h>
+
+#include "GigaPanelTitleBar.h"
+#include "GigaProcreateMode.h"
+#include "KisMainWindow.h"
+#include "kis_config.h"
+
+namespace {
+
+QString stateKey(int mode) { return QStringLiteral("gigaModeState%1").arg(mode); }
+
+// Photoshop-style panel chrome: compact dark tabs on top of each group,
+// the active tab lighter, thin dark splitters between panels.
+const char *PHOTOSHOP_PANEL_CSS =
+    "QMainWindow > QTabBar{background:#232325;}"
+    "QMainWindow > QTabBar::tab{background:#2b2b2d;color:#a9a9a9;padding:3px 10px;margin:0;"
+    "border:0;border-right:1px solid #1b1b1d;}"
+    "QMainWindow > QTabBar::tab:selected{background:#3a3a3d;color:#f0f0f0;}"
+    "QMainWindow > QTabBar::tab:hover{color:#e0e0e0;}"
+    "QMainWindow::separator{background:#1b1b1d;width:3px;height:3px;}";
+
+} // namespace
+
+GigaInterfaceModes::GigaInterfaceModes(KisMainWindow *mainWindow)
+    : QObject(mainWindow)
+    , m_mainWindow(mainWindow)
+{
+    // F9 cycles Studio -> Photoshop -> Procreate. On the window itself so it
+    // also works in Procreate mode, where the menu bar is hidden.
+    m_next = new QAction(i18nc("@action:inmenu", "Next Interface Mode"), this);
+    m_next->setShortcut(QKeySequence(Qt::Key_F9));
+    m_next->setShortcutContext(Qt::WindowShortcut);
+    connect(m_next, &QAction::triggered, this, &GigaInterfaceModes::nextMode);
+    m_mainWindow->addAction(m_next);
+
+    m_menu = new QMenu(i18nc("@title:menu", "Interface Mode"), m_mainWindow);
+    m_group = new QActionGroup(this);
+    m_group->setExclusive(true);
+    const QString names[ModeCount] = {
+        i18nc("interface mode", "Studio"),
+        i18nc("interface mode", "Photoshop"),
+        i18nc("interface mode", "Procreate"),
+    };
+    for (int mode = 0; mode < ModeCount; mode++) {
+        QAction *action = m_menu->addAction(names[mode]);
+        action->setCheckable(true);
+        action->setChecked(mode == Studio);
+        m_group->addAction(action);
+        connect(action, &QAction::triggered, this, [this, mode]() { setMode(mode); });
+        m_modeActions[mode] = action;
+    }
+    m_menu->addSeparator();
+    m_menu->addAction(m_next);
+
+    m_procreate = new GigaProcreateMode(m_mainWindow, m_next);
+}
+
+void GigaInterfaceModes::restoreSavedMode()
+{
+    KisConfig cfg(true);
+    int saved = cfg.readEntry<int>("gigaInterfaceMode", -1);
+    if (saved < 0) {
+        // Older setting from when there was only an on/off Procreate mode.
+        saved = cfg.readEntry<bool>("gigaProcreateMode", false) ? Procreate : Studio;
+    }
+    if (saved > Studio && saved < ModeCount) {
+        setMode(saved);
+    }
+}
+
+void GigaInterfaceModes::nextMode()
+{
+    setMode((m_mode + 1) % ModeCount);
+}
+
+void GigaInterfaceModes::setMode(int mode)
+{
+    if (mode < 0 || mode >= ModeCount) return;
+    if (mode == m_mode) {
+        m_modeActions[mode]->setChecked(true);
+        return;
+    }
+    KisConfig cfg(false);
+
+    // 1. Remember the layout of the mode we're leaving.
+    cfg.writeEntry<QByteArray>(stateKey(m_mode), m_mainWindow->saveState().toBase64());
+
+    // 2. Leave it.
+    if (m_mode == Procreate) m_procreate->setActive(false);
+    if (m_mode == Photoshop) setPhotoshopPanels(false);
+
+    // 3. Enter the new one.
+    const QByteArray saved = QByteArray::fromBase64(cfg.readEntry<QByteArray>(stateKey(mode), QByteArray()));
+    if (mode == Procreate) {
+        m_procreate->setActive(true);
+    } else {
+        if (mode == Photoshop) setPhotoshopPanels(true);
+        if (!saved.isEmpty()) {
+            m_mainWindow->restoreState(saved);
+        } else if (mode == Photoshop) {
+            m_mainWindow->applyGigaLayout(); // first visit: start from the Photoshop-like arrangement
+        }
+        m_procreate->hideBars(); // a restored layout may not know about them
+    }
+
+    m_mode = mode;
+    m_modeActions[mode]->setChecked(true);
+    cfg.writeEntry<int>("gigaInterfaceMode", mode);
+}
+
+void GigaInterfaceModes::setPhotoshopPanels(bool on)
+{
+    if (on == m_photoshopPanelsOn) return;
+    m_photoshopPanelsOn = on;
+
+    if (on) {
+        m_originalDockOptions = int(m_mainWindow->dockOptions());
+        m_originalStyleSheet = m_mainWindow->styleSheet();
+
+        // Tabs on top of each group, like Photoshop; dragging a group's header
+        // moves the whole group.
+        m_mainWindow->setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
+        m_mainWindow->setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowTabbedDocks
+                                     | QMainWindow::AllowNestedDocks | QMainWindow::GroupedDragging);
+        m_mainWindow->setStyleSheet(m_originalStyleSheet + QString::fromLatin1(PHOTOSHOP_PANEL_CSS));
+
+        Q_FOREACH (QDockWidget *dock, m_mainWindow->dockWidgets()) {
+            if (dock->objectName() == QLatin1String("ToolBox")) continue; // keep the toolbox slim
+            m_originalTitleBars.insert(dock, dock->titleBarWidget());
+            dock->setTitleBarWidget(new GigaPanelTitleBar(dock, m_mainWindow));
+        }
+    } else {
+        // Put Krita's own title bars back exactly as they were.
+        for (auto it = m_originalTitleBars.begin(); it != m_originalTitleBars.end(); ++it) {
+            QDockWidget *dock = it.key();
+            if (!dock) continue;
+            GigaPanelTitleBar *ours = dynamic_cast<GigaPanelTitleBar *>(dock->titleBarWidget());
+            if (ours) ours->setCollapsed(false);
+            dock->setTitleBarWidget(it.value());
+            if (it.value()) it.value()->show();
+            delete ours;
+        }
+        m_originalTitleBars.clear();
+
+        m_mainWindow->setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::South);
+        m_mainWindow->setDockOptions(QMainWindow::DockOptions(m_originalDockOptions));
+        m_mainWindow->setStyleSheet(m_originalStyleSheet);
+    }
+}
