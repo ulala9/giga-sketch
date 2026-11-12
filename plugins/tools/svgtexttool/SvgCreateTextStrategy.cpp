@@ -157,7 +157,18 @@ KUndo2Command *SvgCreateTextStrategy::createCommand()
 
     new KoKeepShapesSelectedCommand(tool->koSelection()->selectedShapes(), {}, tool->canvas()->selectedShapesProxy(), false, parentCommand);
 
-    KoShapeContainer* parent = tool->canvas()->shapeController()->documentBase()->createParentForShapes({textShape}, false, parentCommand);
+    // Giga Sketch: optionally give every new text its own layer (Photoshop-style).
+    const bool forceNewLayer = tool->newLayerPerText();
+    KoShapeContainer* parent = tool->canvas()->shapeController()->documentBase()->createParentForShapes({textShape}, forceNewLayer, parentCommand);
+    if (forceNewLayer) {
+        if (KisShapeLayer *newLayer = dynamic_cast<KisShapeLayer *>(parent)) {
+            if (newLayer->shapeCount() == 0) {
+                // Remember the generated name; SvgTextTool replaces it with
+                // the text once editing finishes, unless the user renames it.
+                newLayer->setNodeProperty(SvgTextTool::autoLayerNameProperty(), newLayer->KisBaseNode::name());
+            }
+        }
+    }
     KUndo2Command *cmd = tool->canvas()->shapeController()->addShape(textShape, parent, parentCommand);
 
     parentCommand->setText(cmd->text());

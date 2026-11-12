@@ -12,6 +12,7 @@ const QString USE_CURRENT_TEXT_PROPERTIES = "useCurrentTextProperties";
 const QString CSS_STYLE_PRESET_NAME = "cssStylePresetName";
 const QString USE_VISUAL_BIDI_CURSOR = "useVisualBidiCursor";
 const QString PASTE_RICH_TEXT_BY_DEFAULT = "pasteRichtTextByDefault";
+const QString NEW_LAYER_PER_TEXT = "gigaNewLayerPerText";
 
 void SvgTextToolOptionsData::writeConfig(const QString &toolId)
 {
@@ -20,6 +21,7 @@ void SvgTextToolOptionsData::writeConfig(const QString &toolId)
     configGroup.writeEntry(CSS_STYLE_PRESET_NAME, cssStylePresetName);
     configGroup.writeEntry(USE_VISUAL_BIDI_CURSOR, useVisualBidiCursor);
     configGroup.writeEntry(PASTE_RICH_TEXT_BY_DEFAULT, pasteRichtTextByDefault);
+    configGroup.writeEntry(NEW_LAYER_PER_TEXT, newLayerPerText);
 }
 
 void SvgTextToolOptionsData::loadConfig(const QString &toolId)
@@ -29,6 +31,7 @@ void SvgTextToolOptionsData::loadConfig(const QString &toolId)
     cssStylePresetName = configGroup.readEntry<QString>(CSS_STYLE_PRESET_NAME, QString());
     useVisualBidiCursor = configGroup.readEntry<bool>(USE_VISUAL_BIDI_CURSOR, false);
     pasteRichtTextByDefault = configGroup.readEntry<bool>(PASTE_RICH_TEXT_BY_DEFAULT, false);
+    newLayerPerText = configGroup.readEntry<bool>(NEW_LAYER_PER_TEXT, true);
 }
 
 void SvgTextToolOptionsData::resetConfig()
@@ -37,4 +40,5 @@ void SvgTextToolOptionsData::resetConfig()
     cssStylePresetName = QString();
     useVisualBidiCursor = false;
     pasteRichtTextByDefault = false;
+    newLayerPerText = true;
 }

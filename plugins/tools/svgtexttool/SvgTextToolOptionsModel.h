@@ -23,6 +23,7 @@ public:
     LAGER_QT_CURSOR(QString, cssStylePresetName);
     LAGER_QT_CURSOR(bool, useVisualBidiCursor);
     LAGER_QT_CURSOR(bool, pasteRichtTextByDefault);
+    LAGER_QT_CURSOR(bool, newLayerPerText);
 
     void setConfigName(const QString &configName);
 

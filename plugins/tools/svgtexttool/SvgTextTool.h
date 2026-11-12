@@ -98,7 +98,19 @@ protected:
     KoSelection *koSelection() const;
     KoSvgTextShape *selectedShape() const;
 
+    /// Giga Sketch: whether new texts get their own layer (tool option).
+    bool newLayerPerText() const;
+
+    /// Giga Sketch: node property holding the name we gave a text layer.
+    /// If the layer still has that name, the user hasn't renamed it, so we
+    /// may keep it in sync with the text.
+    static QString autoLayerNameProperty() { return QStringLiteral("gigaTextAutoName"); }
+
 private:
+    /// Giga Sketch: rename the text's layer after its first line of text,
+    /// unless the user renamed the layer or it holds other shapes.
+    void updateAutoLayerName(KoSvgTextShape *shape);
+
     qreal grabSensitivityInPt() const;
 
     KoSvgText::WritingMode writingMode() const;

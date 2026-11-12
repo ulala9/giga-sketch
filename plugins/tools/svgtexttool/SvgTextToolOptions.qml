@@ -172,6 +172,22 @@ Control {
             Layout.fillWidth: true;
         }
 
+        CheckBox {
+            id: chkNewLayerPerText;
+            text: i18nc("@option:check", "New Layer for Each Text");
+            checked: manager.optionsModel.newLayerPerText;
+            onCheckedChanged: {
+                manager.optionsModel.newLayerPerText = checked;
+            }
+            Kis.ToolTipBase {
+                parent: chkNewLayerPerText;
+                text: i18nc("@info:tooltip", "Put every new text on its own layer, named after the text.");
+                visible: parent.hovered;
+            }
+            hoverEnabled: true;
+            Layout.fillWidth: true;
+        }
+
         Kis.ToolSeparatorBase {
             orientation: Qt.Horizontal;
             Layout.fillWidth: true;

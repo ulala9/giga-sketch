@@ -22,6 +22,7 @@
 #include "KoSvgConvertTextTypeCommand.h"
 #include "SvgTextShortCuts.h"
 #include "SvgTextToolOptionsModel.h"
+#include <kis_shape_layer.h>
 #include "SvgTextTypeSettingStrategy.h"
 #include "SvgTextChangeTransformsOnRange.h"
 #include "SvgChangeTextPathInfoStrategy.h"
@@ -202,6 +203,7 @@ void SvgTextTool::deactivate()
 {
     KoToolBase::deactivate();
     m_canvasConnections.clear();
+    updateAutoLayerName(m_textCursor.shape());
     m_textCursor.setShape(nullptr);
     const KisCanvas2 *canvas2 = qobject_cast<const KisCanvas2 *>(this->canvas());
     if (canvas2) {
@@ -459,6 +461,9 @@ void SvgTextTool::slotShapeSelectionChanged()
     }
     KoSvgTextShape *const shape = selectedShape();
     if (shape != m_textCursor.shape() || shape == nullptr) {
+        // Editing of the previous text is done. The cursor still watches it
+        // (and drops it if it was deleted), so the pointer is valid here.
+        updateAutoLayerName(m_textCursor.shape());
         m_textCursor.setShape(shape);
         m_textOnPathHelper.setShape(shape);
         if (shape) {
@@ -468,6 +473,35 @@ void SvgTextTool::slotShapeSelectionChanged()
         }
     }
     slotTextTypeUpdated();
+}
+
+bool SvgTextTool::newLayerPerText() const
+{
+    return m_optionManager ? m_optionManager->optionsModel()->newLayerPerText() : true;
+}
+
+void SvgTextTool::updateAutoLayerName(KoSvgTextShape *shape)
+{
+    if (!shape) return;
+
+    KisShapeLayer *layer = dynamic_cast<KisShapeLayer *>(shape->parent());
+    if (!layer || layer->shapeCount() != 1) return;
+
+    // Only layers we named ourselves, and only while the user hasn't renamed them.
+    const QVariant autoName = layer->nodeProperties().property(autoLayerNameProperty());
+    if (!autoName.isValid() || layer->KisBaseNode::name() != autoName.toString()) return;
+
+    // First line of the text, whitespace tidied, kept short like Photoshop.
+    QString name = shape->plainText().section(QLatin1Char('\n'), 0, 0).simplified();
+    constexpr int MAX_LENGTH = 40;
+    if (name.length() > MAX_LENGTH) {
+        name = name.left(MAX_LENGTH - 1).trimmed() + QChar(0x2026); // ellipsis
+    }
+    if (name.isEmpty() || name == layer->KisBaseNode::name()) return;
+
+    // Not an undo step: like Photoshop, the name just follows the text.
+    layer->KisBaseNode::setName(name);
+    layer->setNodeProperty(autoLayerNameProperty(), name);
 }
 
 void SvgTextTool::copy() const
