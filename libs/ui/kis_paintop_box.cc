@@ -1132,6 +1132,13 @@ void KisPaintopBox::slotColorSpaceChanged(const KoColorSpace* colorSpace)
 
 void KisPaintopBox::slotToggleEraseMode(bool checked)
 {
+    // Giga Sketch: eraser with its own brush (config gigaSeparateEraser).
+    if (!m_gigaSwappingEraser && m_resourceProvider->eraserMode() != checked
+            && KisConfig(true).readEntry<bool>("gigaSeparateEraser", true)) {
+        gigaSwapEraserBrush(checked);
+        return;
+    }
+
     const bool oldEraserMode = m_resourceProvider->eraserMode();
     m_resourceProvider->setEraserMode(checked);
 
@@ -1318,6 +1325,52 @@ void KisPaintopBox::slotToolChanged(KoCanvasController* canvas)
     }
 
     gigaUpdateBarForTool(tool && (tool->flags() & KisTool::FLAG_USES_CUSTOM_PRESET));
+
+    // Giga Sketch: choosing the Brush tool (B) while erasing switches back
+    // to the painting brush. Hooked to the tool's action because pressing B
+    // when the Brush tool is already active doesn't change the tool.
+    if (QAction *brushTool = m_viewManager->actionCollection()->action(QStringLiteral("KritaShape/KisToolBrush"))) {
+        connect(brushTool, &QAction::triggered, this, &KisPaintopBox::slotUnsetEraseMode, Qt::UniqueConnection);
+    }
+}
+
+void KisPaintopBox::gigaSwapEraserBrush(bool toEraser)
+{
+    m_gigaSwappingEraser = true;
+    KisConfig cfg(false);
+    const QString leaving = toEraser ? QStringLiteral("Paint") : QStringLiteral("Eraser");
+    const QString entering = toEraser ? QStringLiteral("Eraser") : QStringLiteral("Paint");
+
+    // 1. Remember the brush we're leaving, as it is right now.
+    KisPaintOpPresetSP current = m_resourceProvider->currentPreset();
+    if (current) {
+        cfg.writeEntry(QStringLiteral("gigaBrush%1Preset").arg(leaving), current->name());
+        cfg.writeEntry(QStringLiteral("gigaBrush%1Size").arg(leaving), m_resourceProvider->size());
+        cfg.writeEntry(QStringLiteral("gigaBrush%1Opacity").arg(leaving), m_resourceProvider->opacity());
+    }
+
+    m_resourceProvider->setEraserMode(toEraser);
+
+    // 2. Load the other brush. The first time there is none saved yet, so
+    //    the current brush is kept (and remembered for next time).
+    const QString name = cfg.readEntry(QStringLiteral("gigaBrush%1Preset").arg(entering), QString());
+    if (!name.isEmpty() && (!current || name != current->name())) {
+        KisPaintOpPresetResourceServer *server = KisResourceServerProvider::instance()->paintOpPresetServer();
+        KisPaintOpPresetSP preset = server->resource(QString(), QString(), name);
+        if (preset && preset->valid()) {
+            resourceSelected(preset);
+        }
+    }
+    const qreal size = cfg.readEntry<qreal>(QStringLiteral("gigaBrush%1Size").arg(entering), 0.0);
+    if (size > 0.0) {
+        m_resourceProvider->setSize(size);
+    }
+    const qreal opacity = cfg.readEntry<qreal>(QStringLiteral("gigaBrush%1Opacity").arg(entering), 0.0);
+    if (opacity > 0.0) {
+        m_resourceProvider->setOpacity(opacity);
+    }
+
+    m_gigaSwappingEraser = false;
 }
 
 void KisPaintopBox::gigaUpdateBarForTool(bool paintTool)

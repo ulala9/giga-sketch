@@ -155,6 +155,14 @@ private:
     /// Giga Sketch: show brush-only controls in the top bar only while a
     /// painting tool is active, like Photoshop's tool-specific options bar.
     void gigaUpdateBarForTool(bool paintTool);
+    /**
+     * Giga Sketch: separate eraser brush (like Photoshop's Eraser tool and
+     * Procreate). Switching erase mode on saves the painting brush (preset,
+     * size, opacity) and loads the eraser's own; switching it off does the
+     * reverse. Picking a brush while erasing makes it the eraser brush.
+     */
+    void gigaSwapEraserBrush(bool toEraser);
+    bool m_gigaSwappingEraser {false};
 private Q_SLOTS:
     void slotPreviousFavoritePreset();
     void slotNextFavoritePreset();
