@@ -21,7 +21,8 @@ class GigaProcreateMode;
 /**
  * Giga Sketch: three interface modes, cycled with F9 or picked from
  * View > Interface Mode.
- *  - Studio: the normal Giga Sketch layout.
+ *  - Studio: classic Krita look: Krita's own menus and toolbars (with the
+ *    user's customisations), Krita wording, its own theme and layout.
  *  - Photoshop: Photoshop-style panels (tabs on top, panel headers with
  *    collapse and a panel menu, whole tab groups drag together).
  *  - Procreate: the minimal Procreate-style layout (GigaProcreateMode).
@@ -42,12 +43,19 @@ public:
     /// Switch to the mode saved last time (call once the window is set up).
     void restoreSavedMode();
 
+    /// The mode saved last time (read before the window builds its menus).
+    static int savedMode();
+
 public Q_SLOTS:
     void setMode(int mode);
     void nextMode();
 
 private:
     void setPhotoshopPanels(bool on);
+    /// Switch modes. @p atStartup: the window already shows this mode's
+    /// layout (Krita restored it), so don't save or restore layouts.
+    void switchTo(int mode, bool atStartup);
+    void applyModeTheme(int mode);
 
     KisMainWindow *m_mainWindow {nullptr};
     GigaProcreateMode *m_procreate {nullptr};

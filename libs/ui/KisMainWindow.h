@@ -437,6 +437,17 @@ public:
     /// popup next to @p anchor); it closes when you click elsewhere.
     void gigaShowPanelFlyout(const QString &dockId, QWidget *anchor);
 
+    /**
+     * Giga Sketch interface modes. Classic (Studio mode) means Krita's own
+     * menus and toolbars (krita5.xmlgui, including the user's toolbar
+     * customisations), Krita's menu wording, and no Giga panel strip or
+     * compact tweaks. Otherwise Giga Sketch's (gigasketch.xmlgui). Switching
+     * rebuilds the menus and toolbars, the same way Configure Toolbars does.
+     */
+    void gigaSetClassicInterface(bool classic);
+    QString gigaCurrentThemeName() const;
+    void gigaSetTheme(const QString &name);
+
 private:
     /**
      * Giga Sketch: a slim vertical strip of panel icons on the right edge
@@ -460,6 +471,12 @@ private:
     void gigaMakePanelsNarrowFriendly();
     /// Giga Sketch: compact interface (smaller toolbar icons, tighter panels).
     void gigaApplyCompactMode(bool compact);
+    void gigaRestoreKritaMargins();
+    /// Giga Sketch: load a menu file (krita5.xmlgui or gigasketch.xmlgui).
+    void gigaLoadMenuFile(const QString &fileName);
+    /// Giga Sketch: put our items (Compact Interface, Interface Mode) in the
+    /// View menu; needed again whenever the menus are rebuilt.
+    void gigaAddViewMenuItems();
     void gigaToggleCollapseAll();
 public Q_SLOTS:
 

@@ -310,6 +310,14 @@ public:
 
     // Giga Sketch: dragging a document tab out of the tab bar.
     bool gigaTabPressed {false};
+    // Giga Sketch interface modes: Studio is "classic" (Krita menus etc.).
+    bool gigaClassic {false};
+    QString gigaMenuFile {QStringLiteral("gigasketch.xmlgui")};
+    QHash<QString, QString> gigaKritaWording; ///< original menu texts
+    QPointer<QToolBar> gigaPanelStrip;
+    QPointer<QAction> gigaCompactAction;
+    QPointer<QMenu> gigaModesMenu;
+    QHash<QWidget *, QMargins> gigaOriginalMargins; ///< panel margins before compact mode
     QByteArray dockerStateBeforeHiding;
     KoToolDocker *toolOptionsDocker {nullptr};
 
@@ -605,9 +613,13 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     KisPart::instance()->notifyMainWindowIsBeingCreated(this);
 
     // If we have customized the toolbars, load that first
-    // Giga Sketch: Photoshop-like menu layout (krita/gigasketch.xmlgui).
-    setLocalXMLFile(KoResourcePaths::locateLocal("data", "gigasketch.xmlgui"));
-    setXMLFile(":/kxmlgui5/gigasketch.xmlgui");
+    // Giga Sketch: Studio mode uses Krita's own menus (krita5.xmlgui, with
+    // the user's customised copy if there is one); the other modes use the
+    // Photoshop-like menu layout (krita/gigasketch.xmlgui).
+    d->gigaClassic = GigaInterfaceModes::savedMode() == GigaInterfaceModes::Studio;
+    d->gigaMenuFile = d->gigaClassic ? QStringLiteral("krita5.xmlgui") : QStringLiteral("gigasketch.xmlgui");
+    setLocalXMLFile(KoResourcePaths::locateLocal("data", d->gigaMenuFile));
+    setXMLFile(QStringLiteral(":/kxmlgui5/") + d->gigaMenuFile);
 
     guiFactory()->addClient(this);
     applyActionIconOverridesFromLocalXML();
@@ -794,6 +806,7 @@ void KisMainWindow::createGigaPanelStrip()
     }
 
     addToolBar(Qt::RightToolBarArea, strip);
+    d->gigaPanelStrip = strip;
 
     // Single-key panels, Photoshop-like (F6 already opens brush presets).
     const QList<QPair<QString, QKeySequence>> panelKeys = {
@@ -822,26 +835,90 @@ void KisMainWindow::createGigaPanelStrip()
         gigaApplyCompactMode(on);
     });
     actionCollection()->addAction(QStringLiteral("giga_compact_ui"), compact);
-    // The menus were already built from the menu file, so add it directly.
-    if (QMenu *viewMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("view"), this))) {
-        viewMenu->addSeparator();
-        viewMenu->addAction(compact);
-    }
+    d->gigaCompactAction = compact;
 
     gigaMakePanelsNarrowFriendly();
 
     // Interface modes: Studio / Photoshop / Procreate (View > Interface
     // Mode, F9 cycles).
     GigaInterfaceModes *modes = new GigaInterfaceModes(this);
-    if (QMenu *viewMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("view"), this))) {
-        viewMenu->addMenu(modes->menu());
-    }
+    d->gigaModesMenu = modes->menu();
+    // The menus were already built from the menu file, so add them directly.
+    gigaAddViewMenuItems();
 
     // Toolbars are created from the menu file after this; apply once ready.
     QTimer::singleShot(0, this, [this, modes]() {
-        gigaApplyCompactMode(KisConfig(true).readEntry<bool>("gigaCompactUi", true));
+        if (!d->gigaClassic) {
+            gigaApplyCompactMode(KisConfig(true).readEntry<bool>("gigaCompactUi", true));
+        }
         modes->restoreSavedMode(); // remembered from last time
     });
+}
+
+void KisMainWindow::gigaAddViewMenuItems()
+{
+    QMenu *viewMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("view"), this));
+    if (!viewMenu) return;
+    viewMenu->addSeparator();
+    if (d->gigaCompactAction) viewMenu->addAction(d->gigaCompactAction);
+    if (d->gigaModesMenu) viewMenu->addMenu(d->gigaModesMenu);
+}
+
+void KisMainWindow::gigaLoadMenuFile(const QString &fileName)
+{
+    if (fileName == d->gigaMenuFile) return;
+    d->gigaMenuFile = fileName;
+
+    // Same steps as Settings > Configure Toolbars uses to rebuild: take our
+    // menus and toolbars down, point at the other file, build them again.
+    // Actions (and their shortcuts) live in the action collection, so they
+    // are not affected; only where they appear changes.
+    setUpdatesEnabled(false);
+    guiFactory()->removeClient(this);
+    setXMLGUIBuildDocument(QDomDocument()); // forget the old file's contents
+    setLocalXMLFile(KoResourcePaths::locateLocal("data", fileName));
+    setXMLFile(QStringLiteral(":/kxmlgui5/") + fileName);
+    guiFactory()->addClient(this);
+
+    applyActionIconOverridesFromLocalXML();
+    synchronizeDynamicActions(); // Python plugin actions placed in menus
+    gigaAddViewMenuItems();
+    applyToolBarLayout();
+    setUpdatesEnabled(true);
+}
+
+void KisMainWindow::gigaSetClassicInterface(bool classic)
+{
+    if (classic != d->gigaClassic) {
+        d->gigaClassic = classic;
+        gigaLoadMenuFile(classic ? QStringLiteral("krita5.xmlgui") : QStringLiteral("gigasketch.xmlgui"));
+    }
+    gigaApplyWording(); // Krita's wording in classic, Photoshop-like otherwise
+
+    if (d->gigaPanelStrip) d->gigaPanelStrip->setVisible(!classic);
+    if (d->gigaCompactAction) d->gigaCompactAction->setEnabled(!classic);
+    if (classic) {
+        gigaRestoreKritaMargins();
+    } else {
+        gigaApplyCompactMode(KisConfig(true).readEntry<bool>("gigaCompactUi", true));
+    }
+}
+
+QString KisMainWindow::gigaCurrentThemeName() const
+{
+#ifndef Q_OS_HAIKU
+    if (d->themeManager) return d->themeManager->currentThemeName();
+#endif
+    return QString();
+}
+
+void KisMainWindow::gigaSetTheme(const QString &name)
+{
+#ifndef Q_OS_HAIKU
+    if (d->themeManager) d->themeManager->setCurrentTheme(name);
+#else
+    Q_UNUSED(name);
+#endif
 }
 
 void KisMainWindow::gigaMakePanelsNarrowFriendly()
@@ -881,8 +958,21 @@ void KisMainWindow::gigaApplyCompactMode(bool compact)
     for (auto it = d->dockWidgetsMap.constBegin(); it != d->dockWidgetsMap.constEnd(); ++it) {
         QDockWidget *dock = it.value();
         if (dock && dock->widget() && dock->widget()->layout()) {
-            dock->widget()->layout()->setContentsMargins(margin, margin, margin, margin);
+            QWidget *content = dock->widget();
+            if (!d->gigaOriginalMargins.contains(content)) {
+                d->gigaOriginalMargins.insert(content, content->layout()->contentsMargins());
+            }
+            content->layout()->setContentsMargins(margin, margin, margin, margin);
         }
+    }
+}
+
+void KisMainWindow::gigaRestoreKritaMargins()
+{
+    // Undo gigaApplyCompactMode's panel margins (Studio mode looks like Krita).
+    for (auto it = d->gigaOriginalMargins.constBegin(); it != d->gigaOriginalMargins.constEnd(); ++it) {
+        QWidget *content = it.key();
+        if (content && content->layout()) content->layout()->setContentsMargins(it.value());
     }
 }
 
@@ -1002,9 +1092,15 @@ void KisMainWindow::gigaApplyWording()
         {"manage_resources",     i18nc("@action:inmenu", "Preset Manager...")},
         {"manage_bundles",       i18nc("@action:inmenu", "Resource Libraries...")},
     };
+    // Studio mode keeps Krita's own wording; the first time through, note
+    // the original texts so they can be put back.
     for (const auto &entry : wording) {
-        if (QAction *action = actionCollection()->action(QString::fromLatin1(entry.first))) {
-            action->setText(entry.second);
+        const QString name = QString::fromLatin1(entry.first);
+        if (QAction *action = actionCollection()->action(name)) {
+            if (!d->gigaKritaWording.contains(name)) {
+                d->gigaKritaWording.insert(name, action->text());
+            }
+            action->setText(d->gigaClassic ? d->gigaKritaWording.value(name) : entry.second);
         }
     }
 }
@@ -3788,7 +3884,7 @@ bool KisMainWindow::checkPaintOpAvailable()
 // This function will rerender the actions with icons in UI (toolbars, shortcuts options etc.)
 void KisMainWindow::applyActionIconOverridesFromLocalXML()
 {
-    QString xmlPath = KoResourcePaths::locateLocal("data", "gigasketch.xmlgui");
+    QString xmlPath = KoResourcePaths::locateLocal("data", d->gigaMenuFile);
     QFile file(xmlPath);
     if (!file.exists()) {
         return;

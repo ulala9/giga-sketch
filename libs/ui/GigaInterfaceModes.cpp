@@ -21,6 +21,7 @@
 namespace {
 
 QString stateKey(int mode) { return QStringLiteral("gigaModeState%1").arg(mode); }
+QString themeKey(int mode) { return QStringLiteral("gigaModeTheme%1").arg(mode); }
 
 // Photoshop-style panel chrome: compact dark tabs on top of each group,
 // the active tab lighter, thin dark splitters between panels.
@@ -68,7 +69,7 @@ GigaInterfaceModes::GigaInterfaceModes(KisMainWindow *mainWindow)
     m_procreate = new GigaProcreateMode(m_mainWindow, m_next);
 }
 
-void GigaInterfaceModes::restoreSavedMode()
+int GigaInterfaceModes::savedMode()
 {
     KisConfig cfg(true);
     int saved = cfg.readEntry<int>("gigaInterfaceMode", -1);
@@ -76,9 +77,16 @@ void GigaInterfaceModes::restoreSavedMode()
         // Older setting from when there was only an on/off Procreate mode.
         saved = cfg.readEntry<bool>("gigaProcreateMode", false) ? Procreate : Studio;
     }
-    if (saved > Studio && saved < ModeCount) {
-        setMode(saved);
-    }
+    return (saved >= 0 && saved < ModeCount) ? saved : Studio;
+}
+
+void GigaInterfaceModes::restoreSavedMode()
+{
+    // m_mode starts as Studio, but the window was built for the saved mode
+    // (menus) and Krita has already restored the layout used last time,
+    // which belongs to the saved mode. So only the chrome is switched here.
+    m_mode = -1;
+    switchTo(savedMode(), true);
 }
 
 void GigaInterfaceModes::nextMode()
@@ -88,6 +96,11 @@ void GigaInterfaceModes::nextMode()
 
 void GigaInterfaceModes::setMode(int mode)
 {
+    switchTo(mode, false);
+}
+
+void GigaInterfaceModes::switchTo(int mode, bool atStartup)
+{
     if (mode < 0 || mode >= ModeCount) return;
     if (mode == m_mode) {
         m_modeActions[mode]->setChecked(true);
@@ -95,30 +108,49 @@ void GigaInterfaceModes::setMode(int mode)
     }
     KisConfig cfg(false);
 
-    // 1. Remember the layout of the mode we're leaving.
-    cfg.writeEntry<QByteArray>(stateKey(m_mode), m_mainWindow->saveState().toBase64());
+    // 1. Remember the layout and theme of the mode we're leaving.
+    if (!atStartup && m_mode >= 0) {
+        cfg.writeEntry<QByteArray>(stateKey(m_mode), m_mainWindow->saveState().toBase64());
+        cfg.writeEntry<QString>(themeKey(m_mode), m_mainWindow->gigaCurrentThemeName());
+    }
 
     // 2. Leave it.
     if (m_mode == Procreate) m_procreate->setActive(false);
     if (m_mode == Photoshop) setPhotoshopPanels(false);
 
-    // 3. Enter the new one.
-    const QByteArray saved = QByteArray::fromBase64(cfg.readEntry<QByteArray>(stateKey(mode), QByteArray()));
+    // 3. Enter the new one. Menus and toolbars first (Studio uses Krita's,
+    //    which rebuilds them), so the layout below can place the toolbars.
+    m_mainWindow->gigaSetClassicInterface(mode == Studio);
+    const QByteArray saved = atStartup ? QByteArray()
+        : QByteArray::fromBase64(cfg.readEntry<QByteArray>(stateKey(mode), QByteArray()));
     if (mode == Procreate) {
         m_procreate->setActive(true);
     } else {
         if (mode == Photoshop) setPhotoshopPanels(true);
         if (!saved.isEmpty()) {
             m_mainWindow->restoreState(saved);
-        } else if (mode == Photoshop) {
+        } else if (mode == Photoshop && !atStartup) {
             m_mainWindow->applyGigaLayout(); // first visit: start from the Photoshop-like arrangement
         }
         m_procreate->hideBars(); // a restored layout may not know about them
     }
+    applyModeTheme(mode);
 
     m_mode = mode;
     m_modeActions[mode]->setChecked(true);
     cfg.writeEntry<int>("gigaInterfaceMode", mode);
+}
+
+void GigaInterfaceModes::applyModeTheme(int mode)
+{
+    // Studio keeps the classic Krita theme; the others use Giga Dark. Pick
+    // another theme while in a mode and that mode remembers it.
+    KisConfig cfg(true);
+    const QString fallback = mode == Studio ? QStringLiteral("Krita blender") : QStringLiteral("Giga Dark");
+    const QString theme = cfg.readEntry<QString>(themeKey(mode), fallback);
+    if (!theme.isEmpty() && theme != m_mainWindow->gigaCurrentThemeName()) {
+        m_mainWindow->gigaSetTheme(theme);
+    }
 }
 
 void GigaInterfaceModes::setPhotoshopPanels(bool on)

@@ -164,10 +164,15 @@ void GigaProcreateMode::buildBars()
     }
     menuButton(i18nc("Procreate-style top bar", "Actions"), actions);
 
-    QMenu *filters = qobject_cast<QMenu *>(m_mainWindow->guiFactory()->container(QStringLiteral("Filter"), m_mainWindow));
-    if (filters) {
-        menuButton(i18nc("Procreate-style top bar", "Adjustments"), filters);
-    }
+    // The Filter menu is looked up each time this opens: switching to Studio
+    // mode rebuilds the menus, so a pointer kept from now could go stale.
+    QMenu *adjustments = new QMenu(m_topBar);
+    connect(adjustments, &QMenu::aboutToShow, this, [this, adjustments]() {
+        adjustments->clear();
+        QMenu *filters = qobject_cast<QMenu *>(m_mainWindow->guiFactory()->container(QStringLiteral("Filter"), m_mainWindow));
+        if (filters) adjustments->addActions(filters->actions());
+    });
+    menuButton(i18nc("Procreate-style top bar", "Adjustments"), adjustments);
 
     QToolButton *selection = addButton(m_topBar, QString(), i18nc("Procreate-style top bar", "Selection"), QString());
     connect(selection, &QToolButton::clicked, this, [this]() { activateTool(QString::fromLatin1(TOOL_SELECT)); });
