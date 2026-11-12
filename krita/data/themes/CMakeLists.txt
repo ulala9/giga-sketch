@@ -10,6 +10,7 @@ if (FOUNDATION_BUILD)
 endif()
 
 install(FILES
+GigaDark.colors
 KritaNeutral.colors
 KritaBlender.colors
 KritaBright.colors

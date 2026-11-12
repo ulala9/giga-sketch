@@ -691,6 +691,70 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     }
 
     applyMainWindowSettings(d->windowStateConfig);
+
+    // Giga Sketch: first start (no saved layout): use the Photoshop-like one.
+    if (!d->windowStateConfig.hasKey("State")) {
+        applyGigaLayout();
+    }
+}
+
+void KisMainWindow::applyGigaLayout()
+{
+    // Each inner list becomes one tabbed group, stacked top to bottom on the
+    // right. The first docker of a group is the tab shown in front.
+    const QList<QStringList> rightGroups = {
+        {QStringLiteral("ColorSelectorNg"), QStringLiteral("PaletteDocker")},
+        {QStringLiteral("sharedtooldocker"), QStringLiteral("PresetDocker"), QStringLiteral("TextProperties")},
+        {QStringLiteral("KisLayerBox"), QStringLiteral("ChannelDocker"), QStringLiteral("History")},
+    };
+
+    // Start clean: everything docked and hidden.
+    Q_FOREACH (QDockWidget *dock, dockWidgets()) {
+        dock->setFloating(false);
+        dock->hide();
+    }
+
+    QDockWidget *toolBox = dockWidget(QStringLiteral("ToolBox"));
+    if (toolBox) {
+        addDockWidget(Qt::LeftDockWidgetArea, toolBox);
+        toolBox->show();
+    }
+
+    QList<QDockWidget *> groupHeads;
+    QDockWidget *previousHead = nullptr;
+    Q_FOREACH (const QStringList &group, rightGroups) {
+        QDockWidget *head = nullptr;
+        Q_FOREACH (const QString &id, group) {
+            QDockWidget *dock = dockWidget(id);
+            if (!dock) continue;
+            if (!head) {
+                head = dock;
+                addDockWidget(Qt::RightDockWidgetArea, head);
+                if (previousHead) {
+                    splitDockWidget(previousHead, head, Qt::Vertical);
+                }
+            } else {
+                tabifyDockWidget(head, dock);
+            }
+            dock->show();
+        }
+        if (head) {
+            head->raise(); // first docker of the group in front
+            groupHeads << head;
+            previousHead = head;
+        }
+    }
+
+    // Slim toolbox, comfortable panel column; Layers gets the most height.
+    if (toolBox) {
+        resizeDocks({toolBox}, {56}, Qt::Horizontal);
+    }
+    if (!groupHeads.isEmpty()) {
+        resizeDocks({groupHeads.first()}, {320}, Qt::Horizontal);
+    }
+    if (groupHeads.size() == 3) {
+        resizeDocks(groupHeads, {260, 280, 420}, Qt::Vertical);
+    }
 }
 
 KisMainWindow::~KisMainWindow()
@@ -2729,6 +2793,10 @@ void KisMainWindow::updateWindowMenu()
     menu->addAction(d->workspaceMenu);
     QMenu *workspaceMenu = d->workspaceMenu->menu();
     workspaceMenu->clear();
+    // Giga Sketch: built-in Photoshop-like docker layout.
+    connect(workspaceMenu->addAction(i18nc("@action:inmenu", "Giga Sketch Layout")),
+            &QAction::triggered, this, &KisMainWindow::applyGigaLayout);
+    workspaceMenu->addSeparator();
     KisResourceModel resourceModel(ResourceType::Workspaces);
     KisResourceIterator resourceIterator(&resourceModel);
     KisMainWindow *m_this = this;

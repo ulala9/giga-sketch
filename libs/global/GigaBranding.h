@@ -60,6 +60,17 @@ inline QString shortcutsConfigFile() { return QStringLiteral("gigasketchshortcut
 inline QString usageLogFile() { return QStringLiteral("gigasketch.log"); }
 inline QString sysInfoLogFile() { return QStringLiteral("gigasketch-sysinfo.log"); }
 
+/// Default UI theme (krita/data/themes/GigaDark.colors).
+inline QString defaultTheme() { return QStringLiteral("Giga Dark"); }
+
+/// Default keyboard shortcut scheme: Krita's bundled Photoshop-compatible
+/// one (krita/data/shortcuts/photoshop_compatible.shortcuts).
+inline QString defaultShortcutScheme() { return QStringLiteral("photoshop_compatible"); }
+
+/// Default canvas input profile (pan/zoom/rotate keys and mouse buttons),
+/// Krita's bundled Photoshop-compatible one.
+inline QString defaultInputProfile() { return QStringLiteral("Photoshop Compatible"); }
+
 /// True for both the stock Krita name and ours. For upstream code that
 /// checks "are we running inside the real app (not a unit test)?".
 inline bool isMainApplicationName(const QString &name)

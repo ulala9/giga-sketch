@@ -421,6 +421,16 @@ private Q_SLOTS:
 
     void restoreWorkspace();
 
+    /**
+     * Giga Sketch: arrange the dockers in a Photoshop-like layout: slim
+     * toolbox on the left; on the right, Color/Palette, then Tool Options/
+     * Brush Presets/Text Properties, then Layers/Channels/History, each as
+     * tabs; everything else hidden. Applied automatically when there is no
+     * saved window layout yet, and available as Window > Workspace >
+     * Giga Sketch Layout.
+     */
+    void applyGigaLayout();
+
     void openCommandBar();
 
     void slotStoragesWarning(const QString &location = QString());
