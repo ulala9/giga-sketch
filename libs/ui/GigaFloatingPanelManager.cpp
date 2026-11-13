@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QMenuBar>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QStatusBar>
 #include <QTabBar>
 
@@ -24,6 +25,32 @@
 namespace {
 const char *const SETTING_KEY = "gigaInWindowPanels";
 constexpr int SNAP_DISTANCE = 10; // px
+// How close to the canvas's left/right edge the pointer must be to dock on
+// that side. Smaller than the 30 px tear-off zone, so a panel torn off a dock
+// doesn't land straight back in it.
+constexpr int SIDE_DOCK_ZONE = 24; // px
+
+// The "it will dock here" highlight. Purely visual: clicks pass through.
+class GigaDropHighlight : public QWidget
+{
+public:
+    explicit GigaDropHighlight(QWidget *parent) : QWidget(parent)
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setObjectName(QStringLiteral("GigaDropHighlight"));
+    }
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        QColor fill = palette().highlight().color();
+        QColor edge = fill;
+        fill.setAlpha(60);
+        p.fillRect(rect(), fill);
+        p.setPen(QPen(edge, 2));
+        p.drawRect(rect().adjusted(1, 1, -1, -1));
+    }
+};
 
 // Application-wide, but it only looks at presses: clicking anywhere in a
 // floating panel brings it to the front. Kept separate from the manager so
@@ -257,6 +284,9 @@ GigaFloatingPanel *GigaFloatingPanelManager::floatPanel(QDockWidget *dock, const
     dock->setFeatures(home.features & ~(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable));
     panel->setGeometryFilter([this](const QRect &r, bool moving) { return moving ? snap(r) : keepInside(r); });
     connect(panel, &GigaFloatingPanel::geometryEdited, this, &GigaFloatingPanelManager::scheduleSave);
+    panel->setMoveObserver([this](GigaFloatingPanel *p, const QPointF &globalPos, bool finished) {
+        onPanelMoved(p, globalPos, finished);
+    });
     panel->setGeometry(keepInside(wanted));
     m_panels.append(panel);
 
@@ -269,10 +299,34 @@ GigaFloatingPanel *GigaFloatingPanelManager::floatPanel(QDockWidget *dock, const
 
 void GigaFloatingPanelManager::dockPanel(QDockWidget *dock, bool keepVisible)
 {
+    if (!panelFor(dock) || !m_mainWindow) return;
+    // Back into its old tab group if one of those panels is still docked,
+    // otherwise on its old side.
+    const HomeInfo home = m_home.value(dock);
+    DropTarget target;
+    target.area = home.area;
+    for (const QString &id : home.tabSiblings) {
+        QDockWidget *candidate = m_mainWindow->dockWidget(id);
+        if (candidate && candidate != dock && isDockedTarget(candidate) && !candidate->isHidden()) {
+            target.tabWith = candidate;
+            break;
+        }
+    }
+    dockInto(dock, target, keepVisible && !dock->isHidden());
+}
+
+bool GigaFloatingPanelManager::isDockedTarget(const QDockWidget *dock) const
+{
+    return dock && m_mainWindow && !isFloating(dock) && !dock->isFloating()
+        && dock->parentWidget() == m_mainWindow
+        && m_mainWindow->dockWidgetArea(const_cast<QDockWidget *>(dock)) != Qt::NoDockWidgetArea;
+}
+
+void GigaFloatingPanelManager::dockInto(QDockWidget *dock, const DropTarget &target, bool show)
+{
     GigaFloatingPanel *panel = panelFor(dock);
     if (!panel || !m_mainWindow) return;
     if (panel->isCollapsed()) panel->setCollapsed(false);
-    const bool wasOpen = !dock->isHidden();
 
     panel->takeDock();
     m_panels.removeAll(panel);
@@ -280,23 +334,15 @@ void GigaFloatingPanelManager::dockPanel(QDockWidget *dock, bool keepVisible)
 
     dock->setParent(m_mainWindow);
     dock->setFeatures(home.features);
-    // Back into its old tab group if one of those panels is still docked,
-    // otherwise on its old side.
-    QDockWidget *sibling = nullptr;
-    for (const QString &id : home.tabSiblings) {
-        QDockWidget *candidate = m_mainWindow->dockWidget(id);
-        if (candidate && candidate != dock && !isFloating(candidate) && !candidate->isFloating()
-            && !candidate->isHidden() && m_mainWindow->dockWidgetArea(candidate) != Qt::NoDockWidgetArea) {
-            sibling = candidate;
-            break;
-        }
-    }
-    if (sibling) {
-        m_mainWindow->tabifyDockWidget(sibling, dock);
+    const Qt::DockWidgetArea area = target.isValid() ? target.area : home.area;
+    if (target.tabWith && isDockedTarget(target.tabWith)) {
+        m_mainWindow->tabifyDockWidget(target.tabWith, dock);
+    } else if (target.splitFrom && isDockedTarget(target.splitFrom)) {
+        m_mainWindow->splitDockWidget(target.splitFrom, dock, target.orientation);
     } else {
-        m_mainWindow->addDockWidget(home.area, dock);
+        m_mainWindow->addDockWidget(area, dock, target.orientation);
     }
-    if (keepVisible && wasOpen) {
+    if (show) {
         dock->show();
         dock->raise(); // its tab to the front
     } else {
@@ -306,6 +352,110 @@ void GigaFloatingPanelManager::dockPanel(QDockWidget *dock, bool keepVisible)
     panel->deleteLater();
     stripFloatable(dock);
     scheduleSave();
+}
+
+GigaFloatingPanelManager::DropTarget GigaFloatingPanelManager::dropTargetAt(const QPointF &globalPos,
+                                                                            const QDockWidget *moving) const
+{
+    DropTarget target;
+    if (!m_mainWindow || !m_mainWindow->centralWidget()) return target;
+    const QPoint pos = m_mainWindow->mapFromGlobal(globalPos.toPoint());
+    auto rectOf = [this](const QDockWidget *d) { return QRect(d->mapTo(m_mainWindow, QPoint(0, 0)), d->size()); };
+    auto usable = [this, moving](const QDockWidget *d) {
+        // The toolbox is too slim to share a group with a panel.
+        return d && d != moving && d->isVisible() && isDockedTarget(d) && d->objectName() != QLatin1String("ToolBox");
+    };
+
+    // 1. Over a docked panel: join its tab group.
+    for (QDockWidget *d : m_watched) {
+        if (!usable(d)) continue;
+        const QRect r = rectOf(d);
+        if (r.contains(pos)) {
+            target.area = m_mainWindow->dockWidgetArea(d);
+            target.tabWith = d;
+            target.highlight = r;
+            return target;
+        }
+    }
+    // ...or over a group's row of tabs (it sits outside the panels).
+    for (QObject *child : m_mainWindow->children()) {
+        QTabBar *tabBar = qobject_cast<QTabBar *>(child);
+        if (!tabBar || !tabBar->isVisible() || !tabBar->geometry().contains(pos)) continue;
+        QDockWidget *d = dockForTab(tabBar, tabBar->currentIndex());
+        if (!usable(d)) continue;
+        target.area = m_mainWindow->dockWidgetArea(d);
+        target.tabWith = d;
+        target.highlight = rectOf(d).united(tabBar->geometry());
+        return target;
+    }
+
+    // 2. Near the canvas's left or right edge (or anywhere beside it): a new
+    //    spot on that side.
+    const QRect canvas = m_mainWindow->centralWidget()->geometry();
+    const int width = qBound(200, moving ? moving->width() : 300, 360);
+    if (pos.x() < canvas.left() + SIDE_DOCK_ZONE) {
+        target.area = Qt::LeftDockWidgetArea;
+        QDockWidget *toolBox = m_mainWindow->dockWidget(QStringLiteral("ToolBox"));
+        if (toolBox && toolBox->isVisible() && isDockedTarget(toolBox)
+            && m_mainWindow->dockWidgetArea(toolBox) == Qt::LeftDockWidgetArea) {
+            // Its own column between the toolbox and the canvas, so the
+            // toolbox stays slim.
+            target.splitFrom = toolBox;
+            target.orientation = Qt::Horizontal;
+        }
+        target.highlight = QRect(canvas.left(), canvas.top(), width, canvas.height());
+    } else if (pos.x() > canvas.right() - SIDE_DOCK_ZONE) {
+        target.area = Qt::RightDockWidgetArea;
+        target.orientation = Qt::Vertical; // under the panels already there
+        QRect column;
+        for (QDockWidget *d : m_watched) {
+            if (usable(d) && m_mainWindow->dockWidgetArea(d) == Qt::RightDockWidgetArea) column |= rectOf(d);
+        }
+        if (column.isValid()) {
+            const int h = qMax(80, column.height() / 3);
+            target.highlight = QRect(column.left(), column.bottom() - h + 1, column.width(), h);
+        } else {
+            target.highlight = QRect(canvas.right() - width + 1, canvas.top(), width, canvas.height());
+        }
+    }
+    return target;
+}
+
+void GigaFloatingPanelManager::onPanelMoved(GigaFloatingPanel *panel, const QPointF &globalPos, bool finished)
+{
+    if (!panel || !panel->dock()) return;
+    // Hold Ctrl to move a panel over the docks without docking it.
+    const bool noDock = QGuiApplication::keyboardModifiers() & Qt::ControlModifier;
+    const DropTarget target = noDock ? DropTarget() : dropTargetAt(globalPos, panel->dock());
+    if (!finished) {
+        if (target.isValid()) showDropHighlight(target.highlight, panel);
+        else hideDropHighlight();
+        return;
+    }
+    hideDropHighlight();
+    if (!target.isValid()) return;
+    // Queued: we're inside the panel's own mouse handling right now.
+    QPointer<QDockWidget> dock = panel->dock();
+    QTimer::singleShot(0, this, [this, dock, target]() {
+        if (dock && isFloating(dock)) dockInto(dock, target, true);
+    });
+}
+
+void GigaFloatingPanelManager::showDropHighlight(const QRect &rect, GigaFloatingPanel *above)
+{
+    if (!m_mainWindow) return;
+    if (!m_dropHighlight) m_dropHighlight = new GigaDropHighlight(m_mainWindow);
+    if (m_dropHighlight->geometry() != rect) m_dropHighlight->setGeometry(rect);
+    if (!m_dropHighlight->isVisible()) {
+        m_dropHighlight->show();
+        m_dropHighlight->raise();
+        if (above) above->raise(); // the panel being dragged stays on top
+    }
+}
+
+void GigaFloatingPanelManager::hideDropHighlight()
+{
+    if (m_dropHighlight && m_dropHighlight->isVisible()) m_dropHighlight->hide();
 }
 
 void GigaFloatingPanelManager::dockAll(bool keepVisible)
@@ -570,7 +720,8 @@ bool GigaFloatingPanelManager::eventFilter(QObject *watched, QEvent *event)
         } else if (type == QEvent::ChildPolished) {
             QObject *child = static_cast<QChildEvent *>(event)->child();
             if (QTabBar *tabBar = qobject_cast<QTabBar *>(child)) watchTabBar(tabBar); // a new panel group
-            if (!m_panels.isEmpty() && !qobject_cast<GigaFloatingPanel *>(child)) m_raiseTimer.start();
+            if (!m_panels.isEmpty() && !qobject_cast<GigaFloatingPanel *>(child)
+                && child != m_dropHighlight.data()) m_raiseTimer.start();
         }
         return false;
     }

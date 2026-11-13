@@ -61,6 +61,14 @@ public:
      */
     void setGeometryFilter(std::function<QRect(const QRect &, bool moving)> filter) { m_filter = filter; }
 
+    /**
+     * Told about every step of a move (finished == false) and where the
+     * pointer was let go (finished == true). The manager uses it to show
+     * where the panel would dock and to dock it on release.
+     */
+    using MoveObserver = std::function<void(GigaFloatingPanel *panel, const QPointF &globalPos, bool finished)>;
+    void setMoveObserver(MoveObserver observer) { m_moveObserver = observer; }
+
     /// Make sure the dock's title bar (our drag handle) is showing.
     void ensureTitleBar();
 
@@ -90,11 +98,13 @@ private:
     QPointer<QDockWidget> m_dock;
     QVBoxLayout *m_layout {nullptr};
     std::function<QRect(const QRect &, bool)> m_filter;
+    MoveObserver m_moveObserver;
 
     bool m_moving {false};
     bool m_grabbed {false};
     Qt::Edges m_resizeEdges;
     QPointF m_pressGlobal;
+    QPointF m_lastGlobal; ///< latest pointer position of a move
     QRect m_startGeometry;
 
     bool m_collapsed {false};

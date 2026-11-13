@@ -411,3 +411,14 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   filters objects it watches (avoid running drag logic twice / per-event casts while painting).
 - Synthetic-event self-test (removed) passed: live tear-off follows the pointer, fallback floats, short drag near the
   docks still re-docks via Qt (Qt put it in the top area in that synthetic case — Qt's own hover logic).
+
+### In-window panels, step 4: drag a floating panel back into the docks
+- `GigaFloatingPanel::setMoveObserver()` reports every move step and the release point; the manager's `onPanelMoved()` turns the pointer position into a `DropTarget` (`dropTargetAt()`):
+  1. pointer over a docked panel (or its group's tab row) → `tabifyDockWidget` with it (ToolBox is excluded: too slim to share a group);
+  2. pointer within 24 px of the canvas's left edge (or anywhere left of it) → own column right of the ToolBox (`splitDockWidget(toolBox, dock, Horizontal)`) so the toolbox stays slim;
+  3. within 24 px of the right edge (or right of it) → `addDockWidget(Right, dock, Vertical)`, stacked under the right-side panels.
+- A `GigaDropHighlight` child widget (mouse-transparent, palette highlight at 60 alpha) shows the target while dragging; the dragged panel is raised above it.
+- Hold **Ctrl** while dragging to move without docking.
+- The actual docking is queued (`QTimer::singleShot(0)`) because the observer runs inside the panel's own mouse handler. `dockPanel()` (button/menu) and drops share `dockInto()`.
+- 24 px side zone is deliberately < the 30 px tear-off zone so a just-torn-off panel doesn't immediately re-dock.
+- Only runs during panel drags (not painting); cost per move is a loop over ~30 docks.

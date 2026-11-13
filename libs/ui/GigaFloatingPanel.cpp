@@ -40,6 +40,7 @@ QDockWidget *GigaFloatingPanel::takeDock()
 {
     QDockWidget *dock = m_dock;
     if (!dock) return nullptr;
+    m_moving = false; // being docked: not a move that ends in a drop
     finishInteraction();
     dock->removeEventFilter(this);
     m_layout->removeWidget(dock);
@@ -132,6 +133,7 @@ void GigaFloatingPanel::beginInteractiveMove(const QPointF &globalPos)
     m_moving = true;
     m_resizeEdges = Qt::Edges();
     m_pressGlobal = globalPos;
+    m_lastGlobal = globalPos;
     m_startGeometry = geometry();
     // The button is still held from the flyout or strip; route the rest of
     // the drag (moves and the release) to this frame.
@@ -145,6 +147,8 @@ void GigaFloatingPanel::moveBy(const QPointF &globalPos)
     QRect r = m_startGeometry.translated(delta);
     if (m_filter) r = m_filter(r, true);
     setGeometry(r);
+    m_lastGlobal = globalPos;
+    if (m_moveObserver) m_moveObserver(this, globalPos, false);
 }
 
 void GigaFloatingPanel::resizeBy(const QPointF &globalPos)
@@ -163,6 +167,7 @@ void GigaFloatingPanel::resizeBy(const QPointF &globalPos)
 void GigaFloatingPanel::finishInteraction()
 {
     const bool wasActive = m_moving || m_resizeEdges;
+    const bool wasMoving = m_moving;
     m_moving = false;
     m_resizeEdges = Qt::Edges();
     if (m_grabbed) {
@@ -171,6 +176,8 @@ void GigaFloatingPanel::finishInteraction()
     }
     unsetCursor();
     if (wasActive) Q_EMIT geometryEdited();
+    // Last, because the observer may dock the panel (queued, but still).
+    if (wasMoving && m_moveObserver) m_moveObserver(this, m_lastGlobal, true);
 }
 
 bool GigaFloatingPanel::eventFilter(QObject *watched, QEvent *event)
@@ -184,6 +191,7 @@ bool GigaFloatingPanel::eventFilter(QObject *watched, QEvent *event)
             raise();
             m_moving = true;
             m_pressGlobal = e->globalPosition();
+            m_lastGlobal = m_pressGlobal;
             m_startGeometry = geometry();
             return true; // never let QDockWidget start its own drag in here
         }
@@ -197,6 +205,7 @@ bool GigaFloatingPanel::eventFilter(QObject *watched, QEvent *event)
         break;
     case QEvent::MouseButtonRelease:
         if (m_moving) {
+            m_lastGlobal = static_cast<QMouseEvent *>(event)->globalPosition();
             finishInteraction();
             return true;
         }
@@ -247,6 +256,7 @@ void GigaFloatingPanel::mouseMoveEvent(QMouseEvent *event)
 
 void GigaFloatingPanel::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (m_moving) m_lastGlobal = event->globalPosition();
     finishInteraction();
     event->accept();
 }

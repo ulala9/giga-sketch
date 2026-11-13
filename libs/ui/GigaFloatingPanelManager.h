@@ -88,6 +88,23 @@ private:
         QDockWidget::DockWidgetFeatures features;
     };
 
+    /// Where a floating panel would dock if let go at a point.
+    struct DropTarget {
+        Qt::DockWidgetArea area {Qt::NoDockWidgetArea};
+        QPointer<QDockWidget> tabWith;   ///< join this docked panel's tab group
+        QPointer<QDockWidget> splitFrom; ///< or sit beside this one
+        Qt::Orientation orientation {Qt::Vertical};
+        QRect highlight;                 ///< what to light up, in window coordinates
+        bool isValid() const { return area != Qt::NoDockWidgetArea; }
+    };
+    DropTarget dropTargetAt(const QPointF &globalPos, const QDockWidget *moving) const;
+    bool isDockedTarget(const QDockWidget *dock) const;
+    void onPanelMoved(GigaFloatingPanel *panel, const QPointF &globalPos, bool finished);
+    void showDropHighlight(const QRect &rect, GigaFloatingPanel *above);
+    void hideDropHighlight();
+    /// Take a floating panel out of its frame and dock it as @p target says.
+    void dockInto(QDockWidget *dock, const DropTarget &target, bool show);
+
     void syncVisibility(GigaFloatingPanel *panel);
     void stripFloatable(QDockWidget *dock);
     QRect allowedArea() const;
@@ -118,6 +135,7 @@ private:
     QTimer m_raiseTimer;
     bool m_restoringSaved {false};
     QObject *m_raiseFilter {nullptr}; ///< app-wide, presses only
+    QPointer<QWidget> m_dropHighlight;
 
     struct TitleDrag {
         QPointer<QDockWidget> dock;
