@@ -64,6 +64,7 @@
 #include "GigaInterfaceModes.h"
 #include "GigaFloatingPanel.h"
 #include "GigaFloatingPanelManager.h"
+#include "GigaSelfTest.h"
 #include "GigaSaveDated.h"
 #include "GigaZoomOption.h"
 #include <QToolBar>
@@ -731,6 +732,7 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     // windows, which Wayland won't let us place).
     d->gigaFloating = new GigaFloatingPanelManager(this);
     Q_FOREACH (QDockWidget *dock, dockWidgets()) d->gigaFloating->watchDock(dock);
+    GigaSelfTest::maybeRun(this); // dev only: does nothing unless GIGA_SELFTEST is set
     static bool gigaFloatHandlerSet = false;
     if (!gigaFloatHandlerSet) {
         gigaFloatHandlerSet = true;

@@ -423,3 +423,10 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - 24 px side zone is deliberately < the 30 px tear-off zone so a just-torn-off panel doesn't immediately re-dock.
 - Only runs during panel drags (not painting); cost per move is a loop over ~30 docks.
 - Gotcha: Qt can report a docked panel as `isVisible()` while it sits parked outside the window at a stale position (seen with Photoshop-mode groups). `dropTargetAt()` only counts docks whose rect is inside the window and doesn't touch the canvas, and only trusts a tab bar that sits directly on its panel. Before that, the right-side column union grew to almost the whole window, giving a huge highlight.
+
+## UI self-tests (dev hook)
+- `giga-tools/selftest.sh <name|all>` runs Giga Sketch in a throw-away HOME/XDG_CONFIG_HOME with `GIGA_SELFTEST=<name>`, prints only `GIGA_SELFTEST PASS/FAIL/INFO/DONE` lines, exit code = failures.
+- Code: `libs/ui/GigaSelfTest.cpp` (called from the KisMainWindow ctor via `GigaSelfTest::maybeRun`; no-op without the env var). Helpers: `report()`, `info()`, `pump()`, `drag(widget, localStart, globalEnd, steps, beforeRelease)`. Add a test function and a row in `runNamed()`'s table. `GIGA_SELFTEST_DELAY` (ms, default 5000) delays the start.
+- Ends with `_Exit(failures)` to skip Krita's shutdown prompts.
+- Existing tests: `panels` (float/dock, drop onto Layers, left/right edge, middle, title-bar tear-off).
+- Gotcha: a non-front tab in a dock group keeps a stale position; `raise()` it before aiming at it.
