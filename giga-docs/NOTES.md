@@ -382,3 +382,22 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   XDG_CONFIG_HOME=<scratch>/cfg. Krita's message handler hides qWarning output here; print with fprintf(stderr).
 - Each SPIKE line printed twice at startup: check whether two KisMainWindows are constructed (manager must be per window).
 - Not yet verified: painting lag with a panel over the OpenGL canvas (needs the user's hand test).
+- Step 2+3 built (same branch). `libs/ui/GigaFloatingPanel.{h,cpp}`: QFrame child of KisMainWindow holding the whole
+  QDockWidget; the dock's own title bar is the drag handle (frame's eventFilter on the dock eats title-area presses so
+  QDockWidget never starts its own drag; Movable+Floatable removed while inside), 5 px border resizes, double-click
+  title / Photoshop header collapse → frame collapse, LayoutRequest → ensureTitleBar() (Krita hides title bars).
+  `beginInteractiveMove()` grabs the mouse for tear-offs.
+- `GigaFloatingPanelManager` (one per window, `KisMainWindow::gigaFloatingPanels()`): strips DockWidgetFloatable from
+  every dock while enabled (so Qt never makes desktop windows); float/dock/dockAll/toggleFloat/raisePanel; keepInside +
+  snap (window area, central widget, other panels, 10 px); qApp filter raises a panel on press; follows dock
+  ShowToParent/HideToParent; setAllHidden (toggleDockersVisibility + leaving Welcome page in
+  setMainWindowLayoutForCurrentMainWidget); begin/endRestore around restoreWorkspaceState (it hides every dock);
+  JSON per mode in kritarc `gigaModeFloatingPanels<mode>` (GigaInterfaceModes::switchTo: save+dockAll when leaving,
+  setStorageKey+restoreSaved when entering/at startup). Setting `gigaInWindowPanels` (Preferences > General > Window).
+- KoDockWidgetTitleBar::setFloatRequestHandler (libs/widgets, additive): float button visible when a handler exists,
+  click → handler first. Photoshop header's Float/Dock menu item goes through the manager.
+- Flyout: drag title row (GigaPanelFlyout::onTearOff) or pin button → floating panel; strip buttons have property
+  gigaPanelId + KisMainWindow::eventFilter → drag out = float + beginInteractiveMove. Strip click on a floating panel =
+  raise, Shift+click = dock.
+- Self-test (temporary, removed) passed: float/collapse/hide-all/workspace restore/close/raise/dock/disable/re-enable,
+  restart restores position. Only one KisMainWindow at startup (step-1 double print was a test artefact).

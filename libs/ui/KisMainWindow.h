@@ -29,6 +29,7 @@ class KoCanvasResourceProvider;
 
 class KisDocument;
 class KoDockFactoryBase;
+class GigaFloatingPanelManager;
 class QDockWidget;
 class KisView;
 class KisViewManager;
@@ -122,6 +123,8 @@ public:
 
     /// Return the list of dock widgets belonging to this main window.
     QList<QDockWidget*> dockWidgets() const;
+    /// Giga Sketch: panels floating inside this window (see GigaFloatingPanelManager).
+    GigaFloatingPanelManager *gigaFloatingPanels() const;
 
     QDockWidget* dockWidget(const QString &id);
 

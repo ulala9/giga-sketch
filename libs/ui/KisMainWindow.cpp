@@ -62,6 +62,8 @@
 #include "kis_icon_utils.h"
 #include "dialogs/GigaNewDocumentDialog.h"
 #include "GigaInterfaceModes.h"
+#include "GigaFloatingPanel.h"
+#include "GigaFloatingPanelManager.h"
 #include "GigaSaveDated.h"
 #include "GigaZoomOption.h"
 #include <QToolBar>
@@ -69,6 +71,10 @@
 #include <QFrame>
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QAbstractButton>
+#include <QHBoxLayout>
+#include <QMouseEvent>
+#include <QToolButton>
 #include <krecentfilesaction.h>
 #include "krita_utils.h"
 #include <ktoggleaction.h>
@@ -317,6 +323,9 @@ public:
     QString gigaMenuFile {QStringLiteral("gigasketch.xmlgui")};
     QHash<QString, QString> gigaKritaWording; ///< original menu texts
     QPointer<QToolBar> gigaPanelStrip;
+    QPointer<GigaFloatingPanelManager> gigaFloating;
+    bool gigaStripPressed {false}; ///< a strip button is pressed (may become a drag)
+    QPointF gigaStripPressPos;
     QPointer<QAction> gigaCompactAction;
     QPointer<QAction> gigaZoomTowardPointer; ///< View > Ctrl+Space Zooms Toward Pointer
     QPointer<QMenu> gigaModesMenu;
@@ -718,6 +727,21 @@ KisMainWindow::KisMainWindow(QUuid uuid)
         tabBar->setChangeCurrentOnDrag(true);
     }
 
+    // Giga Sketch: panels can float inside the window (not as desktop
+    // windows, which Wayland won't let us place).
+    d->gigaFloating = new GigaFloatingPanelManager(this);
+    Q_FOREACH (QDockWidget *dock, dockWidgets()) d->gigaFloating->watchDock(dock);
+    static bool gigaFloatHandlerSet = false;
+    if (!gigaFloatHandlerSet) {
+        gigaFloatHandlerSet = true;
+        // Krita's panel title bar float button asks us first.
+        KoDockWidgetTitleBar::setFloatRequestHandler([](QDockWidget *dock) {
+            KisMainWindow *window = qobject_cast<KisMainWindow *>(dock->window());
+            GigaFloatingPanelManager *manager = window ? window->gigaFloatingPanels() : nullptr;
+            return manager && manager->toggleFloat(dock);
+        });
+    }
+
     createGigaPanelStrip();
     // After construction, when plugins have added their actions too.
     QTimer::singleShot(0, this, &KisMainWindow::gigaApplyWording);
@@ -745,8 +769,44 @@ public:
         setAttribute(Qt::WA_DeleteOnClose);
     }
     std::function<void()> onHide;
+    /// Dragging the title row tears the panel off into a floating panel
+    /// (global pointer position, where in the flyout it was grabbed, size).
+    std::function<void(const QPointF &, const QPoint &, const QSize &)> onTearOff;
+    QPointer<QWidget> titleRow;
 
 protected:
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        // Presses on the title label reach the flyout (labels ignore them).
+        if (event->button() == Qt::LeftButton && onTearOff && titleRow
+            && titleRow->geometry().contains(event->position().toPoint())) {
+            m_pressPos = event->position().toPoint();
+            m_pressed = true;
+            event->accept();
+            return;
+        }
+        QFrame::mousePressEvent(event);
+    }
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (m_pressed && (event->position().toPoint() - m_pressPos).manhattanLength() >= QApplication::startDragDistance()) {
+            m_pressed = false;
+            auto tearOff = onTearOff;
+            const QPointF globalPos = event->globalPosition();
+            const QPoint grabOffset = m_pressPos;
+            const QSize flyoutSize = size();
+            close(); // gives the content back to its panel (onHide)
+            tearOff(globalPos, grabOffset, flyoutSize);
+            return;
+        }
+        QFrame::mouseMoveEvent(event);
+    }
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        m_pressed = false;
+        QFrame::mouseReleaseEvent(event);
+    }
+
     void hideEvent(QHideEvent *event) override
     {
         QFrame::hideEvent(event);
@@ -756,6 +816,10 @@ protected:
             callback();
         }
     }
+
+private:
+    bool m_pressed {false};
+    QPoint m_pressPos;
 };
 
 // Panels that may shrink narrower than their widest row (content scrolls).
@@ -802,10 +866,14 @@ void KisMainWindow::createGigaPanelStrip()
         QDockWidget *dock = dockWidget(id);
         if (!dock) continue; // e.g. Tool Options docker when options are in the toolbar
         QAction *action = strip->addAction(KisIconUtils::loadIcon(entry.icon), dock->windowTitle());
-        action->setToolTip(i18nc("@info:tooltip", "%1 (click: flyout, Shift+click: dock)", dock->windowTitle()));
+        action->setToolTip(i18nc("@info:tooltip", "%1 (click: flyout, drag: float, Shift+click: dock)", dock->windowTitle()));
         connect(action, &QAction::triggered, this, [this, id, strip, action]() {
             gigaTogglePanel(id, strip->widgetForAction(action));
         });
+        if (QWidget *button = strip->widgetForAction(action)) {
+            button->setProperty("gigaPanelId", id); // dragged out: float it (eventFilter)
+            button->installEventFilter(this);
+        }
     }
 
     addToolBar(Qt::RightToolBarArea, strip);
@@ -1011,12 +1079,42 @@ void KisMainWindow::gigaShowPanelFlyout(const QString &dockId, QWidget *anchor)
     QVBoxLayout *layout = new QVBoxLayout(flyout);
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(2);
-    QLabel *title = new QLabel(dock->windowTitle(), flyout);
+    // Title row: the name (drag it to tear the panel off) and a pin button.
+    QWidget *titleRow = new QWidget(flyout);
+    QHBoxLayout *titleLayout = new QHBoxLayout(titleRow);
+    titleLayout->setContentsMargins(0, 0, 0, 0);
+    QLabel *title = new QLabel(dock->windowTitle(), titleRow);
     QFont titleFont = title->font();
     titleFont.setBold(true);
     title->setFont(titleFont);
-    layout->addWidget(title);
+    titleLayout->addWidget(title);
+    titleLayout->addStretch(1);
+    layout->addWidget(titleRow);
     layout->addWidget(content); // borrowed from the docker while the flyout is open
+
+    QPointer<QDockWidget> floatGuard = dock;
+    if (d->gigaFloating && d->gigaFloating->isEnabled()) {
+        title->setToolTip(i18nc("@info:tooltip", "Drag to float this panel"));
+        QToolButton *pin = new QToolButton(titleRow);
+        pin->setAutoRaise(true);
+        pin->setIcon(KisIconUtils::loadIcon("docker_float"));
+        pin->setToolTip(i18nc("@info:tooltip", "Keep this panel open, floating here"));
+        titleLayout->addWidget(pin);
+        connect(pin, &QToolButton::clicked, this, [this, flyout, floatGuard]() {
+            const QRect globalRect(flyout->mapToGlobal(QPoint(0, 0)), flyout->size());
+            flyout->close(); // content back to the panel first
+            if (floatGuard && d->gigaFloating) {
+                d->gigaFloating->floatPanel(floatGuard, QRect(mapFromGlobal(globalRect.topLeft()), globalRect.size()));
+            }
+        });
+        flyout->titleRow = titleRow;
+        flyout->onTearOff = [this, floatGuard](const QPointF &globalPos, const QPoint &grabOffset, const QSize &size) {
+            if (!floatGuard || !d->gigaFloating) return;
+            const QPoint topLeft = mapFromGlobal((globalPos - QPointF(grabOffset)).toPoint());
+            GigaFloatingPanel *panel = d->gigaFloating->floatPanel(floatGuard, QRect(topLeft, size));
+            if (panel) panel->beginInteractiveMove(globalPos); // keep following the pointer
+        };
+    }
     content->show();
 
     KConfigGroup sizes = d->windowStateConfig.group("GigaFlyoutSizes");
@@ -1044,6 +1142,33 @@ void KisMainWindow::gigaShowPanelFlyout(const QString &dockId, QWidget *anchor)
 
 bool KisMainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    // Giga Sketch: drag a panel strip button onto the canvas to float that panel.
+    const QVariant stripPanelId = watched->property("gigaPanelId");
+    if (stripPanelId.isValid() && d->gigaFloating && d->gigaFloating->isEnabled()) {
+        const QEvent::Type type = event->type();
+        if (type == QEvent::MouseButtonPress) {
+            QMouseEvent *e = static_cast<QMouseEvent *>(event);
+            d->gigaStripPressed = e->button() == Qt::LeftButton;
+            d->gigaStripPressPos = e->globalPosition();
+        } else if (type == QEvent::MouseButtonRelease) {
+            d->gigaStripPressed = false;
+        } else if (type == QEvent::MouseMove && d->gigaStripPressed) {
+            QMouseEvent *e = static_cast<QMouseEvent *>(event);
+            if ((e->globalPosition() - d->gigaStripPressPos).manhattanLength() >= 2 * QApplication::startDragDistance()) {
+                d->gigaStripPressed = false;
+                const QString id = stripPanelId.toString();
+                if (QDockWidget *dock = dockWidget(id)) {
+                    if (QAbstractButton *button = qobject_cast<QAbstractButton *>(watched)) button->setDown(false);
+                    const QSize size = d->windowStateConfig.group("GigaFlyoutSizes").readEntry(id, QSize(340, 520));
+                    const QPoint topLeft = mapFromGlobal(e->globalPosition().toPoint()) - QPoint(size.width() / 2, 12);
+                    GigaFloatingPanel *panel = d->gigaFloating->floatPanel(dock, QRect(topLeft, size));
+                    if (panel) panel->beginInteractiveMove(e->globalPosition());
+                }
+                return true;
+            }
+        }
+    }
+
     QTabBar *tabBar = qobject_cast<QTabBar *>(watched);
     if (tabBar && tabBar == d->findTabBarHACK()) {
         // Pens send tablet events; mice send mouse events. Handle both.
@@ -1134,6 +1259,15 @@ void KisMainWindow::gigaTogglePanel(const QString &dockId, QWidget *anchor)
 {
     QDockWidget *dock = dockWidget(dockId);
     if (!dock) return;
+    // Floating inside the window: bring it to the front (Shift: dock it back).
+    if (d->gigaFloating && d->gigaFloating->isFloating(dock)) {
+        if (QGuiApplication::keyboardModifiers().testFlag(Qt::ShiftModifier)) {
+            d->gigaFloating->dockPanel(dock);
+        } else {
+            d->gigaFloating->raisePanel(dock);
+        }
+        return;
+    }
     // Docked and on screen: hide it. Shift: dock it (show + bring to front).
     // Otherwise: open it as a flyout over the canvas, like Photoshop's
     // collapsed panels and Procreate's popovers.
@@ -1146,6 +1280,11 @@ void KisMainWindow::gigaTogglePanel(const QString &dockId, QWidget *anchor)
     } else {
         gigaShowPanelFlyout(dockId, anchor);
     }
+}
+
+GigaFloatingPanelManager *KisMainWindow::gigaFloatingPanels() const
+{
+    return d->gigaFloating;
 }
 
 void KisMainWindow::gigaToggleCollapseAll()
@@ -1185,6 +1324,7 @@ void KisMainWindow::applyGigaLayout()
     };
 
     // Start clean: everything docked and hidden.
+    if (d->gigaFloating) d->gigaFloating->dockAll(false);
     Q_FOREACH (QDockWidget *dock, dockWidgets()) {
         dock->setFloating(false);
         dock->hide();
@@ -2236,6 +2376,7 @@ void KisMainWindow::setMainWindowLayoutForCurrentMainWidget(int widgetIndex, boo
     else {
         setAutoSaveSettings(d->windowStateConfig, false);
         statusBar()->setVisible(KisConfig(true).showStatusBar());
+        if (d->gigaFloating) d->gigaFloating->setAllHidden(false); // Giga Sketch: floating panels come back too
     }
 
     QList<QAction *> actions = d->dockWidgetMenu->menu()->actions();
@@ -2520,6 +2661,7 @@ void KisMainWindow::saveWindowState(bool restoreNormalState)
 
         d->windowStateConfig.writeEntry("ko_geometry", saveGeometry().toBase64());
         d->windowStateConfig.writeEntry("State", saveState().toBase64());
+        if (d->gigaFloating) d->gigaFloating->saveNow(); // Giga Sketch: floating panels aren't in "State"
 
         // if the dockers are hidden at this time, save their state.
         if (!d->toggleDockers->isChecked()) {
@@ -2542,6 +2684,9 @@ bool KisMainWindow::restoreWorkspaceState(const QByteArray &state)
     QByteArray oldState = saveState();
     const bool showTitlebars = KisConfig(false).showDockerTitleBars();
 
+    // Giga Sketch: the loop below hides every panel, in-window floating ones too.
+    if (d->gigaFloating) d->gigaFloating->beginRestore();
+
     // needed because otherwise the layout isn't correctly restored in some situations
     Q_FOREACH (QDockWidget *dock, dockWidgets()) {
         if (dock) {
@@ -2555,6 +2700,7 @@ bool KisMainWindow::restoreWorkspaceState(const QByteArray &state)
     }
 
     bool success = KXmlGuiWindow::restoreState(state);
+    if (d->gigaFloating) d->gigaFloating->endRestore();
 
     if (!success) {
         KXmlGuiWindow::restoreState(oldState);
@@ -3071,6 +3217,7 @@ QDockWidget* KisMainWindow::createDockWidget(KoDockFactoryBase* factory)
         }
 
         d->dockWidgetsMap.insert(factory->id(), dockWidget);
+        if (d->gigaFloating) d->gigaFloating->watchDock(dockWidget);
     }
     else {
         dockWidget = d->dockWidgetsMap[factory->id()];
@@ -3157,6 +3304,7 @@ void KisMainWindow::toggleDockersVisibility(bool visible, bool onWelcomePage)
 {
     if (!visible) {
         d->dockerStateBeforeHiding = saveState();
+        if (d->gigaFloating) d->gigaFloating->setAllHidden(true); // Giga Sketch: in-window floating panels too
 
         Q_FOREACH (QObject* widget, children()) {
             if (widget->inherits("QDockWidget")) {
@@ -3169,6 +3317,7 @@ void KisMainWindow::toggleDockersVisibility(bool visible, bool onWelcomePage)
     }
     else {
         restoreState(d->dockerStateBeforeHiding);
+        if (d->gigaFloating) d->gigaFloating->setAllHidden(false);
     }
 }
 

@@ -5,6 +5,8 @@
  */
 #include "GigaInterfaceModes.h"
 
+#include "GigaFloatingPanelManager.h"
+
 #include <QAction>
 #include <QActionGroup>
 #include <QDockWidget>
@@ -35,6 +37,8 @@ namespace {
 
 QString stateKey(int mode) { return QStringLiteral("gigaModeState%1").arg(mode); }
 QString themeKey(int mode) { return QStringLiteral("gigaModeTheme%1").arg(mode); }
+/// Giga Sketch: panels floating inside the window, per mode.
+QString floatingKey(int mode) { return QStringLiteral("gigaModeFloatingPanels%1").arg(mode); }
 QString statusBarKey(int mode) { return QStringLiteral("gigaModeStatusBar%1").arg(mode); }
 
 // Photoshop-style panel chrome: compact dark tabs on top of each group,
@@ -228,6 +232,12 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
         if (m_mode != Procreate) {
             cfg.writeEntry<bool>(statusBarKey(m_mode), cfg.showStatusBar());
         }
+        // Floating panels aren't part of Qt's layout: remember them for this
+        // mode, then dock them (hidden) so the next layout starts clean.
+        if (GigaFloatingPanelManager *floating = m_mainWindow->gigaFloatingPanels()) {
+            floating->saveNow();
+            floating->dockAll(false);
+        }
     }
 
     // 2. Leave it.
@@ -269,6 +279,12 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
         windowConfig.writeEntry("StatusBar", (barsOn && cfg.showStatusBar()) ? "Enabled" : "Disabled");
     }
     if (!atStartup) showModeMessage(mode);
+
+    // This mode's floating panels (at startup: the ones from last time).
+    if (GigaFloatingPanelManager *floating = m_mainWindow->gigaFloatingPanels()) {
+        floating->setStorageKey(floatingKey(mode));
+        floating->restoreSaved();
+    }
 
     m_mode = mode;
     m_modeActions[mode]->setChecked(true);
