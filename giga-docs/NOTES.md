@@ -401,3 +401,13 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   raise, Shift+click = dock.
 - Self-test (temporary, removed) passed: float/collapse/hide-all/workspace restore/close/raise/dock/disable/re-enable,
   restart restores position. Only one KisMainWindow at startup (step-1 double print was a test artefact).
+- Tear-off by title bar / tab (user report: dragging a docked panel's title "snaps back" — Qt can't drop a non-floatable
+  dock on the canvas). Manager filters each watched dock (title-area press) and every QTabBar child of the window
+  (dock via tabData = QDockWidget address, checked against m_watched; fallback by title text). Qt keeps its own docking
+  drag; when a move lands >30 px inside centralWidget(), tearOff(): send a synthetic MouseButtonRelease to the source
+  (Qt ends its drag and restores the dock), release any grabber, floatPanel() under the pointer, beginInteractiveMove().
+  Fallback: a release seen over the canvas without moves → float there after Qt finishes (singleShot 0).
+- Raise-on-press is a separate tiny app-wide filter (GigaRaiseOnPressFilter, presses only); the manager itself only
+  filters objects it watches (avoid running drag logic twice / per-event casts while painting).
+- Synthetic-event self-test (removed) passed: live tear-off follows the pointer, fallback floats, short drag near the
+  docks still re-docks via Qt (Qt put it in the top area in that synthetic case — Qt's own hover logic).

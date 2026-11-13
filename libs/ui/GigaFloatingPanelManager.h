@@ -15,6 +15,8 @@
 #include <QTimer>
 #include <QDockWidget>
 
+class QTabBar;
+
 class KisMainWindow;
 class GigaFloatingPanel;
 
@@ -96,6 +98,13 @@ private:
     void scheduleSave();
     QString idOf(const QDockWidget *dock) const;
 
+    // Tearing a docked panel off by dragging its title bar or its tab.
+    bool inCanvasZone(const QPointF &globalPos) const;
+    QDockWidget *dockForTab(QTabBar *tabBar, int index) const;
+    void watchTabBar(QTabBar *tabBar);
+    void tearOff(const QPointF &globalPos, bool qtDragStillRunning);
+    bool handleTearOffDrag(QWidget *source, QDockWidget *pressedDock, QEvent *event);
+
     QPointer<KisMainWindow> m_mainWindow;
     bool m_enabled {true};
     bool m_allHidden {false};
@@ -108,6 +117,15 @@ private:
     QTimer m_saveTimer;
     QTimer m_raiseTimer;
     bool m_restoringSaved {false};
+    QObject *m_raiseFilter {nullptr}; ///< app-wide, presses only
+
+    struct TitleDrag {
+        QPointer<QDockWidget> dock;
+        QPointer<QWidget> source;   ///< the dock (title bar) or a panel-group tab bar
+        QPoint grabOffset;          ///< where the title was grabbed, in dock coordinates
+        QSize size;                 ///< the panel's docked size
+        bool active {false};
+    } m_drag;
 };
 
 #endif // GIGA_FLOATING_PANEL_MANAGER_H

@@ -17,10 +17,34 @@
 #include <QMenuBar>
 #include <QMouseEvent>
 #include <QStatusBar>
+#include <QTabBar>
+
+#include <functional>
 
 namespace {
 const char *const SETTING_KEY = "gigaInWindowPanels";
 constexpr int SNAP_DISTANCE = 10; // px
+
+// Application-wide, but it only looks at presses: clicking anywhere in a
+// floating panel brings it to the front. Kept separate from the manager so
+// the manager's own filter only sees the objects it watches.
+class GigaRaiseOnPressFilter : public QObject
+{
+public:
+    explicit GigaRaiseOnPressFilter(std::function<void(QWidget *)> onPress, QObject *parent)
+        : QObject(parent), m_onPress(onPress) {}
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        const QEvent::Type type = event->type();
+        if ((type == QEvent::MouseButtonPress || type == QEvent::TabletPress) && watched->isWidgetType()) {
+            m_onPress(static_cast<QWidget *>(watched));
+        }
+        return false;
+    }
+private:
+    std::function<void(QWidget *)> m_onPress;
+};
 }
 
 GigaFloatingPanelManager::GigaFloatingPanelManager(KisMainWindow *mainWindow)
@@ -39,7 +63,25 @@ GigaFloatingPanelManager::GigaFloatingPanelManager(KisMainWindow *mainWindow)
     connect(&m_raiseTimer, &QTimer::timeout, this, &GigaFloatingPanelManager::raiseAllFrames);
 
     mainWindow->installEventFilter(this);
-    qApp->installEventFilter(this); // only presses are looked at (raise on click)
+    m_raiseFilter = new GigaRaiseOnPressFilter([this](QWidget *widget) {
+        for (const QPointer<GigaFloatingPanel> &panel : m_panels) {
+            if (panel && (panel == widget || panel->isAncestorOf(widget))) {
+                if (m_panels.last() != panel) {
+                    GigaFloatingPanel *p = panel;
+                    p->raise();
+                    m_panels.removeAll(p);
+                    m_panels.append(p);
+                    scheduleSave();
+                }
+                return;
+            }
+        }
+    }, this);
+    qApp->installEventFilter(m_raiseFilter);
+    // Panel-group tab bars that already exist (new ones: ChildPolished).
+    for (QObject *child : mainWindow->children()) {
+        if (QTabBar *tabBar = qobject_cast<QTabBar *>(child)) watchTabBar(tabBar);
+    }
 
     connect(KisConfigNotifier::instance(), &KisConfigNotifier::configChanged, this, [this]() {
         setEnabled(settingEnabled());
@@ -49,7 +91,7 @@ GigaFloatingPanelManager::GigaFloatingPanelManager(KisMainWindow *mainWindow)
 GigaFloatingPanelManager::~GigaFloatingPanelManager()
 {
     if (m_saveTimer.isActive()) saveNow();
-    qApp->removeEventFilter(this);
+    if (m_raiseFilter) qApp->removeEventFilter(m_raiseFilter);
 }
 
 bool GigaFloatingPanelManager::settingEnabled()
@@ -418,42 +460,148 @@ void GigaFloatingPanelManager::restoreSaved()
     m_restoringSaved = false;
 }
 
+void GigaFloatingPanelManager::watchTabBar(QTabBar *tabBar)
+{
+    if (!tabBar) return;
+    tabBar->removeEventFilter(this); // no double install
+    tabBar->installEventFilter(this);
+}
+
+bool GigaFloatingPanelManager::inCanvasZone(const QPointF &globalPos) const
+{
+    if (!m_mainWindow || !m_mainWindow->centralWidget()) return false;
+    // Well inside the canvas area: dropping there can't mean "dock it".
+    const QRect zone = m_mainWindow->centralWidget()->geometry().adjusted(30, 30, -30, -30);
+    return zone.contains(m_mainWindow->mapFromGlobal(globalPos.toPoint()));
+}
+
+QDockWidget *GigaFloatingPanelManager::dockForTab(QTabBar *tabBar, int index) const
+{
+    if (!tabBar || index < 0 || !m_mainWindow) return nullptr;
+    // Qt keeps the dock's address as the tab's data; only trust it if it is
+    // one of our docks.
+    const quintptr id = tabBar->tabData(index).value<quintptr>();
+    for (QDockWidget *dock : m_watched) {
+        if (quintptr(dock) == id) return dock;
+    }
+    // Otherwise match the tab's text to a docked panel's title.
+    const QString text = tabBar->tabText(index);
+    for (QDockWidget *dock : m_watched) {
+        if (dock->windowTitle() == text && m_mainWindow->dockWidgetArea(dock) != Qt::NoDockWidgetArea) return dock;
+    }
+    return nullptr;
+}
+
+void GigaFloatingPanelManager::tearOff(const QPointF &globalPos, bool qtDragStillRunning)
+{
+    QPointer<QDockWidget> dock = m_drag.dock;
+    QPointer<QWidget> source = m_drag.source;
+    const QPoint grabOffset = m_drag.grabOffset;
+    QSize size = m_drag.size;
+    m_drag = TitleDrag();
+    if (!dock || !m_mainWindow || isFloating(dock)) return;
+
+    if (qtDragStillRunning && source) {
+        // End Qt's own docking drag first, with an ordinary release: Qt then
+        // puts the panel back where it was and lets go of the mouse. Only
+        // after that do we take the panel out.
+        QMouseEvent release(QEvent::MouseButtonRelease, source->mapFromGlobal(globalPos), globalPos,
+                            Qt::LeftButton, Qt::NoButton, QGuiApplication::keyboardModifiers());
+        QCoreApplication::sendEvent(source, &release);
+        if (QWidget *grabber = QWidget::mouseGrabber()) grabber->releaseMouse();
+    }
+
+    const int b = GigaFloatingPanel::BORDER;
+    size = QSize(qMax(size.width(), 200), qBound(200, size.height(), 600)) + QSize(2 * b, 2 * b);
+    const QPoint topLeft = m_mainWindow->mapFromGlobal(globalPos.toPoint()) - grabOffset - QPoint(b, b);
+    GigaFloatingPanel *panel = floatPanel(dock, QRect(topLeft, size));
+    // Still pressed: keep following the pointer until it's let go.
+    if (panel && qtDragStillRunning) panel->beginInteractiveMove(globalPos);
+}
+
+bool GigaFloatingPanelManager::handleTearOffDrag(QWidget *source, QDockWidget *pressedDock, QEvent *event)
+{
+    const QEvent::Type type = event->type();
+    if (type == QEvent::MouseButtonPress) {
+        QMouseEvent *e = static_cast<QMouseEvent *>(event);
+        if (e->button() == Qt::LeftButton && pressedDock && !isFloating(pressedDock) && !pressedDock->isFloating()) {
+            m_drag.dock = pressedDock;
+            m_drag.source = source;
+            // Keep the same spot of the title under the pointer once floating.
+            m_drag.grabOffset = (source == pressedDock) ? e->position().toPoint() : QPoint(40, 10);
+            m_drag.size = pressedDock->size();
+            m_drag.active = true;
+        }
+        return false; // Qt's docking still gets the press
+    }
+    if (!m_drag.active || m_drag.source != source) return false;
+
+    if (type == QEvent::MouseMove) {
+        QMouseEvent *e = static_cast<QMouseEvent *>(event);
+        if ((e->buttons() & Qt::LeftButton) && inCanvasZone(e->globalPosition())) {
+            tearOff(e->globalPosition(), true);
+            return true;
+        }
+    } else if (type == QEvent::MouseButtonRelease) {
+        QMouseEvent *e = static_cast<QMouseEvent *>(event);
+        const QPointF globalPos = e->globalPosition();
+        if (inCanvasZone(globalPos)) {
+            // We missed the moves (e.g. the desktop moved the window): let Qt
+            // finish (it snaps the panel back), then float it at the drop.
+            QTimer::singleShot(0, this, [this, globalPos, drag = m_drag]() {
+                m_drag = drag;
+                tearOff(globalPos, false);
+            });
+        }
+        m_drag.active = false;
+    }
+    return false;
+}
+
 bool GigaFloatingPanelManager::eventFilter(QObject *watched, QEvent *event)
 {
     const QEvent::Type type = event->type();
-
-    // Clicking anywhere in a floating panel brings it to the front.
-    if ((type == QEvent::MouseButtonPress || type == QEvent::TabletPress) && !m_panels.isEmpty()) {
-        if (QWidget *widget = qobject_cast<QWidget *>(watched)) {
-            for (const QPointer<GigaFloatingPanel> &panel : m_panels) {
-                if (panel && (panel == widget || panel->isAncestorOf(widget))) {
-                    if (m_panels.last() != panel) {
-                        GigaFloatingPanel *p = panel;
-                        p->raise();
-                        m_panels.removeAll(p);
-                        m_panels.append(p);
-                        scheduleSave();
-                    }
-                    break;
-                }
-            }
-        }
-    }
 
     if (watched == m_mainWindow) {
         if (type == QEvent::Resize) {
             for (const QPointer<GigaFloatingPanel> &panel : m_panels) {
                 if (panel) panel->setGeometry(keepInside(panel->geometry()));
             }
-        } else if (type == QEvent::ChildPolished && !m_panels.isEmpty()) {
+        } else if (type == QEvent::ChildPolished) {
             QObject *child = static_cast<QChildEvent *>(event)->child();
-            if (!qobject_cast<GigaFloatingPanel *>(child)) m_raiseTimer.start();
+            if (QTabBar *tabBar = qobject_cast<QTabBar *>(child)) watchTabBar(tabBar); // a new panel group
+            if (!m_panels.isEmpty() && !qobject_cast<GigaFloatingPanel *>(child)) m_raiseTimer.start();
         }
         return false;
     }
 
+    // Dragging a tab out of a docked panel group.
+    if (m_enabled && (type == QEvent::MouseButtonPress || type == QEvent::MouseMove || type == QEvent::MouseButtonRelease)) {
+        QTabBar *tabBar = qobject_cast<QTabBar *>(watched);
+        if (tabBar && m_mainWindow && tabBar->parentWidget() == m_mainWindow) {
+            QDockWidget *pressed = nullptr;
+            if (type == QEvent::MouseButtonPress) {
+                pressed = dockForTab(tabBar, tabBar->tabAt(static_cast<QMouseEvent *>(event)->position().toPoint()));
+            }
+            return handleTearOffDrag(tabBar, pressed, event);
+        }
+    }
+
     QDockWidget *dock = qobject_cast<QDockWidget *>(watched);
     if (!dock || !m_watched.contains(dock)) return false;
+
+    // Dragging a docked panel by its title bar (Krita's or Photoshop mode's
+    // header): Qt docks it as usual, but over the canvas it floats here.
+    if (m_enabled && !isFloating(dock) && (type == QEvent::MouseButtonPress || type == QEvent::MouseMove
+                                           || type == QEvent::MouseButtonRelease)) {
+        QDockWidget *pressed = nullptr;
+        if (type == QEvent::MouseButtonPress) {
+            QWidget *title = dock->titleBarWidget();
+            const QRect titleArea = (title && title->isVisible()) ? title->geometry() : QRect(0, 0, dock->width(), 20);
+            if (titleArea.contains(static_cast<QMouseEvent *>(event)->position().toPoint())) pressed = dock;
+        }
+        if (handleTearOffDrag(dock, pressed, event)) return true;
+    }
 
     if (type == QEvent::ShowToParent || type == QEvent::HideToParent) {
         // Shown or closed by the user, a menu, the panel strip...: the frame follows.
