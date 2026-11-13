@@ -422,3 +422,4 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - The actual docking is queued (`QTimer::singleShot(0)`) because the observer runs inside the panel's own mouse handler. `dockPanel()` (button/menu) and drops share `dockInto()`.
 - 24 px side zone is deliberately < the 30 px tear-off zone so a just-torn-off panel doesn't immediately re-dock.
 - Only runs during panel drags (not painting); cost per move is a loop over ~30 docks.
+- Gotcha: Qt can report a docked panel as `isVisible()` while it sits parked outside the window at a stale position (seen with Photoshop-mode groups). `dropTargetAt()` only counts docks whose rect is inside the window and doesn't touch the canvas, and only trusts a tab bar that sits directly on its panel. Before that, the right-side column union grew to almost the whole window, giving a huge highlight.

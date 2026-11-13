@@ -361,9 +361,18 @@ GigaFloatingPanelManager::DropTarget GigaFloatingPanelManager::dropTargetAt(cons
     if (!m_mainWindow || !m_mainWindow->centralWidget()) return target;
     const QPoint pos = m_mainWindow->mapFromGlobal(globalPos.toPoint());
     auto rectOf = [this](const QDockWidget *d) { return QRect(d->mapTo(m_mainWindow, QPoint(0, 0)), d->size()); };
-    auto usable = [this, moving](const QDockWidget *d) {
+    const QRect window = m_mainWindow->rect();
+    const QRect canvasArea = m_mainWindow->centralWidget()->geometry();
+    auto usable = [this, moving, rectOf, window, canvasArea](const QDockWidget *d) {
         // The toolbox is too slim to share a group with a panel.
-        return d && d != moving && d->isVisible() && isDockedTarget(d) && d->objectName() != QLatin1String("ToolBox");
+        if (!d || d == moving || !d->isVisible() || !isDockedTarget(d)
+            || d->objectName() == QLatin1String("ToolBox")) {
+            return false;
+        }
+        // Qt can leave a docked panel "visible" but parked outside the window
+        // at a stale spot; only panels really sitting beside the canvas count.
+        const QRect r = rectOf(d);
+        return !r.isEmpty() && window.contains(r) && !canvasArea.intersects(r);
     };
 
     // 1. Over a docked panel: join its tab group.
@@ -383,9 +392,18 @@ GigaFloatingPanelManager::DropTarget GigaFloatingPanelManager::dropTargetAt(cons
         if (!tabBar || !tabBar->isVisible() || !tabBar->geometry().contains(pos)) continue;
         QDockWidget *d = dockForTab(tabBar, tabBar->currentIndex());
         if (!usable(d)) continue;
+        // Qt keeps spare tab bars around, and a tab's panel isn't always
+        // the one drawn under it; only trust a tab row that sits right on
+        // top of (or under) its panel, in the same column.
+        const QRect panelRect = rectOf(d);
+        const QRect tabRect = tabBar->geometry();
+        const bool sameColumn = tabRect.left() < panelRect.right() && tabRect.right() > panelRect.left();
+        const bool touching = qAbs(tabRect.bottom() + 1 - panelRect.top()) <= 6
+            || qAbs(panelRect.bottom() + 1 - tabRect.top()) <= 6;
+        if (!sameColumn || !touching) continue;
         target.area = m_mainWindow->dockWidgetArea(d);
         target.tabWith = d;
-        target.highlight = rectOf(d).united(tabBar->geometry());
+        target.highlight = panelRect.united(tabRect);
         return target;
     }
 
