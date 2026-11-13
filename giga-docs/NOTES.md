@@ -370,3 +370,15 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   after m_chkCanvasMessages; enabled only while that one is on), so the .ui file stays untouched.
 - KisFloatingMessage is a top-level window positioned in global coordinates (top-right of the canvas); on Wayland it can
   land elsewhere (user saw it top-left).
+
+## In-window floating panels (feature/in-window-panels) — spike results (2026-11-13)
+- Spike (env-gated, removed): removeDockWidget(dock) + dock->setParent(QFrame child of KisMainWindow) + layout->addWidget.
+  Result: dock stays visible, content visible (LayerBox's isVisible() gate keeps working), isWindow()=false (no Wayland
+  top-level), dockWidgetArea = NoDockWidgetArea.
+- QMainWindow::saveState() simply omits a dock that lives in such a frame. restoreState() of the current state AND of an
+  older state where that dock was docked both LEAVE it in the frame (Qt doesn't pull it back). So re-docking after a
+  layout/mode restore is our job (manager), and restoring is not destructive.
+- Running a second instance for tests: the single-instance key uses $HOME, so use HOME=<scratch>/home and
+  XDG_CONFIG_HOME=<scratch>/cfg. Krita's message handler hides qWarning output here; print with fprintf(stderr).
+- Each SPIKE line printed twice at startup: check whether two KisMainWindows are constructed (manager must be per window).
+- Not yet verified: painting lag with a panel over the OpenGL canvas (needs the user's hand test).
