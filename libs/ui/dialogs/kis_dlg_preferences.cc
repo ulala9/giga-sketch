@@ -381,6 +381,19 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
     m_chkGigaBrushSwitchMessage->setEnabled(m_chkCanvasMessages->isChecked());
     connect(m_chkCanvasMessages, &QCheckBox::toggled, m_chkGigaBrushSwitchMessage, &QWidget::setEnabled);
 
+    // Giga Sketch: floating panels stay inside the window (Wayland can't
+    // place separate panel windows); off = Krita's floating windows.
+    m_chkGigaInWindowPanels = new QCheckBox(i18n("Float panels inside the main window"), this);
+    m_chkGigaInWindowPanels->setToolTip(i18n("Floating panels sit over the canvas inside the window and stay where you put them. "
+                                             "Turn off to float panels as separate windows, like Krita."));
+    m_chkGigaInWindowPanels->setChecked(cfg.readEntry<bool>("gigaInWindowPanels", true));
+    if (QFormLayout *panelsForm = qobject_cast<QFormLayout*>(m_chkCanvasMessages->parentWidget()->layout())) {
+        int row = -1;
+        QFormLayout::ItemRole role;
+        panelsForm->getWidgetPosition(m_chkGigaBrushSwitchMessage, &row, &role);
+        panelsForm->insertRow(row + 1, QString(), m_chkGigaInWindowPanels);
+    }
+
     const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     QSettings kritarc(configPath + QLatin1Char('/') + GigaBranding::displayConfigFile(), QSettings::IniFormat);
     m_chkHiDPI->setChecked(kritarc.value("EnableHiDPI", true).toBool());
@@ -832,6 +845,7 @@ void GeneralTab::setDefault()
     m_backgroundimage->setText(cfg.getMDIBackgroundImage(true));
     m_chkCanvasMessages->setChecked(cfg.showCanvasMessages(true));
     m_chkGigaBrushSwitchMessage->setChecked(cfg.gigaShowBrushSwitchMessage(true));
+    m_chkGigaInWindowPanels->setChecked(true);
     m_chkCompressKra->setChecked(cfg.compressKra(true));
     m_chkTrimKra->setChecked(cfg.trimKra(true));
     m_chkTrimFramesImport->setChecked(cfg.trimFramesImport(true));
@@ -1015,6 +1029,11 @@ int GeneralTab::mdiMode()
 bool GeneralTab::showCanvasMessages()
 {
     return m_chkCanvasMessages->isChecked();
+}
+
+bool GeneralTab::gigaInWindowPanels()
+{
+    return !m_chkGigaInWindowPanels || m_chkGigaInWindowPanels->isChecked();
 }
 
 bool GeneralTab::gigaShowBrushSwitchMessage()
@@ -2936,6 +2955,7 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
 
         cfg.setShowCanvasMessages(m_general->showCanvasMessages());
         cfg.setGigaShowBrushSwitchMessage(m_general->gigaShowBrushSwitchMessage());
+        cfg.writeEntry<bool>("gigaInWindowPanels", m_general->gigaInWindowPanels());
         cfg.setCompressKra(m_general->compressKra());
         cfg.setTrimKra(m_general->trimKra());
         cfg.setTrimFramesImport(m_general->trimFramesImport());

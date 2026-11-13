@@ -26,6 +26,23 @@
 
 #include <KSqueezedTextLabel>
 
+// Giga Sketch: see setFloatRequestHandler().
+static std::function<bool(QDockWidget *)> &gigaFloatHandler()
+{
+    static std::function<bool(QDockWidget *)> handler;
+    return handler;
+}
+
+void KoDockWidgetTitleBar::setFloatRequestHandler(std::function<bool(QDockWidget *)> handler)
+{
+    gigaFloatHandler() = handler;
+}
+
+bool KoDockWidgetTitleBar::hasFloatRequestHandler()
+{
+    return bool(gigaFloatHandler());
+}
+
 static inline bool hasFeature(const QDockWidget *dockwidget, QDockWidget::DockWidgetFeature feature)
 {
     return (dockwidget->features() & feature) == feature;
@@ -168,6 +185,12 @@ void KoDockWidgetTitleBar::Private::toggleFloating()
 {
     QDockWidget *q = qobject_cast<QDockWidget*>(thePublic->parentWidget());
 
+    // Giga Sketch: the application may float (or re-dock) the panel itself.
+    if (q && !q->isFloating() && gigaFloatHandler() && gigaFloatHandler()(q)) {
+        updateIcons();
+        return;
+    }
+
     q->setFloating(!q->isFloating());
     updateIcons();
 }
@@ -183,7 +206,8 @@ void KoDockWidgetTitleBar::Private::featuresChanged(QDockWidget::DockWidgetFeatu
     QDockWidget *q = qobject_cast<QDockWidget*>(thePublic->parentWidget());
 
     closeButton->setVisible(hasFeature(q, QDockWidget::DockWidgetClosable));
-    floatButton->setVisible(hasFeature(q, QDockWidget::DockWidgetFloatable));
+    floatButton->setVisible(hasFeature(q, QDockWidget::DockWidgetFloatable)
+                            || (gigaFloatHandler() && !locked)); // Giga Sketch
 
     updateButtonSizes();
     thePublic->resizeEvent(0);

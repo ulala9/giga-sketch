@@ -370,3 +370,63 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   after m_chkCanvasMessages; enabled only while that one is on), so the .ui file stays untouched.
 - KisFloatingMessage is a top-level window positioned in global coordinates (top-right of the canvas); on Wayland it can
   land elsewhere (user saw it top-left).
+
+## In-window floating panels (feature/in-window-panels) — spike results (2026-11-13)
+- Spike (env-gated, removed): removeDockWidget(dock) + dock->setParent(QFrame child of KisMainWindow) + layout->addWidget.
+  Result: dock stays visible, content visible (LayerBox's isVisible() gate keeps working), isWindow()=false (no Wayland
+  top-level), dockWidgetArea = NoDockWidgetArea.
+- QMainWindow::saveState() simply omits a dock that lives in such a frame. restoreState() of the current state AND of an
+  older state where that dock was docked both LEAVE it in the frame (Qt doesn't pull it back). So re-docking after a
+  layout/mode restore is our job (manager), and restoring is not destructive.
+- Running a second instance for tests: the single-instance key uses $HOME, so use HOME=<scratch>/home and
+  XDG_CONFIG_HOME=<scratch>/cfg. Krita's message handler hides qWarning output here; print with fprintf(stderr).
+- Each SPIKE line printed twice at startup: check whether two KisMainWindows are constructed (manager must be per window).
+- Not yet verified: painting lag with a panel over the OpenGL canvas (needs the user's hand test).
+- Step 2+3 built (same branch). `libs/ui/GigaFloatingPanel.{h,cpp}`: QFrame child of KisMainWindow holding the whole
+  QDockWidget; the dock's own title bar is the drag handle (frame's eventFilter on the dock eats title-area presses so
+  QDockWidget never starts its own drag; Movable+Floatable removed while inside), 5 px border resizes, double-click
+  title / Photoshop header collapse → frame collapse, LayoutRequest → ensureTitleBar() (Krita hides title bars).
+  `beginInteractiveMove()` grabs the mouse for tear-offs.
+- `GigaFloatingPanelManager` (one per window, `KisMainWindow::gigaFloatingPanels()`): strips DockWidgetFloatable from
+  every dock while enabled (so Qt never makes desktop windows); float/dock/dockAll/toggleFloat/raisePanel; keepInside +
+  snap (window area, central widget, other panels, 10 px); qApp filter raises a panel on press; follows dock
+  ShowToParent/HideToParent; setAllHidden (toggleDockersVisibility + leaving Welcome page in
+  setMainWindowLayoutForCurrentMainWidget); begin/endRestore around restoreWorkspaceState (it hides every dock);
+  JSON per mode in kritarc `gigaModeFloatingPanels<mode>` (GigaInterfaceModes::switchTo: save+dockAll when leaving,
+  setStorageKey+restoreSaved when entering/at startup). Setting `gigaInWindowPanels` (Preferences > General > Window).
+- KoDockWidgetTitleBar::setFloatRequestHandler (libs/widgets, additive): float button visible when a handler exists,
+  click → handler first. Photoshop header's Float/Dock menu item goes through the manager.
+- Flyout: drag title row (GigaPanelFlyout::onTearOff) or pin button → floating panel; strip buttons have property
+  gigaPanelId + KisMainWindow::eventFilter → drag out = float + beginInteractiveMove. Strip click on a floating panel =
+  raise, Shift+click = dock.
+- Self-test (temporary, removed) passed: float/collapse/hide-all/workspace restore/close/raise/dock/disable/re-enable,
+  restart restores position. Only one KisMainWindow at startup (step-1 double print was a test artefact).
+- Tear-off by title bar / tab (user report: dragging a docked panel's title "snaps back" — Qt can't drop a non-floatable
+  dock on the canvas). Manager filters each watched dock (title-area press) and every QTabBar child of the window
+  (dock via tabData = QDockWidget address, checked against m_watched; fallback by title text). Qt keeps its own docking
+  drag; when a move lands >30 px inside centralWidget(), tearOff(): send a synthetic MouseButtonRelease to the source
+  (Qt ends its drag and restores the dock), release any grabber, floatPanel() under the pointer, beginInteractiveMove().
+  Fallback: a release seen over the canvas without moves → float there after Qt finishes (singleShot 0).
+- Raise-on-press is a separate tiny app-wide filter (GigaRaiseOnPressFilter, presses only); the manager itself only
+  filters objects it watches (avoid running drag logic twice / per-event casts while painting).
+- Synthetic-event self-test (removed) passed: live tear-off follows the pointer, fallback floats, short drag near the
+  docks still re-docks via Qt (Qt put it in the top area in that synthetic case — Qt's own hover logic).
+
+### In-window panels, step 4: drag a floating panel back into the docks
+- `GigaFloatingPanel::setMoveObserver()` reports every move step and the release point; the manager's `onPanelMoved()` turns the pointer position into a `DropTarget` (`dropTargetAt()`):
+  1. pointer over a docked panel (or its group's tab row) → `tabifyDockWidget` with it (ToolBox is excluded: too slim to share a group);
+  2. pointer within 24 px of the canvas's left edge (or anywhere left of it) → own column right of the ToolBox (`splitDockWidget(toolBox, dock, Horizontal)`) so the toolbox stays slim;
+  3. within 24 px of the right edge (or right of it) → `addDockWidget(Right, dock, Vertical)`, stacked under the right-side panels.
+- A `GigaDropHighlight` child widget (mouse-transparent, palette highlight at 60 alpha) shows the target while dragging; the dragged panel is raised above it.
+- Hold **Ctrl** while dragging to move without docking.
+- The actual docking is queued (`QTimer::singleShot(0)`) because the observer runs inside the panel's own mouse handler. `dockPanel()` (button/menu) and drops share `dockInto()`.
+- 24 px side zone is deliberately < the 30 px tear-off zone so a just-torn-off panel doesn't immediately re-dock.
+- Only runs during panel drags (not painting); cost per move is a loop over ~30 docks.
+- Gotcha: Qt can report a docked panel as `isVisible()` while it sits parked outside the window at a stale position (seen with Photoshop-mode groups). `dropTargetAt()` only counts docks whose rect is inside the window and doesn't touch the canvas, and only trusts a tab bar that sits directly on its panel. Before that, the right-side column union grew to almost the whole window, giving a huge highlight.
+
+## UI self-tests (dev hook)
+- `giga-tools/selftest.sh <name|all>` runs Giga Sketch in a throw-away HOME/XDG_CONFIG_HOME with `GIGA_SELFTEST=<name>`, prints only `GIGA_SELFTEST PASS/FAIL/INFO/DONE` lines, exit code = failures.
+- Code: `libs/ui/GigaSelfTest.cpp` (called from the KisMainWindow ctor via `GigaSelfTest::maybeRun`; no-op without the env var). Helpers: `report()`, `info()`, `pump()`, `drag(widget, localStart, globalEnd, steps, beforeRelease)`. Add a test function and a row in `runNamed()`'s table. `GIGA_SELFTEST_DELAY` (ms, default 5000) delays the start.
+- Ends with `_Exit(failures)` to skip Krita's shutdown prompts.
+- Existing tests: `panels` (float/dock, drop onto Layers, left/right edge, middle, title-bar tear-off).
+- Gotcha: a non-front tab in a dock group keeps a stale position; `raise()` it before aiming at it.

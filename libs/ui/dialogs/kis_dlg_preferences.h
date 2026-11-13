@@ -85,6 +85,7 @@ public:
     int mdiMode();
     bool showCanvasMessages();
     bool gigaShowBrushSwitchMessage();
+    bool gigaInWindowPanels();
     bool compressKra();
     bool trimKra();
     bool trimFramesImport();
@@ -136,6 +137,7 @@ public:
 private:
     // Giga Sketch: added in code (not in the .ui) under "Show on-canvas popup messages"
     QCheckBox *m_chkGigaBrushSwitchMessage {nullptr};
+    QCheckBox *m_chkGigaInWindowPanels {nullptr};
 };
 
 

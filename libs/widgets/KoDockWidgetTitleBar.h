@@ -9,6 +9,8 @@
 #include "kritawidgets_export.h"
 #include <QDockWidget>
 
+#include <functional>
+
 /**
  * @short A custom title bar for dock widgets.
  *
@@ -24,6 +26,16 @@ public:
     ~KoDockWidgetTitleBar() override;
 
     void updateIcons();
+
+    /**
+     * Giga Sketch: lets the application float panels its own way (inside the
+     * main window). When a handler is set, the float button stays available
+     * even if the dock has no DockWidgetFloatable feature, and clicking it
+     * calls the handler first; if the handler returns true it handled the
+     * click, otherwise the panel floats as a normal Qt window.
+     */
+    static void setFloatRequestHandler(std::function<bool(QDockWidget *)> handler);
+    static bool hasFloatRequestHandler();
 
 public Q_SLOTS:
     void setLocked(bool locked);

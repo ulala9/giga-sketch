@@ -5,6 +5,10 @@
  */
 #include "GigaPanelTitleBar.h"
 
+#include "GigaFloatingPanel.h"
+#include "GigaFloatingPanelManager.h"
+#include "KisMainWindow.h"
+
 #include <QDockWidget>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -65,8 +69,22 @@ GigaPanelTitleBar::GigaPanelTitleBar(QDockWidget *dock, QMainWindow *mainWindow)
     QMenu *menu = new QMenu(m_menu);
     QObject::connect(menu->addAction(i18nc("@action:inmenu panel menu", "Collapse / Expand")),
                      &QAction::triggered, this, [this]() { setCollapsed(!m_collapsed); });
-    QObject::connect(menu->addAction(i18nc("@action:inmenu panel menu", "Float")),
-                     &QAction::triggered, this, [this]() { if (m_dock) m_dock->setFloating(!m_dock->isFloating()); });
+    QAction *floatAction = menu->addAction(i18nc("@action:inmenu panel menu", "Float"));
+    QObject::connect(floatAction, &QAction::triggered, this, [this]() {
+        if (!m_dock) return;
+        // Float inside the window when that's on; otherwise Qt's own floating.
+        KisMainWindow *window = qobject_cast<KisMainWindow *>(m_mainWindow);
+        GigaFloatingPanelManager *manager = window ? window->gigaFloatingPanels() : nullptr;
+        if (manager && manager->toggleFloat(m_dock)) return;
+        m_dock->setFloating(!m_dock->isFloating());
+    });
+    QObject::connect(menu, &QMenu::aboutToShow, this, [this, floatAction]() {
+        KisMainWindow *window = qobject_cast<KisMainWindow *>(m_mainWindow);
+        GigaFloatingPanelManager *manager = window ? window->gigaFloatingPanels() : nullptr;
+        const bool floating = m_dock && manager && manager->isFloating(m_dock);
+        floatAction->setText(floating ? i18nc("@action:inmenu panel menu", "Dock")
+                                      : i18nc("@action:inmenu panel menu", "Float"));
+    });
     menu->addSeparator();
     QObject::connect(menu->addAction(i18nc("@action:inmenu panel menu", "Close")),
                      &QAction::triggered, this, [this]() { if (m_dock) m_dock->hide(); });
@@ -111,6 +129,12 @@ void GigaPanelTitleBar::setCollapsed(bool collapsed)
 {
     if (!m_dock || collapsed == m_collapsed) return;
     m_collapsed = collapsed;
+    // Floating inside the window: the floating frame does the collapsing.
+    if (GigaFloatingPanel *floating = qobject_cast<GigaFloatingPanel *>(m_dock->parentWidget())) {
+        floating->setCollapsed(collapsed);
+        m_collapse->setText(collapsed ? QStringLiteral("»") : QStringLiteral("«"));
+        return;
+    }
     if (QWidget *content = m_dock->widget()) {
         content->setVisible(!collapsed);
     }

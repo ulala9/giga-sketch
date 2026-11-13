@@ -85,6 +85,9 @@ set(kritaui_LIB_SRCS
     GigaProcreateMode.cpp
     GigaProcreateWidgets.cpp
     GigaInterfaceModes.cpp
+    GigaFloatingPanel.cpp
+    GigaFloatingPanelManager.cpp
+    GigaSelfTest.cpp
     GigaSaveDated.cpp
     GigaZoomOption.cpp
     GigaPanelTitleBar.cpp
