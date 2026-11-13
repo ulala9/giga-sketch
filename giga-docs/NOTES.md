@@ -218,7 +218,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Layers docker (`plugins/dockers/layerdocker`): `NodeDelegate::Private::rightmostProperties()` filters to "on"
   properties + warnings when config `gigaCleanLayerRows` (default true). `LayerBox::gigaSetupPanel()` adds the Lock row
   (toggle_layer_alpha_lock / toggle_layer_inherit_alpha / toggle_layer_lock actions) into `verticalLayout` index 2 and
-  rebuilds `hbox1` as fx/mask/fill-adjust/group/new/delete. Eye column was already on the left (VISIBILITY_COL → 0).
+  rebuilds `hbox1`: new + delete inserted at the front (left, before the .ui spacer), fx/mask/fill-adjust/group appended (right). Eye column was already on the left (VISIBILITY_COL → 0).
 - Colour: `WGConfig::defaultColorSelectorConfiguration` = Square + Slider (SV + H); commonColors off. Layout colour group
   = WideGamutColorSelector + SpecificColorSelector + PaletteDocker.
 - Menus: `krita/gigasketch.xmlgui` (generated from krita5.xmlgui; version `GIGA_XMLGUI_VERSION` in krita/CMakeLists.txt,
