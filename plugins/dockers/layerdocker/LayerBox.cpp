@@ -720,7 +720,7 @@ void LayerBox::gigaSetupPanel()
     // verticalLayout: [blend mode row][opacity row][layer list][buttons]
     m_wdgLayerBox->verticalLayout->insertLayout(2, lockRow);
 
-    // --- Bottom row in Photoshop's order, right-aligned ---
+    // --- Bottom row: New and Delete on the left (used most), the rest right-aligned ---
     // Raise/Lower: drag in the list. Duplicate: Ctrl+J. Properties: double-click.
     m_wdgLayerBox->bnDuplicate->hide();
     m_wdgLayerBox->bnLower->hide();
@@ -749,8 +749,11 @@ void LayerBox::gigaSetupPanel()
     row->addWidget(fillAdjust);
 
     row->addWidget(makeButton("groupLayer", i18nc("@info:tooltip", "Group the selected layers"), "create_quick_group"));
-    row->addWidget(m_wdgLayerBox->bnAdd);
-    row->addWidget(m_wdgLayerBox->bnDelete);
+
+    // The .ui row has a stretching spacer after the (now hidden) original
+    // buttons, so anything inserted at the front sits on the left.
+    row->insertWidget(0, m_wdgLayerBox->bnAdd);
+    row->insertWidget(1, m_wdgLayerBox->bnDelete);
 
     gigaUpdateLockButtons();
 }
