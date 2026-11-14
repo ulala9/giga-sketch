@@ -7,8 +7,8 @@ branches, and move things between sections as part of every merge. How the code 
 Last updated: 2026-11-14
 
 ## Resume here
-- **Next up:** user hand-tests `feature/reference-board` (not merged yet), then merge + push. See "Phase 5" below.
-- Repo state: `fix/panel-snap` merged and pushed. `fix/taskbar-icon` has 1 unmerged commit (ask the user).
+- **Next up:** nothing queued. Ask the user what's next (other blueprints in Phase 5, or the `fix/taskbar-icon` commit).
+- Repo state: `feature/reference-board` merged and pushed (user: "feels good"). `fix/taskbar-icon` has 1 unmerged commit (ask the user).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -60,7 +60,7 @@ Last updated: 2026-11-14
 - [ ] Nothing queued. Add UI requests here as the user reports them.
 
 ## Phase 5 — Feature blueprints (doc "Giga Sketch Feature Blueprints")
-- [ ] Reference Board (`feature/reference-board`, built 2026-11-14, awaiting hand test): Normalize, Arrange (5 styles,
+- [x] Reference Board (`feature/reference-board`, merged 2026-11-14, hand-tested): Normalize, Arrange (5 styles,
   order, shape, spacing), Board panel with own camera, Send to Board / Canvas, click-to-focus, ←/→, Ctrl+click colour,
   drop/paste, look options, Resample to Current Size + shrink-on-save. Self-test `refboard`.
 - [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel, 3D Model Layer: blueprinted only.
