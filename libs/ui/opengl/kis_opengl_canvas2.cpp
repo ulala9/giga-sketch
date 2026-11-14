@@ -259,7 +259,12 @@ void KisOpenGLCanvas2::paintGL()
             gc.setClipRect(updateRect);
         }
 
-        QRect decorationsBoundingRect = coordinatesConverter()->imageRectInWidgetPixels().toAlignedRect();
+        // Giga Sketch: with "Grid over background" the grid also paints on the
+        // area around the image, so decorations get the whole widget (the
+        // QPainter canvas already does this).
+        QRect decorationsBoundingRect = KisConfig(true).gigaGridOverBackground()
+            ? rect()
+            : coordinatesConverter()->imageRectInWidgetPixels().toAlignedRect();
 
         if (!updateRect.isEmpty()) {
             decorationsBoundingRect &= updateRect;

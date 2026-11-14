@@ -17,6 +17,7 @@
 #include <kis_config.h>
 #include <kis_config_notifier.h>
 
+#include <QCheckBox>
 #include <QStandardItem>
 #include <QStandardItemModel>
 
@@ -89,6 +90,23 @@ GridConfigWidget::GridConfigWidget(QWidget *parent) :
 
     connect(ui->chkShowGrid, SIGNAL(stateChanged(int)), SLOT(slotGridGuiChanged()));
     connect(ui->chkSnapToGrid, SIGNAL(stateChanged(int)), SLOT(slotGridGuiChanged()));
+
+    // Giga Sketch: "Over background" = let the grid continue over the area
+    // around the canvas. A global preference (not saved in the document), so
+    // it is stored in KisConfig and every canvas is told to repaint.
+    {
+        QCheckBox *chkOverBackground = new QCheckBox(i18n("Over background"), this);
+        chkOverBackground->setObjectName("gigaChkGridOverBackground");
+        chkOverBackground->setToolTip(i18n("Also draw the grid on the area around the canvas"));
+        chkOverBackground->setChecked(KisConfig(true).gigaGridOverBackground());
+        ui->horizontalLayout->addWidget(chkOverBackground);
+        connect(chkOverBackground, &QCheckBox::toggled, this, [](bool checked) {
+            KisConfig cfg(false);
+            if (cfg.gigaGridOverBackground() == checked) return;
+            cfg.setGigaGridOverBackground(checked);
+            KisConfigNotifier::instance()->notifyConfigChanged();
+        });
+    }
 
     connect(ui->chkShowGuides, SIGNAL(stateChanged(int)), SLOT(slotGuidesGuiChanged()));
     connect(ui->chkSnapToGuides, SIGNAL(stateChanged(int)), SLOT(slotGuidesGuiChanged()));

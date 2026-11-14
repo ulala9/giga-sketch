@@ -2363,6 +2363,16 @@ void KisConfig::setGigaShowBrushSwitchMessage(bool show)
     m_cfg.writeEntry("gigaShowBrushSwitchMessage", show);
 }
 
+bool KisConfig::gigaGridOverBackground(bool defaultValue) const
+{
+    return (defaultValue ? false : m_cfg.readEntry("gigaGridOverBackground", false));
+}
+
+void KisConfig::setGigaGridOverBackground(bool value)
+{
+    m_cfg.writeEntry("gigaGridOverBackground", value);
+}
+
 void KisConfig::gigaMigrateCanvasLook()
 {
     // Runs once. Krita's Preferences dialog writes every value to the config

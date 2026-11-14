@@ -513,3 +513,21 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - `pump()` flushes deferred deletes too (see the modecrash note) — keep it that way or tests see dead widgets.
 - `panelmove` times panel drags; `GIGA_PANEL_TRACE=1` (any run) prints a summary line per real panel drag.
 - Gotcha: a non-front tab in a dock group keeps a stale position; `raise()` it before aiming at it.
+
+## Canvas look (feature/procreate-canvas-look, 2026-11-14)
+- Same in all interface modes. Colours live in `namespace GigaCanvasLook` at the top of `libs/ui/kis_config.cc`:
+  surround 30,30,30 (`canvasBorderColor`), checker 235/white at 16 px, grid main 110,200,255 α150 solid,
+  subdivisions + iso vertical same blue α64, solid (style 0). Krita's old values noted in comments.
+- `KisConfig::gigaMigrateCanvasLook()` (static, called at top of `KisApplication::start`): once (flag `gigaCanvasLook=1`)
+  rewrites those keys only if they still equal Krita's old default, because the Preferences dialog writes every value.
+- Grid colours of existing .kra files are stored in the document, so only new documents get the blue grid.
+- Backup of the user's config before this: `~/.config/gigasketchrc.before-canvas-look`.
+- **Grid over background** (Grid panel checkbox "Over background", global `KisConfig::gigaGridOverBackground`, off):
+  `KisGridDecoration::drawDecoration` uses the visible area instead of the image rect; isometric (new + legacy) lines go
+  through `gigaDrawLineFamily()` (same line family/phase as Krita's loops, caps at 4000 lines). The OpenGL canvas
+  (`KisOpenGLCanvas2::paintGL`) only gave decorations the image rect; it passes the whole widget when the option is on.
+- Two upstream grid bugs fixed: `KisGridConfig::loadStaticData()` didn't refresh the pens (new docs drew the grid
+  black until edited in the panel); the constructor didn't fill the isometric trig cache (uninitialised → possible
+  endless loop).
+- Self-test `canvaslook` paints the grid decoration into a QImage (grabbing the OpenGL widget doesn't include
+  decorations). `GIGA_CANVASLOOK_DUMP=/path/prefix` saves the renders as PNGs.

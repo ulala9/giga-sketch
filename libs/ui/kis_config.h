@@ -659,6 +659,11 @@ public:
     /// Krita's old defaults. Call once at startup before any canvas exists.
     static void gigaMigrateCanvasLook();
 
+    /// Giga Sketch: draw the grid over the background around the canvas too,
+    /// not only on the image. Global preference, off by default.
+    bool gigaGridOverBackground(bool defaultValue = false) const;
+    void setGigaGridOverBackground(bool value);
+
     bool compressKra(bool defaultValue = false) const;
     void setCompressKra(bool compress);
 

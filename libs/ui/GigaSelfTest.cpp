@@ -17,6 +17,13 @@
 #include "KisReferenceImagesLayer.h"
 #include "KisView.h"
 #include "kis_canvas2.h"
+#include "KisViewManager.h"
+#include "kis_coordinates_converter.h"
+#include "kis_grid_config.h"
+#include "kis_grid_manager.h"
+#include "kis_canvas_decoration.h"
+#include "kis_zoom_manager.h"
+#include "kis_config_notifier.h"
 #include <GigaBranding.h>
 #include <kundo2stack.h>
 #include <KoCanvasResourceProvider.h>
@@ -30,6 +37,7 @@
 #include <QKeyEvent>
 #include <QMenuBar>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QPointer>
 #include <QStatusBar>
 #include <QTabBar>
@@ -826,6 +834,101 @@ void testReferenceBoard(KisMainWindow *w)
     delete reopened;
 }
 
+QString s_dumpSuffix;
+
+/// Canvas look: dark surround, and the grid drawn over it only when
+/// "Grid over background" is on. Reads the canvas widget's own pixels.
+void testCanvasLook(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    if (!doc || !view || !view->canvasBase()) {
+        report(false, "canvaslook-setup", QStringLiteral("no view"));
+        return;
+    }
+    KisConfig cfg(false);
+    report(cfg.canvasBorderColor() == QColor(30, 30, 30), "canvaslook-border",
+           cfg.canvasBorderColor().name());
+
+    KisGridConfig grid = doc->gridConfig();
+    grid.setShowGrid(true);
+    grid.setGridType(KisGridConfig::GRID_RECTANGULAR);
+    grid.setSpacing(QPoint(64, 64));
+    w->viewManager()->gridManager()->setGridConfig(grid);
+    info(QStringLiteral("grid main %1 sub %2 spacing %3 x/y active %4/%5")
+             .arg(grid.colorMain().name(QColor::HexArgb)).arg(grid.colorSubdivision().name(QColor::HexArgb))
+             .arg(grid.spacing().x()).arg(grid.xSpacingActive()).arg(grid.ySpacingActive()));
+    view->zoomManager()->slotZoomToFit();
+    for (int i = 0; i < 3; i++) view->zoomManager()->slotZoomOut();
+    pump(20);
+
+    QWidget *canvas = view->canvasBase()->canvasWidget();
+    {
+        KisCanvasDecorationSP deco = view->canvasBase()->decoration(QStringLiteral("grid"));
+        info(QStringLiteral("grid decoration: %1, visible %2, doc showGrid %3")
+                 .arg(deco ? QStringLiteral("yes") : QStringLiteral("no"))
+                 .arg(deco && deco->visible()).arg(doc->gridConfig().showGrid()));
+    }
+    // Paint the grid decoration the way the canvas does (whole widget area,
+    // as the OpenGL canvas passes it when the option is on), into an image
+    // filled with the surround colour. (Grabbing the OpenGL widget does not
+    // include the decorations.)
+    KisCanvasDecorationSP gridDeco = view->canvasBase()->decoration(QStringLiteral("grid"));
+    const KisCoordinatesConverter *converter = view->canvasBase()->coordinatesConverter();
+    auto bluePixelsOutsideImage = [&]() {
+        QImage img(canvas->size(), QImage::Format_ARGB32);
+        img.fill(KisConfig(true).canvasBorderColor());
+        const QRect imageRect = converter->imageRectInWidgetPixels().toAlignedRect();
+        {
+            QPainter gc(&img);
+            gc.fillRect(imageRect, Qt::white);
+            const QRect area = KisConfig(true).gigaGridOverBackground() ? img.rect() : imageRect;
+            gc.setClipRect(area);
+            if (gridDeco) gridDeco->paint(gc, converter->widgetToDocument(QRectF(area)), converter, view->canvasBase());
+        }
+        if (qEnvironmentVariableIsSet("GIGA_CANVASLOOK_DUMP")) {
+            img.save(qEnvironmentVariable("GIGA_CANVASLOOK_DUMP") + "-" + s_dumpSuffix + (KisConfig(true).gigaGridOverBackground() ? "-over.png" : "-canvas.png"));
+        }
+        const QRect inner = imageRect.adjusted(-2, -2, 2, 2);
+        int blue = 0, dark = 0, inside = 0;
+        for (int y = 0; y < img.height(); y++) {
+            for (int x = 0; x < img.width(); x++) {
+                const QColor c = img.pixelColor(x, y);
+                const bool bluish = c.blue() > c.red() + 20;
+                if (inner.contains(x, y)) {
+                    if (bluish) ++inside;
+                } else if (bluish) {
+                    ++blue;
+                } else if (c.red() < 45 && c.green() < 45 && c.blue() < 45) {
+                    ++dark;
+                }
+            }
+        }
+        struct Counts { int first; int second; int third; };
+        return Counts{blue, dark, inside};
+    };
+    const QList<QPair<KisGridConfig::GridType, QString>> types = {
+        {KisGridConfig::GRID_RECTANGULAR, QStringLiteral("rect")},
+        {KisGridConfig::GRID_ISOMETRIC, QStringLiteral("iso")},
+        {KisGridConfig::GRID_ISOMETRIC_LEGACY, QStringLiteral("isolegacy")},
+    };
+    for (const auto &type : types) {
+        grid.setGridType(type.first);
+        w->viewManager()->gridManager()->setGridConfig(grid);
+        s_dumpSuffix = type.second;
+        for (bool over : {false, true}) {
+            cfg.setGigaGridOverBackground(over);
+            KisConfigNotifier::instance()->notifyConfigChanged();
+            const auto counts = bluePixelsOutsideImage();
+            const bool ok = over ? counts.first > 50 : counts.first == 0;
+            report(ok && counts.second > 100 && counts.third > 50,
+                   qPrintable(QStringLiteral("canvaslook-%1-%2").arg(type.second, over ? "over" : "canvas-only")),
+                   QStringLiteral("bluish outside image: %1, inside: %2, dark: %3").arg(counts.first).arg(counts.third).arg(counts.second));
+        }
+    }
+    cfg.setGigaGridOverBackground(false);
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -838,6 +941,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("modefloat"), testModeFloating},
         {QStringLiteral("autosave"), testAutosaveName},
         {QStringLiteral("refboard"), testReferenceBoard},
+        {QStringLiteral("canvaslook"), testCanvasLook},
     };
     bool found = false;
     for (const auto &test : tests) {

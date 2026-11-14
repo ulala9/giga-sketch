@@ -78,6 +78,10 @@ public:
           m_penVertical(QPen())
     {
         loadStaticData();
+        // Giga Sketch fix: fill the isometric cache too; it was left
+        // uninitialised until a setter ran, which could make the isometric
+        // grid loop forever on a freshly created config.
+        updateTrigoCache();
         m_penMain.setWidth(0);
         m_penSubdivision.setWidth(0);
         m_penVertical.setWidth(0);
