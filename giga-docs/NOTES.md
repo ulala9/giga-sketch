@@ -432,9 +432,18 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   raiseAllFrames() synchronously. Raising siblings doesn't send ZOrderChange to the canvas, so no loop.
 - Photoshop header (`GigaPanelTitleBar`): the ≡ menu is gone; Float/Dock (docker_float icon) and Close (docker_close,
   Shift+click = close tab group) are direct buttons. The old menu is on right-click of the header.
-- Found, not fixed yet: Photoshop mode → Studio, then drag a panel-group tab → segfault in Qt
-  (QDockAreaLayoutInfo::tabIndexToListIndex via QTabBar slide/moveTab). Repro: `GIGA_MODE` unset, alternate modes in
-  the tabswitch test. Same-mode drags are fine.
+- "Crash after Photoshop → Studio + tab drag" was a SELF-TEST ARTEFACT (fix/mode-switch-tab-crash): Qt retires old
+  panel-group tab bars with deleteLater(); inside the self-test's timer callback processEvents() doesn't run deferred
+  deletes, so the test dragged an already-retired bar → segfault in QDockAreaLayoutInfo::tabIndexToListIndex.
+  `pump()` now also calls sendPostedEvents(nullptr, QEvent::DeferredDelete). Test `modecrash` covers mode switches +
+  reorder + tear-off in both modes.
+- Learned on the way: a mode switch restores the layout TWICE. gigaLoadMenuFile → guiFactory()->addClient →
+  KXmlGuiWindow::finalizeGUI → applyMainWindowSettings → restoreState([MainWindow] State = the mode being left), then
+  switchTo restores the new mode's state. Harmless (old tab bars are retired) but wasted work; a candidate if mode
+  switching ever needs to be faster (hide the State entry during addClient — note setAutoSaveSettings() itself
+  re-applies the settings, so don't use reset/setAutoSaveSettings for that).
+- Qt 6.11 internals: QMainWindowLayout::applyState retires tab bars not in the new state (unuseTabBar = deleteLater);
+  restoreState ends with showTabBars() (shows every used bar). tabChanged() raises the central widget.
 
 ## UI self-tests (dev hook)
 - `giga-tools/selftest.sh <name|all>` runs Giga Sketch in a throw-away HOME/XDG_CONFIG_HOME with `GIGA_SELFTEST=<name>`, prints only `GIGA_SELFTEST PASS/FAIL/INFO/DONE` lines, exit code = failures.
@@ -444,4 +453,6 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   `tabswitch` (opens a document — the Welcome page hides all panels — floats History by API / tab drag / title drag in
   Studio then Photoshop, clicks every group tab, checks the panel is on top). `GIGA_MODE=<0|1>`, `GIGA_HOW=<0|1|2>` pin it.
 - The `drag()` helper sends events to `QWidget::mouseGrabber()` when there is one (like Qt does).
+- `pump()` flushes deferred deletes too (see the modecrash note) — keep it that way or tests see dead widgets.
+- `panelmove` times panel drags; `GIGA_PANEL_TRACE=1` (any run) prints a summary line per real panel drag.
 - Gotcha: a non-front tab in a dock group keeps a stale position; `raise()` it before aiming at it.

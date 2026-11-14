@@ -49,7 +49,14 @@ QString rectText(const QRect &r)
 /// Let queued work (deleteLater, singleShot(0), layouts) run.
 void pump(int rounds = 5)
 {
-    for (int i = 0; i < rounds; ++i) qApp->processEvents();
+    for (int i = 0; i < rounds; ++i) {
+        qApp->processEvents();
+        // The tests run inside a timer callback, where processEvents() leaves
+        // deleteLater() requests alone; a real return to the event loop
+        // would run them. Without this, widgets Qt already retired (e.g.
+        // old panel-group tab bars) linger and get poked by the test.
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
 }
 
 /**
@@ -261,6 +268,68 @@ void testPanelMove(KisMainWindow *w)
     report(true, "panelmove", QStringLiteral("timings above"));
 }
 
+QTabBar *tabBarWith(KisMainWindow *w, const QString &title, int *index);
+
+/// Crash report: Photoshop mode -> Studio, then drag a panel-group tab.
+/// Steps are printed before they run, so a crash shows where it happened.
+void testModeSwitchTabDrag(KisMainWindow *w)
+{
+    GigaInterfaceModes *modes = w->findChild<GigaInterfaceModes *>();
+    if (!modes) { report(false, "setup", QStringLiteral("no modes")); return; }
+    openTestDocument(w);
+    const QList<int> order = {int(GigaInterfaceModes::Studio), int(GigaInterfaceModes::Photoshop), int(GigaInterfaceModes::Studio),
+                              int(GigaInterfaceModes::Photoshop)};
+    for (int mode : order) {
+        modes->setMode(mode);
+        pump(20);
+        const QString tag = mode == GigaInterfaceModes::Studio ? QStringLiteral("studio") : QStringLiteral("photoshop");
+        auto groupBars = [w]() {
+            int n = 0;
+            for (QTabBar *bar : w->findChildren<QTabBar *>(QString(), Qt::FindDirectChildrenOnly)) {
+                if (bar->isVisible() && bar->count() >= 2) ++n;
+            }
+            return n;
+        };
+        if (groupBars() == 0) { // no panel groups in this layout: make some
+            w->applyGigaLayout();
+            pump(20);
+        }
+        int bars = 0;
+        for (QTabBar *bar : w->findChildren<QTabBar *>(QString(), Qt::FindDirectChildrenOnly)) {
+            if (!bar->isVisible() || bar->count() < 2) continue;
+            ++bars;
+            info(QStringLiteral("%1: drag tab '%2' of %3 tabs (movable=%4)").arg(tag, bar->tabText(0)).arg(bar->count()).arg(bar->isMovable()));
+            // Sideways along the bar: reordering, no tear-off.
+            const QRect r = bar->tabRect(0);
+            drag(bar, r.center(), bar->mapToGlobal(QPoint(r.center().x() + r.width() + 10, r.center().y())), 6);
+        }
+        report(bars > 0, qPrintable(tag + QStringLiteral("-reorder")), QStringLiteral("survived %1 tab bars").arg(bars));
+
+        // Tear a tab off onto the canvas (the drag that first showed the crash).
+        GigaFloatingPanelManager *m = w->gigaFloatingPanels();
+        QDockWidget *hist = w->dockWidget(QStringLiteral("History"));
+        int idx = -1;
+        if (hist) hist->raise();
+        pump(10);
+        QTabBar *bar = hist ? tabBarWith(w, hist->windowTitle(), &idx) : nullptr;
+        if (hist && !bar) { // not in a group in this layout: regroup
+            w->applyGigaLayout();
+            pump(20);
+            hist->raise();
+            pump(10);
+            bar = tabBarWith(w, hist->windowTitle(), &idx);
+        }
+        if (m && bar) {
+            drag(bar, bar->tabRect(idx).center(), w->centralWidget()->mapToGlobal(w->centralWidget()->rect().center()), 8);
+            report(m->isFloating(hist), qPrintable(tag + QStringLiteral("-tearoff")), QStringLiteral("History floating"));
+            m->dockAll(true);
+            pump(10);
+        } else {
+            report(false, qPrintable(tag + QStringLiteral("-tearoff")), QStringLiteral("History tab not found"));
+        }
+    }
+}
+
 /// User report: float a panel, then switch tabs in a docked group on the
 /// right -> the floating panel disappears.
 void testTabSwitch(KisMainWindow *w)
@@ -359,6 +428,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("panels"), testPanels},
         {QStringLiteral("tabswitch"), testTabSwitch},
         {QStringLiteral("panelmove"), testPanelMove},
+        {QStringLiteral("modecrash"), testModeSwitchTabDrag},
     };
     bool found = false;
     for (const auto &test : tests) {
