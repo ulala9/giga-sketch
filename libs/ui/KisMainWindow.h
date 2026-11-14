@@ -453,6 +453,12 @@ public:
     /// the panels then, so the on-screen layout must not be saved.
     bool gigaShowingWelcomePage() const;
     void gigaSetTheme(const QString &name);
+    /// Giga Sketch: re-applies menu/status/tool bar settings and the saved
+    /// layout, like Krita, except while gigaLoadMenuFile rebuilds the menus
+    /// (then the saved layout is skipped; the mode switch restores its own).
+    void applyMainWindowSettings(const KConfigGroup &config) override;
+    /// Giga Sketch (self-test): how often a saved layout was re-applied here.
+    int gigaSavedLayoutRestores() const;
 
 private:
     /**

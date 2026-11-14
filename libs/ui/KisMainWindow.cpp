@@ -48,6 +48,8 @@
 #include <QScrollArea>
 #include <QActionGroup>
 
+#include <KConfig>
+#include <KConfigGroup>
 #include <kactioncollection.h>
 #include <kactionmenu.h>
 #include <kis_debug.h>
@@ -322,6 +324,11 @@ public:
     // Giga Sketch interface modes: Studio is "classic" (Krita menus etc.).
     bool gigaClassic {false};
     QString gigaMenuFile {QStringLiteral("gigasketch.xmlgui")};
+    /// Giga Sketch: true while gigaLoadMenuFile rebuilds the menus; then the
+    /// saved panel layout ("State") is not re-applied (the mode switch that
+    /// triggered the rebuild restores its own layout right after).
+    bool gigaSkipSavedLayout {false};
+    int gigaSavedLayoutRestores {0}; ///< times "State" was applied (self-test)
     QHash<QString, QString> gigaKritaWording; ///< original menu texts
     QPointer<QToolBar> gigaPanelStrip;
     QPointer<GigaFloatingPanelManager> gigaFloating;
@@ -967,7 +974,13 @@ void KisMainWindow::gigaLoadMenuFile(const QString &fileName)
     setXMLGUIBuildDocument(QDomDocument()); // forget the old file's contents
     setLocalXMLFile(KoResourcePaths::locateLocal("data", fileName));
     setXMLFile(QStringLiteral(":/kxmlgui5/") + fileName);
+    // addClient() ends by re-applying the saved window settings, including
+    // the saved panel layout. That layout is stale here, and the mode switch
+    // restores the right one right after, so skip it (see
+    // applyMainWindowSettings below).
+    d->gigaSkipSavedLayout = true;
     guiFactory()->addClient(this);
+    d->gigaSkipSavedLayout = false;
 
     applyActionIconOverridesFromLocalXML();
     synchronizeDynamicActions(); // Python plugin actions placed in menus
@@ -975,6 +988,30 @@ void KisMainWindow::gigaLoadMenuFile(const QString &fileName)
     gigaAddFileMenuItems();
     applyToolBarLayout();
     setUpdatesEnabled(true);
+}
+
+void KisMainWindow::applyMainWindowSettings(const KConfigGroup &config)
+{
+    // Normal case: exactly what Krita does.
+    if (!d->gigaSkipSavedLayout || !config.hasKey("State")) {
+        if (config.hasKey("State")) ++d->gigaSavedLayoutRestores;
+        KXmlGuiWindow::applyMainWindowSettings(config);
+        return;
+    }
+    // During a menu rebuild: same settings (menu bar, status bar, toolbar
+    // options) but without "State", the saved panel/toolbar layout. We hand
+    // Krita an in-memory copy of the group with that one entry removed; the
+    // real config file is not touched.
+    KConfig scratch(QString(), KConfig::SimpleConfig);
+    KConfigGroup copy = scratch.group(config.name());
+    config.copyTo(&copy);
+    copy.deleteEntry("State");
+    KXmlGuiWindow::applyMainWindowSettings(copy);
+}
+
+int KisMainWindow::gigaSavedLayoutRestores() const
+{
+    return d->gigaSavedLayoutRestores;
 }
 
 void KisMainWindow::gigaSetClassicInterface(bool classic)

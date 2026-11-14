@@ -75,6 +75,10 @@ public:
     /// Where to remember the floating panels (one key per interface mode).
     void setStorageKey(const QString &key);
     void saveNow();
+    /// Leaving an interface mode: remember its floating panels, then dock
+    /// them hidden. The docking is not a user change, so it must not be
+    /// saved over what was just remembered.
+    void saveAndPark();
     /// Float the panels remembered under the current key.
     void restoreSaved();
 
