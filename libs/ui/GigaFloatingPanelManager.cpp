@@ -214,10 +214,13 @@ QRect GigaFloatingPanelManager::keepInside(QRect r) const
     return r;
 }
 
-QRect GigaFloatingPanelManager::snap(QRect r) const
+QRect GigaFloatingPanelManager::snap(QRect r, const GigaFloatingPanel *self) const
 {
-    // Lines to snap to: the window's usable area, the canvas area and every
-    // other visible floating panel.
+    // Hold Ctrl to move freely (Ctrl also means "don't dock", see onPanelMoved).
+    if (QGuiApplication::keyboardModifiers() & Qt::ControlModifier) return keepInside(r);
+
+    // Lines to snap to: the window's usable area, the canvas area, and the
+    // edges of floating panels that sit next to this one.
     QList<int> xs, ys;
     auto addRect = [&xs, &ys](const QRect &rect) {
         xs << rect.left() << rect.right() + 1;
@@ -226,7 +229,21 @@ QRect GigaFloatingPanelManager::snap(QRect r) const
     addRect(allowedArea());
     if (m_mainWindow && m_mainWindow->centralWidget()) addRect(m_mainWindow->centralWidget()->geometry());
     for (const QPointer<GigaFloatingPanel> &panel : m_panels) {
-        if (panel && panel->isVisible() && panel->geometry() != r) addRect(panel->geometry());
+        // Skip the dragged panel itself. Comparing geometries is not enough:
+        // mid-drag its geometry is last frame's position, so it would snap
+        // back to where it just was and only jump once the pointer got more
+        // than SNAP_DISTANCE away -- moving in ~10 px steps, like a grid.
+        if (!panel || panel == self || !panel->isVisible()) continue;
+        const QRect other = panel->geometry();
+        // Another panel's left/right edges only count when the two panels
+        // share some height (side by side, or nearly touching above/below);
+        // its top/bottom edges only when they share some width. Using every
+        // panel's edges as window-wide lines made dragging feel like moving
+        // on a grid once several panels were floating.
+        const bool shareHeight = r.top() <= other.bottom() + SNAP_DISTANCE && other.top() <= r.bottom() + SNAP_DISTANCE;
+        const bool shareWidth = r.left() <= other.right() + SNAP_DISTANCE && other.left() <= r.right() + SNAP_DISTANCE;
+        if (shareHeight) xs << other.left() << other.right() + 1;
+        if (shareWidth) ys << other.top() << other.bottom() + 1;
     }
 
     auto best = [](int a, int b, const QList<int> &lines, int *shift) {
@@ -293,7 +310,7 @@ GigaFloatingPanel *GigaFloatingPanelManager::floatPanel(QDockWidget *dock, const
     GigaFloatingPanel *panel = new GigaFloatingPanel(dock, m_mainWindow);
     // Inside the frame Qt must not try to drag or float it itself.
     dock->setFeatures(home.features & ~(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable));
-    panel->setGeometryFilter([this](const QRect &r, bool moving) { return moving ? snap(r) : keepInside(r); });
+    panel->setGeometryFilter([this, panel](const QRect &r, bool moving) { return moving ? snap(r, panel) : keepInside(r); });
     connect(panel, &GigaFloatingPanel::geometryEdited, this, &GigaFloatingPanelManager::scheduleSave);
     panel->setMoveObserver([this](GigaFloatingPanel *p, const QPointF &globalPos, bool finished) {
         onPanelMoved(p, globalPos, finished);

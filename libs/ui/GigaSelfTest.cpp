@@ -312,6 +312,74 @@ void testPanelMove(KisMainWindow *w)
     report(true, "panelmove", QStringLiteral("timings above"));
 }
 
+/// User report: dragging a panel "feels like it's on a grid" with several
+/// panels floating. A panel far away must not pull the dragged one; a panel
+/// right beside it still must. (Ctrl = no snapping is checked by hand:
+/// synthetic events don't update the keyboard modifiers.)
+void testPanelSnap(KisMainWindow *w)
+{
+    GigaFloatingPanelManager *m = w->gigaFloatingPanels();
+    QWidget *canvas = w->centralWidget();
+    if (!m || !canvas) { report(false, "setup", QStringLiteral("no manager or canvas")); return; }
+    openTestDocument(w);
+    w->applyGigaLayout();
+    pump(20);
+    QDockWidget *movingDock = w->dockWidget(QStringLiteral("History"));
+    QDockWidget *otherDock = w->dockWidget(QStringLiteral("PresetDocker"));
+    if (!movingDock || !otherDock) { report(false, "setup", QStringLiteral("missing panels")); return; }
+
+    const QPoint c = canvas->geometry().center();
+    info(QStringLiteral("canvas %1").arg(rectText(canvas->geometry())));
+    m->floatPanel(movingDock, QRect(c + QPoint(-350, -250), QSize(200, 200)));
+    m->floatPanel(otherDock, QRect(c + QPoint(50, 150), QSize(200, 150)));
+    pump(20);
+    auto frameOf = [](QDockWidget *dock) { return qobject_cast<GigaFloatingPanel *>(dock->parentWidget()); };
+    GigaFloatingPanel *moving = frameOf(movingDock);
+    GigaFloatingPanel *other = frameOf(otherDock);
+    if (!moving || !other) { report(false, "setup", QStringLiteral("did not float")); return; }
+
+    // Drag the History frame so its left edge ends up `wantLeft`.
+    auto dragLeftTo = [&](int wantLeft) {
+        const QPoint grab(30, 8);
+        const QPoint delta(wantLeft - moving->geometry().left(), 0);
+        drag(movingDock, grab, movingDock->mapToGlobal(grab) + delta, 20);
+        pump(10);
+    };
+
+    // 1. The other panel is far below: its left edge 5 px away must not pull.
+    const QRect far = other->geometry();
+    dragLeftTo(far.left() - 5);
+    report(moving->geometry().left() == far.left() - 5, "far-panel-no-snap",
+           QStringLiteral("moving %1, other %2").arg(rectText(moving->geometry()), rectText(far)));
+
+    // 2. The other panel sits beside it (same height band): end 5 px short of
+    //    touching it, it must snap to touch.
+    other->setGeometry(QRect(QPoint(moving->geometry().right() + 300, moving->geometry().top()), QSize(200, 200)));
+    pump(10);
+    const QRect beside = other->geometry();
+    dragLeftTo(beside.left() - 5 - moving->width());
+    report(moving->geometry().right() + 1 == beside.left(), "beside-panel-snaps",
+           QStringLiteral("moving %1, other %2").arg(rectText(moving->geometry()), rectText(beside)));
+
+    // 3. Slow drag in 1 px steps in open space: the panel must follow every
+    //    pixel (it used to stick to its own previous position and jump).
+    other->move(other->geometry().translated(0, 400).topLeft());
+    pump(10);
+    {
+        const QPoint grab(30, 8);
+        QPoint pointer = movingDock->mapToGlobal(grab);
+        const QPoint start = moving->geometry().topLeft();
+        drag(movingDock, grab, pointer + QPoint(25, 0), 25);
+        pump(10);
+        const int moved = moving->geometry().left() - start.x();
+        report(moved == 25, "slow-drag-follows",
+               QStringLiteral("pointer moved 25 px in 1 px steps, panel moved %1 px").arg(moved));
+    }
+
+    m->dockAll(true);
+    pump(10);
+}
+
 QTabBar *tabBarWith(KisMainWindow *w, const QString &title, int *index);
 
 /// Crash report: Photoshop mode -> Studio, then drag a panel-group tab.
@@ -574,6 +642,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("panels"), testPanels},
         {QStringLiteral("tabswitch"), testTabSwitch},
         {QStringLiteral("panelmove"), testPanelMove},
+        {QStringLiteral("panelsnap"), testPanelSnap},
         {QStringLiteral("modecrash"), testModeSwitchTabDrag},
         {QStringLiteral("modeswitch"), testModeSwitchRestore},
         {QStringLiteral("modefloat"), testModeFloating},
