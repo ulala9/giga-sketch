@@ -42,3 +42,9 @@ I test brush feel by hand with a pen tablet and will report what feels off. Comp
 
 ## Notes
 Keep a running summary of what you learn about the code in `NOTES.md` (stroke pipeline, text tool, UI structure) so it carries over between sessions.
+
+## Roadmap (start here when resuming)
+`giga-docs/ROADMAP.md` holds the phases, what's done, what's next, and decisions. It is imported below so it loads
+every session. Update it (tick items, "Resume here", decisions) as part of every merge.
+
+@/home/ulala99/Documents/Apps/GigaSketch/giga-sketch/giga-docs/ROADMAP.md

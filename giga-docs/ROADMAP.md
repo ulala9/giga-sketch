@@ -1,0 +1,69 @@
+# Giga Sketch — roadmap and status
+
+Loaded at the start of every session (imported from CLAUDE.md). **Keep it current:** tick items, add
+branches, and move things between sections as part of every merge. How the code works lives in
+`NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
+
+Last updated: 2026-11-13
+
+## Resume here
+- **Next up:** Phase 1 → autosave file names (`fix/autosave-name`), then Phase 3 → text scale (`feature/text-scale`).
+- Repo state: everything merged into `giga-main` and pushed to `origin`. No open feature branches.
+- Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
+  user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
+- UI checks: `giga-tools/selftest.sh all` (headless-ish UI self-tests, see NOTES.md "UI self-tests").
+  Never screenshot the desktop; ask the user to look.
+
+## Phase 1 — Isolate from stock Krita, rebrand
+- [x] Own config/data/cache folders, app ID, desktop file (`feature/isolate-identity`)
+- [x] Title, about screen, original icons/artwork (`feature/branding`)
+- [ ] **Autosave files** still named `krita-*-autosave.kra` like stock Krita → give them a Giga name
+- [ ] (Windows only, ignore for now) `kritacrash.log`
+
+## Phase 2 — Procreate-style brush feel
+- [x] "Smooth Curve" smoothing mode: 1€ filter + centripetal Catmull-Rom, corner keeping (`feature/curve-smoothing`)
+- [x] Catch-up easing on pen lift (animated tail), Catch-Up Time, Show Lag Line
+- [x] Controls: amount, speed influence, pressure influence
+- [x] Ctrl+Z during the catch-up tail (`fix/undo-during-catch-up`)
+- [x] QuickShape (hold at stroke end → line/ellipse/…) and editing (`feature/quickshape`, `feature/quickshape-edit`)
+- [x] Separate eraser brush (`feature/separate-eraser`)
+- [x] **Hand-tested by the user vs Procreate — done.** Don't propose more tuning unless they report an issue.
+
+## Phase 3 — Photoshop-style text tool
+- [x] Audit of Krita 6.0 text tool (table in NOTES.md)
+- [x] One layer per text, auto-named from its first line (`feature/text-ps-workflow`)
+- [x] Paragraph space before/after, left/right indents (`feature/text-paragraph-spacing`)
+- [x] Text options bar on top + easy moving (`feature/text-options-bar`, `feature/text-easy-move`)
+- [x] Photoshop-style box text with resize handles, point ↔ paragraph conversion (`feature/text-boxes`)
+- [x] Font picker: search, favourites, recent, previews, live preview (`feature/font-picker`)
+- [x] Character and Paragraph panels (`feature/character-panel`)
+- [ ] **Horizontal / vertical text scale** (Krita only has font-stretch) — next text item
+- [ ] Hyphenation — **super low priority** (user decision); don't suggest it
+- Already in Krita, no work needed: OpenType features, variable fonts, kerning/tracking/leading, baseline shift,
+  case, faux bold/italic, underline/strike, text on a path, on-canvas editing.
+
+## Phase 4 — Photoshop-style UI
+- [x] Giga Dark theme, Photoshop shortcut scheme + input profile defaults (`feature/ui-*`)
+- [x] Photoshop-like layout, left toolbox with tool groups, top options bar, right panel icon strip
+- [x] Layers panel: lock row, PS button order, New/Delete on the left (`feature/ui-layers-panel`, `feature/layers-buttons-left`)
+- [x] Colour panel, menus wording, New Document dialog (`feature/ui-color-panel`, `feature/ui-menus-wording`, …)
+- [x] Space-saving mode, panel flyouts (`feature/ui-space-saving`)
+- [x] Interface modes Studio / Photoshop / Procreate, F9 (`feature/interface-modes`, `feature/procreate-*`, `feature/studio-*`)
+- [x] Panels float inside the window: tear-off by tab/title/strip, drag back to dock, per-mode memory (`feature/in-window-panels`)
+- [x] Floating panels stay on top on tab changes; header buttons instead of ≡ menu (`fix/floating-panel-tabs`)
+- [x] Save Dated JPG, Ctrl+Space zoom toward pointer, no brush-switch popup
+- [ ] Nothing queued. Add UI requests here as the user reports them.
+
+## Known issues / watch list
+- Mode switch restores the panel layout twice (menu rebuild + mode). Harmless; fix only if switching feels slow
+  (details in NOTES.md, "In-window panels: buried by tab changes").
+- If dragging a floating panel ever looks choppy again: run with `GIGA_PANEL_TRACE=1` and read the summary lines.
+- Pre-existing upstream test failures (not ours): TestSvgParser/Cloned/RoundTrip, SvgTextCursorTest RTL/vertical.
+
+## Backlog / ideas (not scheduled)
+- (empty — add user ideas here with the date)
+
+## Decisions log
+- 2026-11-13: brush feel tuning considered done (user tested).
+- 2026-11-13: hyphenation → super low priority.
+- 2026-11-13: panel headers show Float/Dock and Close as buttons, not a dropdown (fewer clicks).
