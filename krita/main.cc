@@ -654,6 +654,23 @@ if (!qEnvironmentVariableIsEmpty("KRITA_OPENGL_DEBUG")) {
     }
 #endif
 
+    // Giga Sketch: set our app name *before* the application object exists.
+    // The KAboutData call further down sets the same name, but by then two
+    // things have already used the default (the binary name, "krita"):
+    //  - Qt's X11 window class (WM_CLASS). Plasma matches windows to
+    //    launchers by it, so with "krita" our window was grouped with an
+    //    installed stock Krita and showed Krita's taskbar icon.
+    //  - The KisConfig read in the KisApplication constructor, which opened
+    //    "<appname>rc", i.e. stock Krita's kritarc.
+    QCoreApplication::setApplicationName(GigaBranding::appName());
+#if defined HAVE_X11
+    // First half of WM_CLASS ("instance name"); Qt uses the binary name
+    // unless RESOURCE_NAME is set. Must match StartupWMClass in our launcher.
+    if (!qEnvironmentVariableIsSet("RESOURCE_NAME")) {
+        qputenv("RESOURCE_NAME", GigaBranding::appName().toLocal8Bit());
+    }
+#endif
+
     // first create the application so we can create a pixmap
     KisApplication app(key, argc, argv);
 
