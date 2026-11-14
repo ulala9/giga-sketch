@@ -113,7 +113,9 @@ private:
     void stripFloatable(QDockWidget *dock);
     QRect allowedArea() const;
     QRect keepInside(QRect r) const;
-    QRect snap(QRect r) const;
+    /// Snap a panel being dragged to nearby edges. `self` is that panel: it
+    /// must never snap to its own previous position.
+    QRect snap(QRect r, const GigaFloatingPanel *self) const;
     QRect defaultGeometryFor(QDockWidget *dock) const;
     void raiseAllFrames();
     void scheduleSave();
