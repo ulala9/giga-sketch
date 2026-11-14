@@ -1,0 +1,9 @@
+{
+    "Id": "Giga Reference Board",
+    "Type": "Service",
+    "X-KDE-Library": "kritagigareferenceboard",
+    "X-KDE-ServiceTypes": [
+        "Krita/Dock"
+    ],
+    "X-Krita-Version": "28"
+}

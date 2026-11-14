@@ -464,6 +464,40 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Qt 6.11 internals: QMainWindowLayout::applyState retires tab bars not in the new state (unuseTabBar = deleteLater);
   restoreState ends with showTabBars() (shows every used bar). tabChanged() raises the central widget.
 
+## Reference Board (feature/reference-board)
+- Blueprint: Claude doc "Giga Sketch Feature Blueprints" → Reference Board (claude.ai/artifact/KkhoZFGHU3vzMt7tmZ8NTK).
+- Krita side: each reference = `KisReferenceImage` (a KoShape) in one hidden per-document `KisReferenceImagesLayer`;
+  `KisReferenceImagesDecoration` paints the layer's shape manager over the canvas; the tool is
+  `plugins/tools/defaulttool/referenceimagestool/`. Saved by `kis_kra_savexml_visitor` (saveXml) + `kis_kra_save_visitor`
+  (saveImage); `.krf` sets use the same saveXml/fromXml.
+- "On the Board" = `KisReferenceImage::setOnBoard(true)` = `setVisible(false)`: hidden shapes are skipped by canvas paint,
+  `shapeAt`/`shapesAt` and `KoSelection::select`, so nothing else needed changing (plus `selectAll` skips hidden ones).
+  The canvas transform is never touched while on the Board, so Send to Canvas is exact.
+- New per-image fields: `boardRect` (document points, Board coordinates). XML: optional `giga-onBoard`, `giga-boardRect`
+  ("x y w h"); stock Krita ignores them (images show at their canvas spot). Loading only puts an image on the Board if
+  it has a valid boardRect.
+- `libs/ui/GigaReferenceLayout.{h,cpp}`: pure maths (normalize modes, Justified rows / Masonry / Packed (skyline) /
+  Grid / Auto, score = fill × aspect fit, readingOrder). Scaling styles re-run once or twice so total image area
+  stays the same (otherwise a lone image in a row gets stretched). Unit test `TestGigaReferenceLayout` (38 cases).
+- `libs/ui/GigaReferenceBoard.{h,cpp}`: `GeometryCommand` (before/after {transform, onBoard, boardRect} per image —
+  one class for normalize/arrange/send/move), `ResampleCommand` (keeps old QImage for undo), `Notifier` (changed() on
+  every apply, settingsChanged()), helpers, `Settings` (KisConfig keys `gigaRefBoard*`, global not per document),
+  `animateOnCanvas` (200 ms lerp of transforms after the command is pushed; stops if any other Board command applies
+  or someone else moves the shape; snaps survivors to the final state).
+- Resample rule: target width = max(canvas width at 100 % in image px, Board focus width) × 1.5; only shrinks, and only
+  if < 90 % of current. Board size comes from `setBoardViewportSize()` (atomics, read while saving).
+  "Shrink oversized references when saving" (Board ▸ Look) scales only the saved PNG in `saveImage()`.
+- Panel: `plugins/dockers/gigareferenceboard/` (docker id `GigaReferenceBoard`, DockMinimized, in GIGA_PANELS strip).
+  `GigaReferenceBoardView`: camera widget = board × zoom + pan; auto-fit until the user moves the camera; focus fly-to
+  300 ms (zoom geometric, centre linear); board rects animate 200 ms on change; draws with
+  `KisReferenceImage::paintInRect` (same mipmaps as the canvas). Takes keyboard focus on hover (gives it back on leave,
+  never from text fields); ShortcutOverride for Esc/Home/←/→/Space/Ctrl+V. Touch: 1 finger = mouse, 2 = pinch/pan;
+  touchpad: NativeGesture zoom, pixelDelta scroll pans.
+- Tool's Send to Board shows the Board dock if hidden.
+- Self-test `refboard` (13 checks). Q_PROPERTY imageCount/focusedIndex + Q_INVOKABLE imageWidgetCenter exist for it.
+- Known: the old `panelsnap` self-test segfaults in a small test window (948×512) even without this feature — its
+  History frame gets docked by the drag and the test dereferences the deleted frame (test bug, not app).
+
 ## UI self-tests (dev hook)
 - `giga-tools/selftest.sh <name|all>` runs Giga Sketch in a throw-away HOME/XDG_CONFIG_HOME with `GIGA_SELFTEST=<name>`, prints only `GIGA_SELFTEST PASS/FAIL/INFO/DONE` lines, exit code = failures.
 - Code: `libs/ui/GigaSelfTest.cpp` (called from the KisMainWindow ctor via `GigaSelfTest::maybeRun`; no-op without the env var). Helpers: `report()`, `info()`, `pump()`, `drag(widget, localStart, globalEnd, steps, beforeRelease)`. Add a test function and a row in `runNamed()`'s table. `GIGA_SELFTEST_DELAY` (ms, default 5000) delays the start.

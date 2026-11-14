@@ -91,6 +91,8 @@ set(kritaui_LIB_SRCS
     GigaSaveDated.cpp
     GigaZoomOption.cpp
     GigaPanelTitleBar.cpp
+    GigaReferenceLayout.cpp
+    GigaReferenceBoard.cpp
 
     flake/kis_node_dummies_graph.cpp
     flake/kis_dummies_facade_base.cpp

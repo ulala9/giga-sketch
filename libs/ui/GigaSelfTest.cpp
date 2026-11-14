@@ -12,7 +12,14 @@
 #include "KisDocument.h"
 #include "KisPart.h"
 #include "kis_config.h"
+#include "GigaReferenceBoard.h"
+#include "KisReferenceImage.h"
+#include "KisReferenceImagesLayer.h"
+#include "KisView.h"
+#include "kis_canvas2.h"
 #include <GigaBranding.h>
+#include <kundo2stack.h>
+#include <KoCanvasResourceProvider.h>
 #include <KoColor.h>
 #include <KoColorSpaceRegistry.h>
 
@@ -20,6 +27,7 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QElapsedTimer>
+#include <QKeyEvent>
 #include <QMenuBar>
 #include <QMouseEvent>
 #include <QPointer>
@@ -636,6 +644,161 @@ void testModeFloating(KisMainWindow *w)
     }
 }
 
+/// Reference Board: send to Board / back, arrange + undo, save/reload,
+/// resample, and click-to-focus in the panel.
+void testReferenceBoard(KisMainWindow *w)
+{
+    using namespace GigaReferenceBoard;
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
+
+    // Three references: a big photo-like one and two small ones.
+    QList<KoShape *> shapes;
+    const QList<QPair<QSize, QColor>> specs = {{QSize(3000, 2000), Qt::red}, {QSize(300, 600), Qt::green}, {QSize(500, 200), Qt::blue}};
+    int z = 0;
+    for (const auto &spec : specs) {
+        QImage img(spec.first, QImage::Format_ARGB32);
+        img.fill(spec.second);
+        KisReferenceImage *ref = KisReferenceImage::fromQImage(*canvas->coordinatesConverter(), img);
+        ref->setZIndex(z++);
+        shapes.append(ref);
+    }
+    // Shrink the big one on the canvas (as if scaled down by hand).
+    shapes[0]->setTransformation(QTransform::fromScale(0.1, 0.1));
+    canvas->addCommand(KisReferenceImagesLayer::addReferenceImages(doc, shapes));
+    pump(10);
+    KisSharedPtr<KisReferenceImagesLayer> layer = doc->referenceImagesLayer();
+    if (!layer || layer->referenceImages().size() != 3) { report(false, "setup", QStringLiteral("references not added")); return; }
+    const QVector<KisReferenceImage *> refs = layer->referenceImages();
+
+    QDockWidget *dock = w->dockWidget(QStringLiteral("GigaReferenceBoard"));
+    report(dock != nullptr, "board-dock", dock ? QStringLiteral("registered") : QStringLiteral("missing"));
+    if (!dock) return;
+    dock->show();
+    dock->raise();
+    pump(10);
+    QWidget *boardView = dock->findChild<QWidget *>(QStringLiteral("GigaReferenceBoardView"));
+    if (!boardView) { report(false, "board-view", QStringLiteral("missing")); return; }
+
+    // Send two to the Board: hidden on the canvas, placed on the Board.
+    const QTransform canvasTransform1 = refs[1]->transformation();
+    canvas->addCommand(sendToBoard({refs[1], refs[2]}, layer.data(), Settings::load()));
+    pump(10);
+    bool ok = refs[1]->isOnBoard() && refs[2]->isOnBoard() && !refs[1]->isVisible() && refs[0]->isVisible()
+        && refs[1]->boardRect().isValid() && !refs[1]->boardRect().intersects(refs[2]->boardRect());
+    report(ok, "send-to-board", QStringLiteral("board images: %1").arg(boardView->property("imageCount").toInt()));
+    report(boardView->property("imageCount").toInt() == 2, "board-shows-images",
+           QString::number(boardView->property("imageCount").toInt()));
+
+    // Undo, redo.
+    doc->undoStack()->undo();
+    pump(5);
+    ok = !refs[1]->isOnBoard() && refs[1]->isVisible() && boardView->property("imageCount").toInt() == 0;
+    doc->undoStack()->redo();
+    pump(5);
+    ok = ok && refs[1]->isOnBoard();
+    report(ok, "board-undo-redo", QString());
+
+    // Click-to-focus on the Board.
+    pump(20); // camera animation
+    QPointF center;
+    QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, center), Q_ARG(int, 0));
+    {
+        const QPoint p = center.toPoint();
+        QMouseEvent press(QEvent::MouseButtonPress, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(boardView, &press);
+        QMouseEvent release(QEvent::MouseButtonRelease, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(boardView, &release);
+        pump(5);
+    }
+    report(boardView->property("focusedIndex").toInt() == 0, "board-click-focus",
+           QStringLiteral("focused %1 (clicked %2,%3)").arg(boardView->property("focusedIndex").toInt()).arg(center.x()).arg(center.y()));
+    {
+        QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+        QCoreApplication::sendEvent(boardView, &esc);
+        pump(5);
+    }
+    report(boardView->property("focusedIndex").toInt() == -1, "board-esc-overview", QString());
+
+    // Ctrl+click samples the colour (image 0 in z order is the green one).
+    pump(20);
+    QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, center), Q_ARG(int, 0));
+    {
+        const QPoint p = center.toPoint();
+        QMouseEvent press(QEvent::MouseButtonPress, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::ControlModifier);
+        QCoreApplication::sendEvent(boardView, &press);
+        QMouseEvent release(QEvent::MouseButtonRelease, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+        QCoreApplication::sendEvent(boardView, &release);
+        pump(5);
+    }
+    const QColor picked = canvas->resourceManager()->foregroundColor().toQColor();
+    report(picked == QColor(Qt::green), "board-ctrl-click-colour", picked.name());
+
+    // Send back to the canvas: exact same transform as before.
+    canvas->addCommand(sendToCanvas({refs[1]}));
+    pump(5);
+    report(!refs[1]->isOnBoard() && refs[1]->isVisible() && qFuzzyCompare(refs[1]->transformation(), canvasTransform1),
+           "send-to-canvas-same-place", QString());
+
+    // Arrange on the canvas: bounding boxes no longer overlap; undo restores.
+    QVector<KisReferenceImage *> onCanvas = canvasImages(layer.data());
+    QVector<QTransform> before;
+    for (KisReferenceImage *r : onCanvas) before.append(r->transformation());
+    auto area = [](const QRectF &r) { return r.width() * r.height(); };
+    const qreal areaBefore = area(onCanvas[0]->boundingRect()) + area(onCanvas[1]->boundingRect());
+    Settings settings = Settings::load();
+    settings.style = GigaReferenceLayout::Style::JustifiedRows;
+    GeometryCommand *arrange = arrangeOnCanvas(onCanvas, settings, canvas, layer.data());
+    canvas->addCommand(arrange);
+    animateOnCanvas(arrange);
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < 400) pump(1); // let the 200 ms animation finish
+    // No overlap, and about the same total size as before (nothing jumps).
+    const qreal areaAfter = area(onCanvas[0]->boundingRect()) + area(onCanvas[1]->boundingRect());
+    ok = onCanvas.size() == 2 && !onCanvas[0]->boundingRect().adjusted(1, 1, -1, -1).intersects(onCanvas[1]->boundingRect())
+        && qAbs(areaAfter / areaBefore - 1.0) < 0.15;
+    report(ok, "arrange-canvas", QStringLiteral("area %3 -> %4: %1 / %2").arg(rectText(onCanvas[0]->boundingRect().toRect()), rectText(onCanvas[1]->boundingRect().toRect())).arg(areaBefore).arg(areaAfter));
+    doc->undoStack()->undo();
+    pump(5);
+    ok = true;
+    for (int i = 0; i < onCanvas.size(); ++i) ok = ok && qFuzzyCompare(onCanvas[i]->transformation(), before[i]);
+    report(ok, "arrange-undo", QString());
+
+    // Resample the big one: 3000 px shown at ~300 pt -> ~450 px (x1.5 headroom).
+    const QString summary = resampleSummary({refs[0]});
+    canvas->addCommand(resample({refs[0]}));
+    pump(5);
+    const QSize after = refs[0]->imagePixelSize();
+    report(after.width() < 3000 && after.width() >= 300 && refs[0]->boundingRect().isValid(), "resample",
+           QStringLiteral("%1 -> %2x%3").arg(summary).arg(after.width()).arg(after.height()));
+    doc->undoStack()->undo();
+    pump(5);
+    report(refs[0]->imagePixelSize() == QSize(3000, 2000), "resample-undo", QString());
+
+    // Save and reopen: Board state survives.
+    const QRectF boardRect2 = refs[2]->boardRect();
+    const QString path = QDir::home().filePath(QStringLiteral("refboard-test.kra"));
+    ok = doc->exportDocumentSync(path, "application/x-krita");
+    KisDocument *reopened = KisPart::instance()->createDocument();
+    ok = ok && reopened->openPath(path, KisDocument::DontAddToRecent);
+    int onBoard = 0;
+    bool rectKept = false;
+    if (ok && reopened->referenceImagesLayer()) {
+        for (KisReferenceImage *r : reopened->referenceImagesLayer()->referenceImages()) {
+            if (r->isOnBoard()) {
+                ++onBoard;
+                rectKept = rectKept || (qAbs(r->boardRect().x() - boardRect2.x()) < 0.01 && qAbs(r->boardRect().width() - boardRect2.width()) < 0.01);
+                ok = ok && !r->isVisible();
+            }
+        }
+    }
+    report(ok && onBoard == 1 && rectKept, "save-reload", QStringLiteral("on board after reload: %1").arg(onBoard));
+    delete reopened;
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -647,6 +810,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("modeswitch"), testModeSwitchRestore},
         {QStringLiteral("modefloat"), testModeFloating},
         {QStringLiteral("autosave"), testAutosaveName},
+        {QStringLiteral("refboard"), testReferenceBoard},
     };
     bool found = false;
     for (const auto &test : tests) {

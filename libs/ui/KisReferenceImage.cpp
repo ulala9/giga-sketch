@@ -33,6 +33,7 @@
 #include <KisPart.h>
 
 #include "kis_clipboard.h"
+#include "GigaReferenceBoard.h"
 
 struct KisReferenceImage::Private : public QSharedData
 {
@@ -49,6 +50,11 @@ struct KisReferenceImage::Private : public QSharedData
     qreal saturation{1.0};
     int id{-1};
     bool embed{true};
+
+    // Giga Sketch: Reference Board placement (see KisReferenceImage.h).
+    bool onBoard{false};
+    QRectF boardRect;
+    QColor averageColor; // cache for "sort by colour"; invalid = not computed yet
 
     bool loadFromFile() {
         KIS_SAFE_ASSERT_RECOVER_RETURN_VALUE(!externalFilename.isEmpty(), false);
@@ -341,6 +347,17 @@ void KisReferenceImage::saveXml(QDomDocument &document, QDomElement &parentEleme
     element.setAttribute("opacity", KisDomUtils::toString(1.0 - transparency()));
     element.setAttribute("saturation", KisDomUtils::toString(d->saturation));
 
+    // Giga Sketch: Reference Board. Optional, ignored by stock Krita (the
+    // image then simply shows at its canvas placement).
+    if (d->onBoard) {
+        element.setAttribute("giga-onBoard", "true");
+    }
+    if (d->boardRect.isValid()) {
+        element.setAttribute("giga-boardRect", QString("%1 %2 %3 %4")
+                             .arg(KisDomUtils::toString(d->boardRect.x()), KisDomUtils::toString(d->boardRect.y()),
+                                  KisDomUtils::toString(d->boardRect.width()), KisDomUtils::toString(d->boardRect.height())));
+    }
+
     parentElement.appendChild(element);
 }
 
@@ -372,6 +389,16 @@ KisReferenceImage * KisReferenceImage::fromXml(const QDomElement &elem)
     qreal saturation = KisDomUtils::toDouble(elem.attribute("saturation", "1"));
     reference->setSaturation(saturation);
 
+    // Giga Sketch: Reference Board
+    const QStringList boardRect = elem.attribute("giga-boardRect").split(' ', Qt::SkipEmptyParts);
+    if (boardRect.size() == 4) {
+        const QRectF r(KisDomUtils::toDouble(boardRect[0]), KisDomUtils::toDouble(boardRect[1]),
+                       KisDomUtils::toDouble(boardRect[2]), KisDomUtils::toDouble(boardRect[3]));
+        if (r.isValid()) reference->setBoardRect(r);
+    }
+    // Only goes to the Board if it has somewhere to be drawn there.
+    reference->setOnBoard(elem.attribute("giga-onBoard").toLower() == "true" && reference->boardRect().isValid());
+
     return reference;
 }
 
@@ -387,7 +414,14 @@ bool KisReferenceImage::saveImage(KoStore *store) const
 
     KoStoreDevice storeDev(store);
     if (storeDev.open(QIODevice::WriteOnly)) {
-        saved = d->image.save(&storeDev, "PNG");
+        // Giga Sketch: optional "shrink oversized references when saving".
+        // Only the saved copy is shrunk; the open document is untouched.
+        const QSize target = GigaReferenceBoard::shrinkOnSaveTarget(*this);
+        if (target.isValid() && target.width() < d->image.width()) {
+            saved = d->image.scaled(target, Qt::IgnoreAspectRatio, Qt::SmoothTransformation).save(&storeDev, "PNG");
+        } else {
+            saved = d->image.save(&storeDev, "PNG");
+        }
     }
 
     return store->close() && saved;
@@ -423,4 +457,100 @@ QImage KisReferenceImage::getImage()
 KoShape *KisReferenceImage::cloneShape() const
 {
     return new KisReferenceImage(*this);
+}
+
+// --- Giga Sketch: Reference Board -----------------------------------------
+
+bool KisReferenceImage::isOnBoard() const
+{
+    return d->onBoard;
+}
+
+void KisReferenceImage::setOnBoard(bool onBoard)
+{
+    d->onBoard = onBoard;
+    // Hidden shapes are skipped by the canvas painting, hit-testing and
+    // selection, which is exactly "not on the canvas".
+    setVisible(!onBoard);
+}
+
+QRectF KisReferenceImage::boardRect() const
+{
+    return d->boardRect;
+}
+
+void KisReferenceImage::setBoardRect(const QRectF &rect)
+{
+    d->boardRect = rect;
+}
+
+QSize KisReferenceImage::imagePixelSize() const
+{
+    return d->image.size();
+}
+
+void KisReferenceImage::setImage(const QImage &image)
+{
+    if (image.isNull()) return;
+    d->image = image;
+    d->cachedImage = QImage(); // rebuilt (with mipmaps) on the next paint
+    d->averageColor = QColor();
+}
+
+void KisReferenceImage::paintInRect(QPainter &gc, const QRectF &target) const
+{
+    if (d->image.isNull() || target.isEmpty()) return;
+
+    if (d->cachedImage.isNull()) {
+        const_cast<KisReferenceImage*>(this)->d->updateCache();
+    }
+
+    gc.save();
+    QTransform transform = QTransform::fromScale(target.width() / d->image.width(), target.height() / d->image.height());
+    transform *= QTransform::fromTranslate(target.x(), target.y());
+
+    const qreal dpr = gc.device() ? gc.device()->devicePixelRatioF() : 1.0;
+    qreal scale = 1.0;
+    QImage prescaled = d->mipmap.getClosestWithoutWorkaroundBorder(transform * QTransform::fromScale(dpr, dpr) * gc.transform(), &scale);
+    QTransform drawTransform = QTransform::fromScale(1.0 / scale, 1.0 / scale) * transform;
+
+    gc.setRenderHint(QPainter::SmoothPixmapTransform, scale <= 1.0);
+    gc.setClipRect(target, Qt::IntersectClip);
+    gc.setTransform(drawTransform, true);
+    gc.drawImage(QPoint(), prescaled);
+    gc.restore();
+}
+
+QColor KisReferenceImage::pixelAtNormalized(const QPointF &uv)
+{
+    if (d->cachedImage.isNull()) {
+        d->updateCache();
+    }
+    if (d->cachedImage.isNull()) return QColor();
+    const QPoint p(qBound(0, int(uv.x() * d->cachedImage.width()), d->cachedImage.width() - 1),
+                   qBound(0, int(uv.y() * d->cachedImage.height()), d->cachedImage.height() - 1));
+    return d->cachedImage.pixelColor(p);
+}
+
+QColor KisReferenceImage::averageColor() const
+{
+    if (!d->averageColor.isValid() && !d->image.isNull()) {
+        // Nearest-neighbour shrink of a huge image is cheap (16x16 samples).
+        const QImage small = d->image.scaled(16, 16, Qt::IgnoreAspectRatio, Qt::FastTransformation)
+                                 .convertToFormat(QImage::Format_ARGB32);
+        qreal r = 0, g = 0, b = 0, a = 0;
+        for (int y = 0; y < small.height(); ++y) {
+            for (int x = 0; x < small.width(); ++x) {
+                const QColor c = small.pixelColor(x, y);
+                r += c.redF() * c.alphaF();
+                g += c.greenF() * c.alphaF();
+                b += c.blueF() * c.alphaF();
+                a += c.alphaF();
+            }
+        }
+        QColor avg = a > 0 ? QColor::fromRgbF(r / a, g / a, b / a) : QColor(Qt::gray);
+        // Cache through a const_cast the same way paint() caches its mipmaps.
+        const_cast<KisReferenceImage*>(this)->d->averageColor = avg;
+    }
+    return d->averageColor;
 }
