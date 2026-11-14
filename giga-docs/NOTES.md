@@ -399,6 +399,10 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   setMainWindowLayoutForCurrentMainWidget); begin/endRestore around restoreWorkspaceState (it hides every dock);
   JSON per mode in kritarc `gigaModeFloatingPanels<mode>` (GigaInterfaceModes::switchTo: save+dockAll when leaving,
   setStorageKey+restoreSaved when entering/at startup). Setting `gigaInWindowPanels` (Preferences > General > Window).
+- Snapping (fix/panel-snap, 2026-11-14): `snap(r, self)` must skip the dragged panel by identity -- mid-drag its
+  geometry is last frame's, so a geometry compare let it snap to itself (~11 px steps, "moves on a grid"). Other
+  panels' x-edges only count if the panels overlap vertically (±SNAP_DISTANCE), y-edges if they overlap horizontally.
+  Ctrl held = no snap (QGuiApplication::keyboardModifiers). Self-test `panelsnap` (Ctrl not testable there).
 - KoDockWidgetTitleBar::setFloatRequestHandler (libs/widgets, additive): float button visible when a handler exists,
   click → handler first. Photoshop header's Float/Dock menu item goes through the manager.
 - Flyout: drag title row (GigaPanelFlyout::onTearOff) or pin button → floating panel; strip buttons have property

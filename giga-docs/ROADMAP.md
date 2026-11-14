@@ -7,9 +7,8 @@ branches, and move things between sections as part of every merge. How the code 
 Last updated: 2026-11-14
 
 ## Resume here
-- **Next up:** `fix/panel-snap` — floating panels feel "on a grid" while dragging (user report 2026-11-14). Cause:
-  `snap()` uses every other panel's edges as full-window lines. Fix: only snap to panels you're next to, Ctrl = no snap.
-- Repo state: `fix/mode-switch-double-restore` merged and pushed. Text tools are "okish"; don't push more text work.
+- **Next up:** nothing queued — all four phases done. Ask the user what they want next (new UI reports, backlog ideas).
+- Repo state: `fix/panel-snap` merged and pushed. Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
 - UI checks: `giga-tools/selftest.sh all` (headless-ish UI self-tests, see NOTES.md "UI self-tests").
@@ -55,7 +54,7 @@ Last updated: 2026-11-14
 - [x] Panels float inside the window: tear-off by tab/title/strip, drag back to dock, per-mode memory (`feature/in-window-panels`)
 - [x] Floating panels stay on top on tab changes; header buttons instead of ≡ menu (`fix/floating-panel-tabs`)
 - [x] Mode switch: no stale layout restore, each mode keeps its floating panels (`fix/mode-switch-double-restore`)
-- [ ] Panel snapping only to adjacent panels, Ctrl = free move (`fix/panel-snap`)
+- [x] Smooth panel dragging (no self-snap), snapping only to adjacent panels, Ctrl = free move (`fix/panel-snap`)
 - [x] Save Dated JPG, Ctrl+Space zoom toward pointer, no brush-switch popup
 - [ ] Nothing queued. Add UI requests here as the user reports them.
 
