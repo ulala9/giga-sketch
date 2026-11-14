@@ -11,6 +11,7 @@
 
 class QDockWidget;
 class QLabel;
+class QMenu;
 class QMainWindow;
 class QToolButton;
 
@@ -38,13 +39,21 @@ public:
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
+    /// Floating (inside the window, or as Qt's own floating window)?
+    bool isFloatingHere() const;
+    /// Float/Dock button tooltip follows the panel's state.
+    void updateFloatButton();
+
     QPointer<QDockWidget> m_dock;
     QPointer<QMainWindow> m_mainWindow;
     QLabel *m_title {nullptr};
     QToolButton *m_collapse {nullptr};
-    QToolButton *m_menu {nullptr};
+    QToolButton *m_float {nullptr};
+    QToolButton *m_close {nullptr};
+    QMenu *m_contextMenu {nullptr};
     bool m_collapsed {false};
     int m_expandedMaxHeight {QWIDGETSIZE_MAX};
 };

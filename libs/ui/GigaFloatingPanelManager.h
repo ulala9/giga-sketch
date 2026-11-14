@@ -136,6 +136,9 @@ private:
     bool m_restoringSaved {false};
     QObject *m_raiseFilter {nullptr}; ///< app-wide, presses only
     QPointer<QWidget> m_dropHighlight;
+    /// The canvas area (central widget), watched for being raised: Qt raises
+    /// it whenever a panel-group tab changes, which would bury the panels.
+    QPointer<QWidget> m_watchedCentral;
 
     struct TitleDrag {
         QPointer<QDockWidget> dock;

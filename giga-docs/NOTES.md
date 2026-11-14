@@ -424,9 +424,24 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Only runs during panel drags (not painting); cost per move is a loop over ~30 docks.
 - Gotcha: Qt can report a docked panel as `isVisible()` while it sits parked outside the window at a stale position (seen with Photoshop-mode groups). `dropTargetAt()` only counts docks whose rect is inside the window and doesn't touch the canvas, and only trusts a tab bar that sits directly on its panel. Before that, the right-side column union grew to almost the whole window, giving a huge highlight.
 
+### In-window panels: buried by tab changes (fix/floating-panel-tabs)
+- Bug: clicking a tab in a docked panel group hid every floating panel (they came back when painting created a child
+  widget → m_raiseTimer). Cause is in Qt: `QMainWindowLayout::tabChanged()` calls `centralWidget()->raise()`.
+  The panels were still "visible", just under the canvas — tests must check `childAt(panel centre)`, not isVisible().
+- Fix: the manager watches the central widget (installed on first float) and on `QEvent::ZOrderChange` calls
+  raiseAllFrames() synchronously. Raising siblings doesn't send ZOrderChange to the canvas, so no loop.
+- Photoshop header (`GigaPanelTitleBar`): the ≡ menu is gone; Float/Dock (docker_float icon) and Close (docker_close,
+  Shift+click = close tab group) are direct buttons. The old menu is on right-click of the header.
+- Found, not fixed yet: Photoshop mode → Studio, then drag a panel-group tab → segfault in Qt
+  (QDockAreaLayoutInfo::tabIndexToListIndex via QTabBar slide/moveTab). Repro: `GIGA_MODE` unset, alternate modes in
+  the tabswitch test. Same-mode drags are fine.
+
 ## UI self-tests (dev hook)
 - `giga-tools/selftest.sh <name|all>` runs Giga Sketch in a throw-away HOME/XDG_CONFIG_HOME with `GIGA_SELFTEST=<name>`, prints only `GIGA_SELFTEST PASS/FAIL/INFO/DONE` lines, exit code = failures.
 - Code: `libs/ui/GigaSelfTest.cpp` (called from the KisMainWindow ctor via `GigaSelfTest::maybeRun`; no-op without the env var). Helpers: `report()`, `info()`, `pump()`, `drag(widget, localStart, globalEnd, steps, beforeRelease)`. Add a test function and a row in `runNamed()`'s table. `GIGA_SELFTEST_DELAY` (ms, default 5000) delays the start.
 - Ends with `_Exit(failures)` to skip Krita's shutdown prompts.
-- Existing tests: `panels` (float/dock, drop onto Layers, left/right edge, middle, title-bar tear-off).
+- Existing tests: `panels` (float/dock, drop onto Layers, left/right edge, middle, title-bar tear-off);
+  `tabswitch` (opens a document — the Welcome page hides all panels — floats History by API / tab drag / title drag in
+  Studio then Photoshop, clicks every group tab, checks the panel is on top). `GIGA_MODE=<0|1>`, `GIGA_HOW=<0|1|2>` pin it.
+- The `drag()` helper sends events to `QWidget::mouseGrabber()` when there is one (like Qt does).
 - Gotcha: a non-front tab in a dock group keeps a stale position; `raise()` it before aiming at it.
