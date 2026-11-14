@@ -278,6 +278,17 @@ GigaFloatingPanel *GigaFloatingPanelManager::floatPanel(QDockWidget *dock, const
 
     const QRect wanted = geometry.isEmpty() ? defaultGeometryFor(dock) : geometry;
 
+    // Qt's QMainWindowLayout::tabChanged() calls centralWidget()->raise()
+    // whenever a tab in a docked panel group changes; that put the canvas on
+    // top of every floating panel. Watch the canvas area and put the panels
+    // back on top when that happens (see eventFilter).
+    QWidget *central = m_mainWindow->centralWidget();
+    if (central && central != m_watchedCentral) {
+        if (m_watchedCentral) m_watchedCentral->removeEventFilter(this);
+        m_watchedCentral = central;
+        central->installEventFilter(this);
+    }
+
     m_mainWindow->removeDockWidget(dock);
     GigaFloatingPanel *panel = new GigaFloatingPanel(dock, m_mainWindow);
     // Inside the frame Qt must not try to drag or float it itself.
@@ -729,6 +740,14 @@ bool GigaFloatingPanelManager::handleTearOffDrag(QWidget *source, QDockWidget *p
 bool GigaFloatingPanelManager::eventFilter(QObject *watched, QEvent *event)
 {
     const QEvent::Type type = event->type();
+
+    if (watched == m_watchedCentral.data()) {
+        // The canvas was raised (by Qt on a tab change, or anything else):
+        // floating panels back on top, right away so nothing flickers.
+        // Raising the panels doesn't send this event to the canvas again.
+        if (type == QEvent::ZOrderChange && !m_panels.isEmpty()) raiseAllFrames();
+        return false;
+    }
 
     if (watched == m_mainWindow) {
         if (type == QEvent::Resize) {

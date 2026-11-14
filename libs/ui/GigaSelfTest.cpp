@@ -7,12 +7,18 @@
 
 #include "GigaFloatingPanel.h"
 #include "GigaFloatingPanelManager.h"
+#include "GigaInterfaceModes.h"
 #include "KisMainWindow.h"
+#include "KisDocument.h"
+#include "KisPart.h"
+#include <KoColor.h>
+#include <KoColorSpaceRegistry.h>
 
 #include <QApplication>
 #include <QDockWidget>
 #include <QMouseEvent>
 #include <QPointer>
+#include <QTabBar>
 #include <QTimer>
 
 #include <cstdio>
@@ -55,15 +61,25 @@ void drag(QWidget *target, const QPoint &localStart, const QPoint &globalEnd, in
     const QPoint g0 = target->mapToGlobal(localStart);
     QMouseEvent press(QEvent::MouseButtonPress, localStart, g0, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(target, &press);
+    // Like Qt: while a widget grabs the mouse, it gets the events.
+    QPointer<QWidget> pressed = target;
+    auto receiver = [&pressed]() -> QWidget * {
+        QWidget *grabber = QWidget::mouseGrabber();
+        return grabber ? grabber : pressed.data();
+    };
     for (int i = 1; i <= steps; ++i) {
         const QPoint g = g0 + (globalEnd - g0) * i / steps;
-        QMouseEvent move(QEvent::MouseMove, target->mapFromGlobal(g), g, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
-        QCoreApplication::sendEvent(target, &move);
+        QWidget *r = receiver();
+        if (!r) return;
+        QMouseEvent move(QEvent::MouseMove, r->mapFromGlobal(g), g, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(r, &move);
     }
     if (beforeRelease) beforeRelease();
-    QMouseEvent release(QEvent::MouseButtonRelease, target->mapFromGlobal(globalEnd), globalEnd, Qt::LeftButton,
+    QWidget *r = receiver();
+    if (!r) return;
+    QMouseEvent release(QEvent::MouseButtonRelease, r->mapFromGlobal(globalEnd), globalEnd, Qt::LeftButton,
                         Qt::NoButton, Qt::NoModifier);
-    QCoreApplication::sendEvent(target, &release);
+    QCoreApplication::sendEvent(r, &release);
     pump();
 }
 
@@ -148,10 +164,132 @@ void testPanels(KisMainWindow *w)
     m->dockAll(true);
 }
 
+/// The main window's tab bar that has a tab titled @p title (a docked panel group).
+QTabBar *tabBarWith(KisMainWindow *w, const QString &title, int *index)
+{
+    for (QTabBar *bar : w->findChildren<QTabBar *>(QString(), Qt::FindDirectChildrenOnly)) {
+        if (!bar->isVisible()) continue;
+        for (int i = 0; i < bar->count(); ++i) {
+            if (bar->tabText(i) == title) { *index = i; return bar; }
+        }
+    }
+    return nullptr;
+}
+
+void clickTab(QTabBar *bar, int index)
+{
+    const QPoint p = bar->tabRect(index).center();
+    const QPoint g = bar->mapToGlobal(p);
+    QMouseEvent press(QEvent::MouseButtonPress, p, g, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(bar, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, p, g, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(bar, &release);
+    pump();
+}
+
+/// User report: float a panel, then switch tabs in a docked group on the
+/// right -> the floating panel disappears.
+void testTabSwitch(KisMainWindow *w)
+{
+    GigaFloatingPanelManager *m = w->gigaFloatingPanels();
+    QWidget *canvas = w->centralWidget();
+    GigaInterfaceModes *modes = w->findChild<GigaInterfaceModes *>();
+    if (!m || !canvas || !modes) { report(false, "setup", QStringLiteral("no manager, canvas or modes")); return; }
+
+    // Leave the Welcome page (it hides every panel): open a document.
+    KisDocument *doc = KisPart::instance()->createDocument();
+    KisPart::instance()->addDocument(doc, false);
+    const KoColorSpace *cs = KoColorSpaceRegistry::instance()->rgb8();
+    doc->newImage(QStringLiteral("selftest"), 800, 600, cs, KoColor(Qt::white, cs), KisConfig::RASTER_LAYER, 1, QString(), 1.0);
+    w->showDocument(doc);
+    pump(20);
+
+    for (int run = 0; run < 6; ++run) {
+        const int mode = qEnvironmentVariableIsSet("GIGA_MODE") ? qEnvironmentVariableIntValue("GIGA_MODE") : (run < 3 ? int(GigaInterfaceModes::Studio) : int(GigaInterfaceModes::Photoshop));
+        const int how = qEnvironmentVariableIsSet("GIGA_HOW") ? qEnvironmentVariableIntValue("GIGA_HOW") : run % 3; // 0 = API, 1 = drag its tab, 2 = drag its title bar
+        modes->setMode(mode);
+        pump(10);
+        w->applyGigaLayout();
+        pump(10);
+        const QString tag = (mode == GigaInterfaceModes::Studio ? QStringLiteral("studio") : QStringLiteral("photoshop"))
+            + (how == 0 ? QStringLiteral("-api") : how == 1 ? QStringLiteral("-tabdrag") : QStringLiteral("-titledrag"));
+
+        QDockWidget *hist = w->dockWidget(QStringLiteral("History"));
+        QDockWidget *layers = w->dockWidget(QStringLiteral("KisLayerBox"));
+        if (!hist || !layers) { report(false, "setup", QStringLiteral("missing panels")); return; }
+        const QRect mid(canvas->geometry().center() - QPoint(150, 150), QSize(300, 300));
+        hist->raise();
+        pump(10);
+        const QPoint target = canvas->mapToGlobal(canvas->rect().center());
+        if (how == 0) {
+            m->floatPanel(hist, mid);
+        } else if (how == 1) {
+            int idx = -1;
+            QTabBar *bar = tabBarWith(w, hist->windowTitle(), &idx);
+            if (!bar) { report(false, qPrintable(tag), QStringLiteral("History has no tab")); continue; }
+            drag(bar, bar->tabRect(idx).center(), target, 8);
+        } else {
+            drag(hist, QPoint(30, 8), target, 8);
+        }
+        pump(10);
+        if (!m->isFloating(hist)) { report(false, qPrintable(tag), QStringLiteral("did not float")); m->dockAll(true); pump(10); continue; }
+        GigaFloatingPanel *frame = qobject_cast<GigaFloatingPanel *>(hist->parentWidget());
+        info(tag + QStringLiteral(": floating=%1 frameVisible=%2 frameHidden=%3 windowVisible=%4 histHidden=%5 frameGeom=%6")
+                 .arg(m->isFloating(hist)).arg(frame && frame->isVisible()).arg(frame && frame->isHidden())
+                 .arg(w->isVisible()).arg(hist->isHidden()).arg(frame ? rectText(frame->geometry()) : QString()));
+
+        const QRect canvasBefore = canvas->geometry();
+        // Every tab of every visible docked group: click it, check History.
+        QList<QTabBar *> bars = w->findChildren<QTabBar *>(QString(), Qt::FindDirectChildrenOnly);
+        int clicks = 0;
+        bool ok = true;
+        QString firstBad;
+        for (QTabBar *bar : bars) {
+            if (!bar->isVisible()) continue;
+            for (int i = 0; i < bar->count(); ++i) {
+                const QString t = bar->tabText(i);
+                clickTab(bar, i);
+                ++clicks;
+                frame = qobject_cast<GigaFloatingPanel *>(hist->parentWidget());
+                bool visible = frame && frame->isVisible() && !hist->isHidden();
+                QString cover;
+                if (visible) {
+                    // What is really on top at the panel's centre?
+                    QWidget *top = w->childAt(frame->geometry().center());
+                    if (!top || !(top == frame || frame->isAncestorOf(top))) {
+                        visible = false;
+                        QWidget *topLevelChild = top;
+                        while (topLevelChild && topLevelChild->parentWidget() != w) topLevelChild = topLevelChild->parentWidget();
+                        cover = top ? QStringLiteral(" covered by %1 '%2' (window child %3 '%4' %5 hidden=%6)")
+                                          .arg(QString::fromLatin1(top->metaObject()->className()), top->objectName(),
+                                               topLevelChild ? QString::fromLatin1(topLevelChild->metaObject()->className()) : QString(),
+                                               topLevelChild ? topLevelChild->objectName() : QString(),
+                                               topLevelChild ? rectText(topLevelChild->geometry()) : QString())
+                                          .arg(topLevelChild && topLevelChild->isHidden())
+                                    : QStringLiteral(" nothing at centre");
+                    }
+                }
+                if (!visible && ok) {
+                    ok = false;
+                    firstBad = QStringLiteral("after clicking tab '%1': frame=%2 frameVisible=%3 dockHidden=%4 parent=%5")
+                                   .arg(t).arg(frame != nullptr).arg(frame && frame->isVisible()).arg(hist->isHidden())
+                                   .arg(hist->parentWidget() ? QString::fromLatin1(hist->parentWidget()->metaObject()->className()) : QStringLiteral("none")) + cover;
+                }
+            }
+        }
+        info(tag + QStringLiteral(": canvas %1 -> %2").arg(rectText(canvasBefore), rectText(canvas->geometry())));
+        report(ok && clicks > 0, qPrintable(tag + QStringLiteral("-click-tabs")),
+               ok ? QStringLiteral("History still shown after %1 tab clicks").arg(clicks) : firstBad);
+        m->dockAll(true);
+        pump(10);
+    }
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
         {QStringLiteral("panels"), testPanels},
+        {QStringLiteral("tabswitch"), testTabSwitch},
     };
     bool found = false;
     for (const auto &test : tests) {

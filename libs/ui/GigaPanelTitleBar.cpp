@@ -9,7 +9,9 @@
 #include "GigaFloatingPanelManager.h"
 #include "KisMainWindow.h"
 
+#include <QContextMenuEvent>
 #include <QDockWidget>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMainWindow>
@@ -19,6 +21,7 @@
 #include <QToolButton>
 
 #include <klocalizedstring.h>
+#include <kis_icon_utils.h>
 
 namespace {
 constexpr int HEADER_HEIGHT = 22;
@@ -64,39 +67,80 @@ GigaPanelTitleBar::GigaPanelTitleBar(QDockWidget *dock, QMainWindow *mainWindow)
     QObject::connect(m_collapse, &QToolButton::clicked, this, [this]() { setCollapsed(!m_collapsed); });
     layout->addWidget(m_collapse);
 
-    m_menu = makeButton(QStringLiteral("≡"), i18nc("@info:tooltip", "Panel menu"));
-    m_menu->setPopupMode(QToolButton::InstantPopup);
-    QMenu *menu = new QMenu(m_menu);
-    QObject::connect(menu->addAction(i18nc("@action:inmenu panel menu", "Collapse / Expand")),
-                     &QAction::triggered, this, [this]() { setCollapsed(!m_collapsed); });
-    QAction *floatAction = menu->addAction(i18nc("@action:inmenu panel menu", "Float"));
-    QObject::connect(floatAction, &QAction::triggered, this, [this]() {
+    // Float/Dock and Close are buttons right on the header (one click),
+    // not hidden in a menu. The same actions are on a right-click menu,
+    // with Close Tab Group.
+    auto toggleFloat = [this]() {
         if (!m_dock) return;
         // Float inside the window when that's on; otherwise Qt's own floating.
         KisMainWindow *window = qobject_cast<KisMainWindow *>(m_mainWindow);
         GigaFloatingPanelManager *manager = window ? window->gigaFloatingPanels() : nullptr;
         if (manager && manager->toggleFloat(m_dock)) return;
         m_dock->setFloating(!m_dock->isFloating());
-    });
-    QObject::connect(menu, &QMenu::aboutToShow, this, [this, floatAction]() {
-        KisMainWindow *window = qobject_cast<KisMainWindow *>(m_mainWindow);
-        GigaFloatingPanelManager *manager = window ? window->gigaFloatingPanels() : nullptr;
-        const bool floating = m_dock && manager && manager->isFloating(m_dock);
-        floatAction->setText(floating ? i18nc("@action:inmenu panel menu", "Dock")
-                                      : i18nc("@action:inmenu panel menu", "Float"));
-    });
-    menu->addSeparator();
-    QObject::connect(menu->addAction(i18nc("@action:inmenu panel menu", "Close")),
-                     &QAction::triggered, this, [this]() { if (m_dock) m_dock->hide(); });
-    QObject::connect(menu->addAction(i18nc("@action:inmenu panel menu", "Close Tab Group")),
-                     &QAction::triggered, this, [this]() {
+    };
+    auto closeGroup = [this]() {
         if (!m_dock || !m_mainWindow) return;
         const QList<QDockWidget *> group = m_mainWindow->tabifiedDockWidgets(m_dock);
         for (QDockWidget *other : group) other->hide();
         m_dock->hide();
+    };
+
+    m_float = makeButton(QString(), QString());
+    m_float->setIcon(KisIconUtils::loadIcon("docker_float"));
+    m_float->setIconSize(QSize(12, 12));
+    QObject::connect(m_float, &QToolButton::clicked, this, toggleFloat);
+    layout->addWidget(m_float);
+
+    m_close = makeButton(QString(), i18nc("@info:tooltip", "Close this panel (Shift+click: close its whole tab group)"));
+    m_close->setIcon(KisIconUtils::loadIcon("docker_close"));
+    m_close->setIconSize(QSize(12, 12));
+    QObject::connect(m_close, &QToolButton::clicked, this, [this, closeGroup]() {
+        if (QGuiApplication::keyboardModifiers().testFlag(Qt::ShiftModifier)) {
+            closeGroup();
+        } else if (m_dock) {
+            m_dock->hide();
+        }
     });
-    m_menu->setMenu(menu);
-    layout->addWidget(m_menu);
+    layout->addWidget(m_close);
+
+    // Right-click on the header: the same actions as a menu.
+    m_contextMenu = new QMenu(this);
+    QObject::connect(m_contextMenu->addAction(i18nc("@action:inmenu panel menu", "Collapse / Expand")),
+                     &QAction::triggered, this, [this]() { setCollapsed(!m_collapsed); });
+    QAction *floatAction = m_contextMenu->addAction(i18nc("@action:inmenu panel menu", "Float"));
+    QObject::connect(floatAction, &QAction::triggered, this, toggleFloat);
+    QObject::connect(m_contextMenu, &QMenu::aboutToShow, this, [this, floatAction]() {
+        floatAction->setText(isFloatingHere() ? i18nc("@action:inmenu panel menu", "Dock")
+                                              : i18nc("@action:inmenu panel menu", "Float"));
+    });
+    m_contextMenu->addSeparator();
+    QObject::connect(m_contextMenu->addAction(i18nc("@action:inmenu panel menu", "Close")),
+                     &QAction::triggered, this, [this]() { if (m_dock) m_dock->hide(); });
+    QObject::connect(m_contextMenu->addAction(i18nc("@action:inmenu panel menu", "Close Tab Group")),
+                     &QAction::triggered, this, closeGroup);
+    setContextMenuPolicy(Qt::DefaultContextMenu);
+    updateFloatButton();
+}
+
+bool GigaPanelTitleBar::isFloatingHere() const
+{
+    KisMainWindow *window = qobject_cast<KisMainWindow *>(m_mainWindow);
+    GigaFloatingPanelManager *manager = window ? window->gigaFloatingPanels() : nullptr;
+    return m_dock && ((manager && manager->isFloating(m_dock)) || m_dock->isFloating());
+}
+
+void GigaPanelTitleBar::updateFloatButton()
+{
+    if (!m_float) return;
+    const QString tip = isFloatingHere() ? i18nc("@info:tooltip", "Dock this panel back")
+                                         : i18nc("@info:tooltip", "Float this panel over the canvas");
+    if (m_float->toolTip() != tip) m_float->setToolTip(tip);
+}
+
+void GigaPanelTitleBar::contextMenuEvent(QContextMenuEvent *event)
+{
+    if (m_contextMenu) m_contextMenu->popup(event->globalPos());
+    event->accept();
 }
 
 QSize GigaPanelTitleBar::sizeHint() const
@@ -111,6 +155,9 @@ QSize GigaPanelTitleBar::minimumSizeHint() const
 
 void GigaPanelTitleBar::paintEvent(QPaintEvent *)
 {
+    // The header repaints whenever its panel floats or docks (it moves to a
+    // new parent): keep the Float/Dock tooltip in step. Only a string compare.
+    updateFloatButton();
     QPainter p(this);
     p.fillRect(rect(), QColor(35, 35, 37));
     p.setPen(QColor(24, 24, 26));
