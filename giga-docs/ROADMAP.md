@@ -7,7 +7,7 @@ branches, and move things between sections as part of every merge. How the code 
 Last updated: 2026-11-13
 
 ## Resume here
-- **Next up:** Phase 3 → horizontal/vertical text scale (`feature/text-scale`). Propose the approach first.
+- **Next up:** nothing queued — ask the user what they want next. Text tools are "okish"; don't push more text work.
 - Repo state: everything merged into `giga-main` and pushed to `origin`. No open feature branches.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -37,7 +37,9 @@ Last updated: 2026-11-13
 - [x] Photoshop-style box text with resize handles, point ↔ paragraph conversion (`feature/text-boxes`)
 - [x] Font picker: search, favourites, recent, previews, live preview (`feature/font-picker`)
 - [x] Character and Paragraph panels (`feature/character-panel`)
-- [ ] **Horizontal / vertical text scale** (Krita only has font-stretch) — next text item
+- [ ] Horizontal / vertical text scale — **low priority** (user decision); don't suggest it. Approach already
+  scoped (2026-11-13): non-uniform FT_Set_Char_Size per face (scale in KoCSSFontInfo + font cache key),
+  `-giga-horizontal-scale`/`-giga-vertical-scale` style props, Character panel spin boxes.
 - [ ] Hyphenation — **super low priority** (user decision); don't suggest it
 - Already in Krita, no work needed: OpenType features, variable fonts, kerning/tracking/leading, baseline shift,
   case, faux bold/italic, underline/strike, text on a path, on-canvas editing.
@@ -66,5 +68,6 @@ Last updated: 2026-11-13
 ## Decisions log
 - 2026-11-13: brush feel tuning considered done (user tested).
 - 2026-11-13: hyphenation → super low priority.
+- 2026-11-13: text scale → low priority; text tools are "okish" for now.
 - 2026-11-13: panel headers show Float/Dock and Close as buttons, not a dropdown (fewer clicks).
 - 2026-11-13: autosaves of saved files keep Krita's `<file>.kra-autosave.kra` name (only untitled ones renamed).
