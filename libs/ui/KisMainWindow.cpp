@@ -853,6 +853,7 @@ const GigaPanelEntry GIGA_PANELS[] = {
     {"KisLayerBox", "all-layers"},
     {"ChannelDocker", "color-adjustment-mode-channels"},
     {"History", "edit-undo"},
+    {"GigaReferenceBoard", "krita_tool_reference_images"},
 };
 }
 

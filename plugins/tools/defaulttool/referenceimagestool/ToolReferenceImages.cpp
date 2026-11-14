@@ -32,6 +32,9 @@
 #include "QClipboard"
 #include "kis_action.h"
 #include <KisCursorOverrideLock.h>
+#include <GigaReferenceBoard.h>
+#include <KisMainWindow.h>
+#include <QDockWidget>
 
 #include "ToolReferenceImagesWidget.h"
 #include "KisReferenceImageCollection.h"
@@ -358,6 +361,19 @@ QMenu* ToolReferenceImages::popupActionsMenu()
         m_contextMenu->addAction(action("object_order_raise"));
         m_contextMenu->addAction(action("object_order_lower"));
         m_contextMenu->addAction(action("object_order_back"));
+
+        // Giga Sketch: Reference Board
+        m_contextMenu->addSeparator();
+        m_contextMenu->addAction(i18n("Normalize Sizes"), this, SLOT(gigaNormalize()));
+        m_contextMenu->addAction(i18n("Arrange"), this, SLOT(gigaArrange()));
+        m_contextMenu->addAction(KisIconUtils::loadIcon("krita_tool_reference_images"), i18n("Send to Reference Board"),
+                                 this, SLOT(gigaSendToBoard()));
+        const QString summary = GigaReferenceBoard::resampleSummary(gigaTargets());
+        QAction *resample = m_contextMenu->addAction(
+            summary.isEmpty() ? i18n("Resample to Current Size (already small)")
+                              : i18n("Resample to Current Size (%1)", summary),
+            this, SLOT(gigaResample()));
+        resample->setEnabled(!summary.isEmpty());
     }
 
     return m_contextMenu.data();
@@ -391,6 +407,7 @@ bool ToolReferenceImages::selectAll()
 {
     Q_FOREACH(KoShape *shape, shapeManager()->shapes()) {
         if (!shape->isSelectable()) continue;
+        if (!shape->isVisible()) continue; // Giga Sketch: skip images on the Reference Board
         koSelection()->select(shape);
     }
     repaintDecorations();
@@ -436,4 +453,99 @@ QList<QAction *> ToolReferenceImagesFactory::createActionsImpl()
         }
     }
     return actions;
+}
+
+// --- Giga Sketch: Reference Board -------------------------------------------
+
+QVector<KisReferenceImage*> ToolReferenceImages::gigaTargets() const
+{
+    QVector<KisReferenceImage*> images;
+    if (koSelection()) {
+        Q_FOREACH (KoShape *shape, koSelection()->selectedEditableShapes()) {
+            auto *reference = dynamic_cast<KisReferenceImage*>(shape);
+            if (reference && !reference->isOnBoard()) images.append(reference);
+        }
+    }
+    if (images.isEmpty()) {
+        images = GigaReferenceBoard::canvasImages(m_layer.toStrongRef().data());
+    }
+    return images;
+}
+
+void ToolReferenceImages::gigaNormalize()
+{
+    const GigaReferenceBoard::Settings settings = GigaReferenceBoard::Settings::load();
+    KisReferenceImage *matchTo = nullptr;
+    if (koSelection() && !koSelection()->selectedEditableShapes().isEmpty()) {
+        // "Match selected" = the image selected last.
+        matchTo = dynamic_cast<KisReferenceImage*>(koSelection()->selectedEditableShapes().last());
+    }
+    GigaReferenceBoard::GeometryCommand *cmd = GigaReferenceBoard::normalizeOnCanvas(gigaTargets(), settings.normalizeMode, matchTo);
+    if (!cmd) return;
+    canvas()->addCommand(cmd);
+    GigaReferenceBoard::animateOnCanvas(cmd);
+}
+
+void ToolReferenceImages::gigaArrange()
+{
+    const GigaReferenceBoard::Settings settings = GigaReferenceBoard::Settings::load();
+    GigaReferenceBoard::GeometryCommand *cmd =
+        GigaReferenceBoard::arrangeOnCanvas(gigaTargets(), settings, canvas(), m_layer.toStrongRef().data());
+    if (!cmd) return;
+    canvas()->addCommand(cmd);
+    GigaReferenceBoard::animateOnCanvas(cmd);
+}
+
+void ToolReferenceImages::gigaSendToBoard()
+{
+    auto layer = m_layer.toStrongRef();
+    if (!layer) return;
+    KUndo2Command *cmd = GigaReferenceBoard::sendToBoard(gigaTargets(), layer.data(), GigaReferenceBoard::Settings::load());
+    if (!cmd) return;
+    canvas()->addCommand(cmd);
+    repaintDecorations();
+
+    auto kisCanvas = dynamic_cast<KisCanvas2*>(canvas());
+    if (kisCanvas && kisCanvas->viewManager()) {
+        // Open the Board panel if it is hidden, so the images don't seem to vanish.
+        if (KisMainWindow *window = kisCanvas->viewManager()->mainWindow()) {
+            QDockWidget *board = window->dockWidget(QStringLiteral("GigaReferenceBoard"));
+            if (board && !board->isVisible()) {
+                board->show();
+                board->raise();
+            }
+        }
+        kisCanvas->viewManager()->showFloatingMessage(i18n("Sent to the Reference Board panel"),
+                                                      KisIconUtils::loadIcon("krita_tool_reference_images"));
+    }
+}
+
+void ToolReferenceImages::gigaSendAllToCanvas()
+{
+    auto layer = m_layer.toStrongRef();
+    if (!layer) return;
+    KUndo2Command *cmd = GigaReferenceBoard::sendToCanvas(GigaReferenceBoard::boardImages(layer.data()));
+    if (cmd) canvas()->addCommand(cmd);
+}
+
+void ToolReferenceImages::gigaResample()
+{
+    const QVector<KisReferenceImage*> images = gigaTargets();
+    const QString summary = GigaReferenceBoard::resampleSummary(images);
+    KUndo2Command *cmd = nullptr;
+    {
+        KisCursorOverrideLock cursorLock(Qt::BusyCursor); // big images take a moment to scale
+        cmd = GigaReferenceBoard::resample(images);
+    }
+    auto kisCanvas = dynamic_cast<KisCanvas2*>(canvas());
+    if (!cmd) {
+        if (kisCanvas && kisCanvas->viewManager()) {
+            kisCanvas->viewManager()->showFloatingMessage(i18n("These references are already about their shown size"), QIcon());
+        }
+        return;
+    }
+    canvas()->addCommand(cmd);
+    if (kisCanvas && kisCanvas->viewManager()) {
+        kisCanvas->viewManager()->showFloatingMessage(i18n("Resampled: %1", summary), QIcon());
+    }
 }

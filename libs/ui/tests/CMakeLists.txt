@@ -24,6 +24,7 @@ kis_add_tests(
     KisQuickShapeRecognizerTest.cpp
     TestGigaSaveDated.cpp
     TestGigaZoomOption.cpp
+    TestGigaReferenceLayout.cpp
 
     LINK_LIBRARIES kritaui kritalibkis kritatestsdk
     )

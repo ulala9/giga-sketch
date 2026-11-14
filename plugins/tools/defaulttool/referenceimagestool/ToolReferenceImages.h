@@ -22,6 +22,7 @@
 
 class ToolReferenceImagesWidget;
 class KisReferenceImagesLayer;
+class KisReferenceImage;
 
 class ToolReferenceImages : public DefaultTool
 {
@@ -66,6 +67,14 @@ public Q_SLOTS:
     void saveReferenceImages();
     void loadReferenceImages();
 
+    // Giga Sketch: Reference Board (act on the selected images, or on all
+    // canvas images when nothing is selected)
+    void gigaNormalize();
+    void gigaArrange();
+    void gigaSendToBoard();
+    void gigaSendAllToCanvas();
+    void gigaResample();
+
     void slotNodeAdded(KisNodeSP node);
     void slotNodeAdded(KisNodeSP node, KisNodeAdditionFlags flags);
     void slotSelectionChanged();
@@ -84,6 +93,7 @@ private:
     KisWeakSharedPtr<KisReferenceImagesLayer> m_layer;
 
     KisDocument *document() const;
+    QVector<KisReferenceImage*> gigaTargets() const;
     void setReferenceImageLayer(KisSharedPtr<KisReferenceImagesLayer> layer);
 };
 

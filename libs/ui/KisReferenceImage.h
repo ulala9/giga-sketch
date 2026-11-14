@@ -84,6 +84,31 @@ public:
 
     QImage getImage();
 
+    // --- Giga Sketch: Reference Board -------------------------------------
+    // An image "on the Board" is hidden from the painting canvas (its canvas
+    // placement is kept untouched) and drawn by the Reference Board panel at
+    // boardRect() instead. Saved as optional giga-* XML attributes that
+    // stock Krita ignores.
+
+    bool isOnBoard() const;
+    /// Also hides/shows the shape on the canvas. Call update() around it.
+    void setOnBoard(bool onBoard);
+    QRectF boardRect() const;
+    void setBoardRect(const QRectF &rect);
+
+    QSize imagePixelSize() const;
+    /// Replaces the stored pixels (Resample to Current Size). The shape keeps
+    /// its size on the canvas.
+    void setImage(const QImage &image);
+
+    /// Draws the image (with its saturation) stretched into target, using
+    /// the same mipmaps as the canvas. Used by the Board.
+    void paintInRect(QPainter &gc, const QRectF &target) const;
+    /// Colour at uv (0..1 across the image), for Ctrl+click on the Board.
+    QColor pixelAtNormalized(const QPointF &uv);
+    /// Cheap average colour (cached), for "sort by colour".
+    QColor averageColor() const;
+
 private:
     struct Private;
     QSharedDataPointer<Private> d;

@@ -37,6 +37,9 @@ private Q_SLOTS:
     void slotImageValuesChanged();
 
 private:
+    void gigaSetupBoardSection(); // Giga Sketch: Normalize / Arrange / Board
+    void gigaLoadSettings();
+    void gigaSaveSettings();
     struct Private;
     const QScopedPointer<Private> d;
     void updateVisibility(bool hasSelection);
