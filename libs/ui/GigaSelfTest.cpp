@@ -16,6 +16,7 @@
 
 #include <QApplication>
 #include <QDockWidget>
+#include <QElapsedTimer>
 #include <QMouseEvent>
 #include <QPointer>
 #include <QTabBar>
@@ -187,6 +188,79 @@ void clickTab(QTabBar *bar, int index)
     pump();
 }
 
+/// Leave the Welcome page (it hides every panel): open a new document.
+void openTestDocument(KisMainWindow *w)
+{
+    KisDocument *doc = KisPart::instance()->createDocument();
+    KisPart::instance()->addDocument(doc, false);
+    const KoColorSpace *cs = KoColorSpaceRegistry::instance()->rgb8();
+    doc->newImage(QStringLiteral("selftest"), 2000, 1500, cs, KoColor(Qt::white, cs), KisConfig::RASTER_LAYER, 1, QString(), 1.0);
+    w->showDocument(doc);
+    pump(20);
+}
+
+/// User report: moving a floating panel looks choppy. Times each step of a
+/// drag across the canvas: the move itself (geometry, snapping, dock-drop
+/// check) and the repaint that follows.
+void testPanelMove(KisMainWindow *w)
+{
+    GigaFloatingPanelManager *m = w->gigaFloatingPanels();
+    QWidget *canvas = w->centralWidget();
+    if (!m || !canvas) { report(false, "setup", QStringLiteral("no manager or canvas")); return; }
+    openTestDocument(w);
+    w->applyGigaLayout();
+    pump(20);
+
+    const QStringList ids = {QStringLiteral("History"), QStringLiteral("KisLayerBox"), QStringLiteral("PresetDocker"),
+                             QStringLiteral("WideGamutColorSelector")};
+    for (int variant = 0; variant < 2; ++variant)
+    for (const QString &id : ids) {
+        const bool collapsed = variant == 1; // header only: is it the content's repaint?
+        QDockWidget *dock = w->dockWidget(id);
+        if (!dock) { info(QStringLiteral("no panel ") + id); continue; }
+        const QPoint c = canvas->geometry().center();
+        m->floatPanel(dock, QRect(c - QPoint(400, 250), QSize(320, 450)));
+        pump(20);
+        GigaFloatingPanel *frame = qobject_cast<GigaFloatingPanel *>(dock->parentWidget());
+        if (!frame) { report(false, qPrintable(id), QStringLiteral("did not float")); continue; }
+
+        if (collapsed) { frame->setCollapsed(true); pump(10); }
+        const QPoint grab(30, 8);
+        const QPoint g0 = dock->mapToGlobal(grab);
+        QMouseEvent press(QEvent::MouseButtonPress, grab, g0, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(dock, &press);
+        const int steps = 90;
+        qint64 moveNs = 0, paintNs = 0, worstFrameNs = 0;
+        QElapsedTimer total;
+        total.start();
+        for (int i = 1; i <= steps; ++i) {
+            const QPoint g = g0 + QPoint(i * 6, (i % 30) * 3);
+            QElapsedTimer t;
+            t.start();
+            QMouseEvent move(QEvent::MouseMove, dock->mapFromGlobal(g), g, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(dock, &move);
+            const qint64 a = t.nsecsElapsed();
+            qApp->processEvents(); // the repaint (and the flush to the screen)
+            const qint64 b = t.nsecsElapsed();
+            moveNs += a;
+            paintNs += b - a;
+            worstFrameNs = qMax(worstFrameNs, b);
+        }
+        const qint64 totalNs = total.nsecsElapsed();
+        QMouseEvent release(QEvent::MouseButtonRelease, dock->mapFromGlobal(g0), g0, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(dock, &release);
+        pump(10);
+        info(QStringLiteral("%1%7: per step move %2 ms, repaint %3 ms, worst step %4 ms, total %5 ms for %6 steps")
+                 .arg(id).arg(moveNs / steps / 1e6, 0, 'f', 2).arg(paintNs / steps / 1e6, 0, 'f', 2)
+                 .arg(worstFrameNs / 1e6, 0, 'f', 1).arg(totalNs / 1e6, 0, 'f', 0).arg(steps)
+                 .arg(collapsed ? QStringLiteral(" (collapsed)") : QString()));
+        if (collapsed) frame->setCollapsed(false);
+        m->dockAll(true);
+        pump(10);
+    }
+    report(true, "panelmove", QStringLiteral("timings above"));
+}
+
 /// User report: float a panel, then switch tabs in a docked group on the
 /// right -> the floating panel disappears.
 void testTabSwitch(KisMainWindow *w)
@@ -196,13 +270,7 @@ void testTabSwitch(KisMainWindow *w)
     GigaInterfaceModes *modes = w->findChild<GigaInterfaceModes *>();
     if (!m || !canvas || !modes) { report(false, "setup", QStringLiteral("no manager, canvas or modes")); return; }
 
-    // Leave the Welcome page (it hides every panel): open a document.
-    KisDocument *doc = KisPart::instance()->createDocument();
-    KisPart::instance()->addDocument(doc, false);
-    const KoColorSpace *cs = KoColorSpaceRegistry::instance()->rgb8();
-    doc->newImage(QStringLiteral("selftest"), 800, 600, cs, KoColor(Qt::white, cs), KisConfig::RASTER_LAYER, 1, QString(), 1.0);
-    w->showDocument(doc);
-    pump(20);
+    openTestDocument(w);
 
     for (int run = 0; run < 6; ++run) {
         const int mode = qEnvironmentVariableIsSet("GIGA_MODE") ? qEnvironmentVariableIntValue("GIGA_MODE") : (run < 3 ? int(GigaInterfaceModes::Studio) : int(GigaInterfaceModes::Photoshop));
@@ -290,6 +358,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
         {QStringLiteral("panels"), testPanels},
         {QStringLiteral("tabswitch"), testTabSwitch},
+        {QStringLiteral("panelmove"), testPanelMove},
     };
     bool found = false;
     for (const auto &test : tests) {

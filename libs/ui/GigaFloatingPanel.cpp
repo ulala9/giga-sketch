@@ -5,11 +5,112 @@
  */
 #include "GigaFloatingPanel.h"
 
+#include <QApplication>
 #include <QDockWidget>
+#include <QElapsedTimer>
+#include <QHash>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPointingDevice>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <algorithm>
+#include <cstdio>
+
+namespace
+{
+/**
+ * Diagnostics for "moving a panel looks choppy": start Giga Sketch with
+ * GIGA_PANEL_TRACE=1 and every panel drag prints one summary line to the
+ * terminal (move events, gaps between them, frames, who repainted).
+ * Off by default: then the only cost is one bool check per move.
+ */
+class DragTrace : public QObject
+{
+public:
+    static bool enabled()
+    {
+        static const bool on = qEnvironmentVariableIsSet("GIGA_PANEL_TRACE");
+        return on;
+    }
+    static DragTrace &instance()
+    {
+        static DragTrace trace;
+        return trace;
+    }
+    void begin(const QString &name)
+    {
+        m_name = name;
+        m_moves = m_synthesized = m_frames = 0;
+        m_gaps.clear();
+        m_paints.clear();
+        m_device.clear();
+        m_clock.start();
+        m_lastMoveNs = -1;
+        if (!m_active) qApp->installEventFilter(this);
+        m_active = true;
+    }
+    void move(const QMouseEvent *e)
+    {
+        if (!m_active) return;
+        ++m_moves;
+        if (e->source() != Qt::MouseEventNotSynthesized) ++m_synthesized; // e.g. made from pen (tablet) events
+        if (m_device.isEmpty() && e->pointingDevice()) {
+            m_device = e->pointingDevice()->name() + QStringLiteral(" type ") + QString::number(int(e->pointingDevice()->type()));
+        }
+        const qint64 now = m_clock.nsecsElapsed();
+        if (m_lastMoveNs >= 0) m_gaps.append(now - m_lastMoveNs);
+        m_lastMoveNs = now;
+    }
+    void end()
+    {
+        if (!m_active) return;
+        m_active = false;
+        qApp->removeEventFilter(this);
+        const double ms = m_clock.nsecsElapsed() / 1e6;
+        std::sort(m_gaps.begin(), m_gaps.end());
+        auto gap = [this](double q) { return m_gaps.isEmpty() ? 0.0 : m_gaps.at(int(q * (m_gaps.size() - 1))) / 1e6; };
+        QList<QPair<int, QByteArray>> paints;
+        for (auto it = m_paints.constBegin(); it != m_paints.constEnd(); ++it) paints.append({it.value(), it.key()});
+        std::sort(paints.begin(), paints.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+        QString top;
+        for (int i = 0; i < qMin(6, int(paints.size())); ++i) {
+            top += QStringLiteral(" %1=%2").arg(QString::fromLatin1(paints[i].second)).arg(paints[i].first);
+        }
+        fprintf(stderr, "GIGA_PANEL_TRACE %s: %.0f ms, %d moves (%d from pen), gaps ms median %.1f p90 %.1f max %.1f, "
+                        "%d frames (%.0f fps), device %s, paints:%s\n",
+                qPrintable(m_name), ms, m_moves, m_synthesized, gap(0.5), gap(0.9), gap(1.0), m_frames,
+                ms > 0 ? m_frames * 1000.0 / ms : 0.0, qPrintable(m_device), qPrintable(top));
+        fflush(stderr);
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        const QEvent::Type type = event->type();
+        if (type == QEvent::Paint) {
+            ++m_paints[QByteArray(watched->metaObject()->className())];
+        } else if (type == QEvent::UpdateRequest && watched->isWidgetType()
+                   && static_cast<QWidget *>(watched)->isWindow()) {
+            ++m_frames; // one repaint of a window = one frame
+        }
+        return false;
+    }
+
+private:
+    bool m_active {false};
+    QString m_name;
+    QString m_device;
+    int m_moves {0};
+    int m_synthesized {0};
+    int m_frames {0};
+    QList<qint64> m_gaps;
+    QHash<QByteArray, int> m_paints;
+    QElapsedTimer m_clock;
+    qint64 m_lastMoveNs {-1};
+};
+} // namespace
 
 GigaFloatingPanel::GigaFloatingPanel(QDockWidget *dock, QWidget *mainWindow)
     : QFrame(mainWindow) // a plain child widget, never a desktop window
@@ -135,6 +236,7 @@ void GigaFloatingPanel::beginInteractiveMove(const QPointF &globalPos)
     m_pressGlobal = globalPos;
     m_lastGlobal = globalPos;
     m_startGeometry = geometry();
+    if (DragTrace::enabled()) DragTrace::instance().begin(objectName());
     // The button is still held from the flyout or strip; route the rest of
     // the drag (moves and the release) to this frame.
     grabMouse(Qt::ClosedHandCursor);
@@ -175,6 +277,7 @@ void GigaFloatingPanel::finishInteraction()
         m_grabbed = false;
     }
     unsetCursor();
+    if (wasMoving && DragTrace::enabled()) DragTrace::instance().end();
     if (wasActive) Q_EMIT geometryEdited();
     // Last, because the observer may dock the panel (queued, but still).
     if (wasMoving && m_moveObserver) m_moveObserver(this, m_lastGlobal, true);
@@ -193,12 +296,14 @@ bool GigaFloatingPanel::eventFilter(QObject *watched, QEvent *event)
             m_pressGlobal = e->globalPosition();
             m_lastGlobal = m_pressGlobal;
             m_startGeometry = geometry();
+            if (DragTrace::enabled()) DragTrace::instance().begin(objectName());
             return true; // never let QDockWidget start its own drag in here
         }
         break;
     }
     case QEvent::MouseMove:
         if (m_moving) {
+            if (DragTrace::enabled()) DragTrace::instance().move(static_cast<QMouseEvent *>(event));
             moveBy(static_cast<QMouseEvent *>(event)->globalPosition());
             return true;
         }
@@ -245,6 +350,7 @@ void GigaFloatingPanel::mousePressEvent(QMouseEvent *event)
 void GigaFloatingPanel::mouseMoveEvent(QMouseEvent *event)
 {
     if (m_moving) {
+        if (DragTrace::enabled()) DragTrace::instance().move(event);
         moveBy(event->globalPosition()); // a grabbed tear-off drag
     } else if (m_resizeEdges) {
         resizeBy(event->globalPosition());
