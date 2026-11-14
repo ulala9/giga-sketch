@@ -7,8 +7,8 @@ branches, and move things between sections as part of every merge. How the code 
 Last updated: 2026-11-14
 
 ## Resume here
-- **Next up:** nothing queued. Ask the user what's next (other blueprints in Phase 5, or the `fix/taskbar-icon` commit).
-- Repo state: `feature/reference-board` merged and pushed (user: "feels good"). `fix/taskbar-icon` has 1 unmerged commit (ask the user).
+- **Next up:** nothing queued. Ask the user what's next (other blueprints in Phase 5, or theme options).
+- Repo state: everything merged and pushed (`fix/taskbar-icon`, `fix/no-text-menu` on 2026-11-14).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -57,6 +57,8 @@ Last updated: 2026-11-14
 - [x] Mode switch: no stale layout restore, each mode keeps its floating panels (`fix/mode-switch-double-restore`)
 - [x] Smooth panel dragging (no self-snap), snapping only to adjacent panels, Ctrl = free move (`fix/panel-snap`)
 - [x] Save Dated JPG, Ctrl+Space zoom toward pointer, no brush-switch popup
+- [x] Taskbar icon: WM_CLASS `gigasketch` set before the app starts (`fix/taskbar-icon`)
+- [x] No stray "No text" menu: Window menu is named `settings` in gigasketch.xmlgui so Toolbars Shown merges into it (`fix/no-text-menu`)
 - [ ] Nothing queued. Add UI requests here as the user reports them.
 
 ## Phase 5 — Feature blueprints (doc "Giga Sketch Feature Blueprints")
