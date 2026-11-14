@@ -11,10 +11,12 @@
 #include "KisMainWindow.h"
 #include "KisDocument.h"
 #include "KisPart.h"
+#include <GigaBranding.h>
 #include <KoColor.h>
 #include <KoColorSpaceRegistry.h>
 
 #include <QApplication>
+#include <QDir>
 #include <QDockWidget>
 #include <QElapsedTimer>
 #include <QMouseEvent>
@@ -196,7 +198,7 @@ void clickTab(QTabBar *bar, int index)
 }
 
 /// Leave the Welcome page (it hides every panel): open a new document.
-void openTestDocument(KisMainWindow *w)
+KisDocument *openTestDocument(KisMainWindow *w)
 {
     KisDocument *doc = KisPart::instance()->createDocument();
     KisPart::instance()->addDocument(doc, false);
@@ -204,6 +206,44 @@ void openTestDocument(KisMainWindow *w)
     doc->newImage(QStringLiteral("selftest"), 2000, 1500, cs, KoColor(Qt::white, cs), KisConfig::RASTER_LAYER, 1, QString(), 1.0);
     w->showDocument(doc);
     pump(20);
+    return doc;
+}
+
+/// Autosaves of never-saved documents go to $HOME (the test's throw-away
+/// home) and must be named after Giga Sketch, not "krita-...", so stock
+/// Krita's startup recovery never offers (or deletes) them.
+void testAutosaveName(KisMainWindow *w)
+{
+    // Startup recovery: was a recovery dialog opened for files already in $HOME?
+    // (selftest.sh starts with an empty home; put files there by hand to check
+    // that stock Krita's "krita-*" autosaves are ignored and ours are offered.)
+    bool recoveryDialog = false;
+    for (QWidget *top : QApplication::topLevelWidgets()) {
+        recoveryDialog = recoveryDialog || (top->isVisible() && top->inherits("KisAutoSaveRecoveryDialog"));
+    }
+    const QStringList patterns = {QStringLiteral("*-autosave.kra"), QStringLiteral(".*-autosave.kra")};
+    const QStringList before = QDir::home().entryList(patterns, QDir::Files | QDir::Hidden);
+    info(QStringLiteral("autosaves in home at start: %1; recovery dialog open: %2")
+             .arg(before.isEmpty() ? QStringLiteral("none") : before.join(QStringLiteral(", ")))
+             .arg(recoveryDialog ? QStringLiteral("yes") : QStringLiteral("no")));
+
+    KisDocument *doc = openTestDocument(w);
+    if (!doc) { report(false, "setup", QStringLiteral("no document")); return; }
+    doc->setModified(true);
+    QMetaObject::invokeMethod(doc, "slotAutoSave"); // what the autosave timer calls
+
+    QStringList found;
+    QElapsedTimer waited;
+    waited.start();
+    while (found.isEmpty() && waited.elapsed() < 15000) { // saving runs in the background
+        pump(5);
+        found = QDir::home().entryList(patterns, QDir::Files | QDir::Hidden);
+        for (const QString &name : before) found.removeAll(name); // only the new one
+    }
+    const QString expected = GigaBranding::appName() + QStringLiteral("-");
+    bool ok = !found.isEmpty();
+    for (const QString &name : found) ok = ok && (name.startsWith(expected) || name.startsWith(QLatin1Char('.') + expected));
+    report(ok, "autosave-name", found.isEmpty() ? QStringLiteral("no autosave file after 15 s") : found.join(QStringLiteral(", ")));
 }
 
 /// User report: moving a floating panel looks choppy. Times each step of a
@@ -429,6 +469,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("tabswitch"), testTabSwitch},
         {QStringLiteral("panelmove"), testPanelMove},
         {QStringLiteral("modecrash"), testModeSwitchTabDrag},
+        {QStringLiteral("autosave"), testAutosaveName},
     };
     bool found = false;
     for (const auto &test : tests) {
