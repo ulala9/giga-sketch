@@ -34,6 +34,7 @@
 #include <QStatusBar>
 #include <QTabBar>
 #include <QToolBar>
+#include <QToolButton>
 #include <QTimer>
 
 #include <cstdio>
@@ -826,6 +827,28 @@ void testReferenceBoard(KisMainWindow *w)
     delete reopened;
 }
 
+/// Layers panel bottom row: New, Duplicate, Delete side by side on the left.
+void testLayerButtons(KisMainWindow *w)
+{
+    openTestDocument(w);
+    QToolButton *add = w->findChild<QToolButton *>(QStringLiteral("bnAdd"));
+    QToolButton *dup = w->findChild<QToolButton *>(QStringLiteral("bnDuplicate"));
+    QToolButton *del = w->findChild<QToolButton *>(QStringLiteral("bnDelete"));
+    if (!add || !dup || !del) {
+        report(false, "layerbuttons-found", QStringLiteral("add %1 dup %2 del %3").arg(!!add).arg(!!dup).arg(!!del));
+        return;
+    }
+    const bool visible = !add->isHidden() && !dup->isHidden() && !del->isHidden();
+    const bool order = add->x() < dup->x() && dup->x() < del->x();
+    const bool adjacent = dup->x() - (add->x() + add->width()) < 12 && del->x() - (dup->x() + dup->width()) < 12;
+    report(visible && order && adjacent, "layerbuttons-order",
+           QStringLiteral("x: new %1, duplicate %2, delete %3").arg(add->x()).arg(dup->x()).arg(del->x()));
+
+    // (Clicking is not tested: in a headless run Krita never gets an active
+    // layer, so Duplicate Layer stays disabled. The button just triggers
+    // Krita's own "duplicatelayer" action.)
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -838,6 +861,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("modefloat"), testModeFloating},
         {QStringLiteral("autosave"), testAutosaveName},
         {QStringLiteral("refboard"), testReferenceBoard},
+        {QStringLiteral("layerbuttons"), testLayerButtons},
     };
     bool found = false;
     for (const auto &test : tests) {
