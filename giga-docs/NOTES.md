@@ -522,10 +522,17 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   rewrites those keys only if they still equal Krita's old default, because the Preferences dialog writes every value.
 - Grid colours of existing .kra files are stored in the document, so only new documents get the blue grid.
 - Backup of the user's config before this: `~/.config/gigasketchrc.before-canvas-look`.
-- **Grid over background** (Grid panel checkbox "Over background", global `KisConfig::gigaGridOverBackground`, off):
-  `KisGridDecoration::drawDecoration` uses the visible area instead of the image rect; isometric (new + legacy) lines go
-  through `gigaDrawLineFamily()` (same line family/phase as Krita's loops, caps at 4000 lines). The OpenGL canvas
-  (`KisOpenGLCanvas2::paintGL`) only gave decorations the image rect; it passes the whole widget when the option is on.
+- **Grid "Draw on"** (Grid panel dropdown + Size box; global `KisConfig::gigaGridArea` 0 Canvas / 1 Canvas +
+  background / 2 Background only, `gigaBackgroundGridSize` 8–600 screen px, default 48). Both panel controls just
+  repaint every canvas (`gigaRepaintAllCanvases`), not `notifyConfigChanged` (that resets canvases: too heavy for a spin box).
+  - Canvas + background: `KisGridDecoration::drawDecoration` uses the visible area instead of the image rect; isometric
+    (new + legacy) lines go through `gigaDrawLineFamily()` (same line family/phase as Krita's loops, caps at 4000 lines).
+  - Background only: `gigaDrawBackgroundGrid()` draws screen-fixed squares in widget coords, anchored to the image
+    origin (pans, doesn't zoom/rotate), clipped to visible area minus the image polygon. Uses the grid colours and
+    subdivision; snapping still uses the (hidden) image grid.
+  - The OpenGL canvas (`KisOpenGLCanvas2::paintGL`) only gave decorations the image rect; it passes the whole widget when
+    either background mode is on.
+- Grid panel limits raised to 10000 px (rect spacing starts at 500 in the .ui; iso cells were 1000).
 - Two upstream grid bugs fixed: `KisGridConfig::loadStaticData()` didn't refresh the pens (new docs drew the grid
   black until edited in the panel); the constructor didn't fill the isometric trig cache (uninitialised → possible
   endless loop).

@@ -2363,14 +2363,26 @@ void KisConfig::setGigaShowBrushSwitchMessage(bool show)
     m_cfg.writeEntry("gigaShowBrushSwitchMessage", show);
 }
 
-bool KisConfig::gigaGridOverBackground(bool defaultValue) const
+KisConfig::GigaGridArea KisConfig::gigaGridArea(bool defaultValue) const
 {
-    return (defaultValue ? false : m_cfg.readEntry("gigaGridOverBackground", false));
+    const int v = defaultValue ? 0 : m_cfg.readEntry("gigaGridArea", 0);
+    return GigaGridArea(qBound(0, v, int(GigaGridBackgroundOnly)));
 }
 
-void KisConfig::setGigaGridOverBackground(bool value)
+void KisConfig::setGigaGridArea(GigaGridArea value)
 {
-    m_cfg.writeEntry("gigaGridOverBackground", value);
+    m_cfg.writeEntry("gigaGridArea", int(value));
+}
+
+int KisConfig::gigaBackgroundGridSize(bool defaultValue) const
+{
+    const int v = defaultValue ? 48 : m_cfg.readEntry("gigaBackgroundGridSize", 48);
+    return qBound(8, v, 600);
+}
+
+void KisConfig::setGigaBackgroundGridSize(int value)
+{
+    m_cfg.writeEntry("gigaBackgroundGridSize", qBound(8, value, 600));
 }
 
 void KisConfig::gigaMigrateCanvasLook()

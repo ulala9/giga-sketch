@@ -12,6 +12,8 @@
 #include <QPainter>
 #include <QPen>
 #include <QtMath>
+#include <QPainterPath>
+#include <QPolygonF>
 #include <klocalizedstring.h>
 
 #include <KoUnit.h>
@@ -56,6 +58,58 @@ void gigaDrawLineFamily(QPainter &gc, const QRectF &area,
                     QPointF(area.right(), c + slope * (area.right() - anchorX)));
     }
 }
+
+// Giga Sketch: "Background only" grid. Square cells of a fixed size in
+// screen pixels, drawn in widget coordinates on the area around the image
+// only. It is anchored to the image origin, so it moves when you pan, but it
+// does not zoom or rotate with the canvas.
+void gigaDrawBackgroundGrid(QPainter &gc, const QRectF &updateArea,
+                            const KisCoordinatesConverter *converter,
+                            const KisGridConfig &config, int cellSize)
+{
+    const QRectF area = converter->documentToWidget(updateArea);
+    if (area.isEmpty() || cellSize < 1) return;
+
+    // Mask out the image (a polygon, so a rotated canvas works too).
+    const QRectF imageRect = converter->imageRectInImagePixels();
+    const QPolygonF imagePolygon = converter->imageToWidgetTransform().map(imageRect);
+    QPainterPath clip;
+    clip.addRect(area);
+    QPainterPath imagePath;
+    imagePath.addPolygon(imagePolygon);
+    imagePath.closeSubpath();
+    clip = clip.subtracted(imagePath);
+
+    gc.save();
+    gc.resetTransform();
+    gc.setClipPath(clip, Qt::IntersectClip);
+    gc.setRenderHints(QPainter::Antialiasing, false);
+
+    // Subdivision lines only when they stay at least 4 px apart.
+    int subdivision = qMax(1, int(config.subdivision()));
+    while (subdivision > 1 && cellSize / subdivision < 4) subdivision--;
+    const qreal step = qreal(cellSize) / subdivision;
+    const QPen mainPen = config.penMain();
+    const QPen subdivisionPen = config.penSubdivision();
+
+    const QPointF origin = converter->imageToWidgetTransform().map(QPointF(0, 0));
+
+    const int firstX = qCeil((area.left() - origin.x()) / step);
+    const int lastX = qFloor((area.right() - origin.x()) / step);
+    for (int i = firstX; i <= lastX; i++) {
+        const qreal x = qRound(origin.x() + i * step) + 0.5;
+        gc.setPen(i % subdivision == 0 ? mainPen : subdivisionPen);
+        gc.drawLine(QPointF(x, area.top()), QPointF(x, area.bottom()));
+    }
+    const int firstY = qCeil((area.top() - origin.y()) / step);
+    const int lastY = qFloor((area.bottom() - origin.y()) / step);
+    for (int i = firstY; i <= lastY; i++) {
+        const qreal y = qRound(origin.y() + i * step) + 0.5;
+        gc.setPen(i % subdivision == 0 ? mainPen : subdivisionPen);
+        gc.drawLine(QPointF(area.left(), y), QPointF(area.right(), y));
+    }
+    gc.restore();
+}
 }
 
 struct KisGridDecoration::Private
@@ -85,6 +139,13 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
     if (!m_d->config.showGrid()) return;
 
     Q_UNUSED(canvas);
+
+    // Giga Sketch: "Background only" has its own screen-fixed grid.
+    const KisConfig gigaCfg(true);
+    if (gigaCfg.gigaGridArea() == KisConfig::GigaGridBackgroundOnly) {
+        gigaDrawBackgroundGrid(gc, updateArea, converter, m_d->config, gigaCfg.gigaBackgroundGridSize());
+        return;
+    }
 
     QTransform transform = converter->imageToWidgetTransform();
 
@@ -119,7 +180,7 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
 
     // Giga Sketch: "Grid over background" lets the grid continue past the
     // image edges over the area around the canvas. Off = Krita's behaviour.
-    const bool gigaOverBackground = KisConfig(true).gigaGridOverBackground();
+    const bool gigaOverBackground = gigaCfg.gigaGridArea() == KisConfig::GigaGridCanvasAndBackground;
     const QRectF updateRectInImagePixels = gigaOverBackground
         ? converter->documentToImage(updateArea)
         : converter->documentToImage(updateArea) & imageRectInImagePixels;

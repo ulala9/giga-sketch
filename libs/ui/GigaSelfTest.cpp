@@ -44,6 +44,8 @@
 #include <QToolBar>
 #include <QTimer>
 
+#include <algorithm>
+#include <climits>
 #include <cstdio>
 #include <functional>
 
@@ -875,6 +877,7 @@ void testCanvasLook(KisMainWindow *w)
     // include the decorations.)
     KisCanvasDecorationSP gridDeco = view->canvasBase()->decoration(QStringLiteral("grid"));
     const KisCoordinatesConverter *converter = view->canvasBase()->coordinatesConverter();
+    QImage lastImage;
     auto bluePixelsOutsideImage = [&]() {
         QImage img(canvas->size(), QImage::Format_ARGB32);
         img.fill(KisConfig(true).canvasBorderColor());
@@ -882,14 +885,18 @@ void testCanvasLook(KisMainWindow *w)
         {
             QPainter gc(&img);
             gc.fillRect(imageRect, Qt::white);
-            const QRect area = KisConfig(true).gigaGridOverBackground() ? img.rect() : imageRect;
+            const QRect area = KisConfig(true).gigaGridPaintsBackground() ? img.rect() : imageRect;
             gc.setClipRect(area);
             if (gridDeco) gridDeco->paint(gc, converter->widgetToDocument(QRectF(area)), converter, view->canvasBase());
         }
         if (qEnvironmentVariableIsSet("GIGA_CANVASLOOK_DUMP")) {
-            img.save(qEnvironmentVariable("GIGA_CANVASLOOK_DUMP") + "-" + s_dumpSuffix + (KisConfig(true).gigaGridOverBackground() ? "-over.png" : "-canvas.png"));
+            img.save(qEnvironmentVariable("GIGA_CANVASLOOK_DUMP") + "-" + s_dumpSuffix + "-" + QString::number(int(KisConfig(true).gigaGridArea())) + ".png");
         }
-        const QRect inner = imageRect.adjusted(-2, -2, 2, 2);
+        lastImage = img;
+        // Background-only clips exactly at the image edge: count "inside" a
+        // little within the edge; otherwise a little outside it.
+        const bool bgOnly = KisConfig(true).gigaGridArea() == KisConfig::GigaGridBackgroundOnly;
+        const QRect inner = bgOnly ? imageRect.adjusted(2, 2, -2, -2) : imageRect.adjusted(-2, -2, 2, 2);
         int blue = 0, dark = 0, inside = 0;
         for (int y = 0; y < img.height(); y++) {
             for (int x = 0; x < img.width(); x++) {
@@ -917,8 +924,7 @@ void testCanvasLook(KisMainWindow *w)
         w->viewManager()->gridManager()->setGridConfig(grid);
         s_dumpSuffix = type.second;
         for (bool over : {false, true}) {
-            cfg.setGigaGridOverBackground(over);
-            KisConfigNotifier::instance()->notifyConfigChanged();
+            cfg.setGigaGridArea(over ? KisConfig::GigaGridCanvasAndBackground : KisConfig::GigaGridOnCanvas);
             const auto counts = bluePixelsOutsideImage();
             const bool ok = over ? counts.first > 50 : counts.first == 0;
             report(ok && counts.second > 100 && counts.third > 50,
@@ -926,7 +932,58 @@ void testCanvasLook(KisMainWindow *w)
                    QStringLiteral("bluish outside image: %1, inside: %2, dark: %3").arg(counts.first).arg(counts.third).arg(counts.second));
         }
     }
-    cfg.setGigaGridOverBackground(false);
+
+    // Background only: nothing on the image, lines around it, and the same
+    // on-screen spacing at two zoom levels.
+    grid.setGridType(KisGridConfig::GRID_RECTANGULAR);
+    w->viewManager()->gridManager()->setGridConfig(grid);
+    cfg.setGigaGridArea(KisConfig::GigaGridBackgroundOnly);
+    cfg.setGigaBackgroundGridSize(48);
+    s_dumpSuffix = QStringLiteral("bg");
+    // Typical gap between bluish pixels along the quietest of the top rows
+    // (that row crosses only vertical lines).
+    auto onScreenGap = [&]() {
+        int bestRow = -1, bestCount = INT_MAX;
+        for (int y = 2; y < 40; y++) {
+            int n = 0;
+            for (int x = 0; x < lastImage.width(); x++) {
+                const QColor c = lastImage.pixelColor(x, y);
+                if (c.blue() > c.red() + 20) ++n;
+            }
+            if (n > 0 && n < bestCount) { bestCount = n; bestRow = y; }
+        }
+        if (bestRow < 0) return -1;
+        QList<int> gaps;
+        int prev = -1;
+        for (int x = 0; x < lastImage.width(); x++) {
+            const QColor c = lastImage.pixelColor(x, bestRow);
+            if (c.blue() > c.red() + 20) {
+                if (prev >= 0 && x - prev > 1) gaps << x - prev;
+                prev = x;
+            }
+        }
+        if (gaps.isEmpty()) return -1;
+        std::sort(gaps.begin(), gaps.end());
+        return gaps[gaps.size() / 2];
+    };
+    int gaps[2] = {-1, -1};
+    for (int i = 0; i < 2; i++) {
+        if (i == 1) {
+            view->zoomManager()->slotZoomIn();
+            pump(20);
+        }
+        s_dumpSuffix = QStringLiteral("bg-zoom%1").arg(i);
+        const auto counts = bluePixelsOutsideImage();
+        gaps[i] = onScreenGap();
+        report(counts.third == 0 && counts.first > 50,
+               qPrintable(QStringLiteral("canvaslook-bgonly-zoom%1").arg(i)),
+               QStringLiteral("bluish outside image: %1, inside: %2, gap %3 px").arg(counts.first).arg(counts.third).arg(gaps[i]));
+    }
+    // 48 px squares with 2 subdivisions: a line every 24 screen px.
+    report(gaps[0] >= 23 && gaps[0] <= 25 && gaps[1] >= 23 && gaps[1] <= 25, "canvaslook-bgonly-fixed-size",
+           QStringLiteral("gaps %1 / %2 px").arg(gaps[0]).arg(gaps[1]));
+
+    cfg.setGigaGridArea(KisConfig::GigaGridOnCanvas);
 }
 
 bool runNamed(const QString &name, KisMainWindow *w)

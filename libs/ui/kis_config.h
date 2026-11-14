@@ -659,10 +659,20 @@ public:
     /// Krita's old defaults. Call once at startup before any canvas exists.
     static void gigaMigrateCanvasLook();
 
-    /// Giga Sketch: draw the grid over the background around the canvas too,
-    /// not only on the image. Global preference, off by default.
-    bool gigaGridOverBackground(bool defaultValue = false) const;
-    void setGigaGridOverBackground(bool value);
+    /// Giga Sketch: where the grid is drawn. Global preference.
+    enum GigaGridArea {
+        GigaGridOnCanvas = 0,          ///< Krita's behaviour: on the image only
+        GigaGridCanvasAndBackground,   ///< one image-pixel grid, continued over the surround
+        GigaGridBackgroundOnly         ///< screen-fixed squares on the surround only
+    };
+    GigaGridArea gigaGridArea(bool defaultValue = false) const;
+    void setGigaGridArea(GigaGridArea value);
+    /// True when the grid paints outside the image (either background mode).
+    bool gigaGridPaintsBackground() const { return gigaGridArea() != GigaGridOnCanvas; }
+
+    /// Giga Sketch: square size, in screen pixels, of the "Background only" grid.
+    int gigaBackgroundGridSize(bool defaultValue = false) const;
+    void setGigaBackgroundGridSize(int value);
 
     bool compressKra(bool defaultValue = false) const;
     void setCompressKra(bool compress);
