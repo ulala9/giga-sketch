@@ -720,9 +720,8 @@ void LayerBox::gigaSetupPanel()
     // verticalLayout: [blend mode row][opacity row][layer list][buttons]
     m_wdgLayerBox->verticalLayout->insertLayout(2, lockRow);
 
-    // --- Bottom row: New and Delete on the left (used most), the rest right-aligned ---
-    // Raise/Lower: drag in the list. Duplicate: Ctrl+J. Properties: double-click.
-    m_wdgLayerBox->bnDuplicate->hide();
+    // --- Bottom row: New, Duplicate and Delete on the left (used most), the rest right-aligned ---
+    // Raise/Lower: drag in the list. Properties: double-click.
     m_wdgLayerBox->bnLower->hide();
     m_wdgLayerBox->bnRaise->hide();
     m_wdgLayerBox->bnProperties->hide();
@@ -730,6 +729,7 @@ void LayerBox::gigaSetupPanel()
     QHBoxLayout *row = m_wdgLayerBox->hbox1;
     row->removeWidget(m_wdgLayerBox->bnAdd);
     row->removeWidget(m_wdgLayerBox->bnDelete);
+    row->removeWidget(m_wdgLayerBox->bnDuplicate);
 
     row->addWidget(makeButton("layer-style-enabled", i18nc("@info:tooltip", "Layer style (fx)"), "layer_style"));
     row->addWidget(makeButton("convert-to-transparencyMask", i18nc("@info:tooltip", "Add layer mask"), "add_new_transparency_mask"));
@@ -753,7 +753,8 @@ void LayerBox::gigaSetupPanel()
     // The .ui row has a stretching spacer after the (now hidden) original
     // buttons, so anything inserted at the front sits on the left.
     row->insertWidget(0, m_wdgLayerBox->bnAdd);
-    row->insertWidget(1, m_wdgLayerBox->bnDelete);
+    row->insertWidget(1, m_wdgLayerBox->bnDuplicate);
+    row->insertWidget(2, m_wdgLayerBox->bnDelete);
 
     gigaUpdateLockButtons();
 }
