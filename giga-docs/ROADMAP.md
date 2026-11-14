@@ -7,7 +7,7 @@ branches, and move things between sections as part of every merge. How the code 
 Last updated: 2026-11-13
 
 ## Resume here
-- **Next up:** Phase 1 → autosave file names (`fix/autosave-name`), then Phase 3 → text scale (`feature/text-scale`).
+- **Next up:** Phase 3 → horizontal/vertical text scale (`feature/text-scale`). Propose the approach first.
 - Repo state: everything merged into `giga-main` and pushed to `origin`. No open feature branches.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -17,7 +17,7 @@ Last updated: 2026-11-13
 ## Phase 1 — Isolate from stock Krita, rebrand
 - [x] Own config/data/cache folders, app ID, desktop file (`feature/isolate-identity`)
 - [x] Title, about screen, original icons/artwork (`feature/branding`)
-- [ ] **Autosave files** still named `krita-*-autosave.kra` like stock Krita → give them a Giga name
+- [x] Autosaves of untitled documents named `gigasketch-*`, startup recovery ignores Krita's (`fix/autosave-name`)
 - [ ] (Windows only, ignore for now) `kritacrash.log`
 
 ## Phase 2 — Procreate-style brush feel
@@ -67,3 +67,4 @@ Last updated: 2026-11-13
 - 2026-11-13: brush feel tuning considered done (user tested).
 - 2026-11-13: hyphenation → super low priority.
 - 2026-11-13: panel headers show Float/Dock and Close as buttons, not a dropdown (fewer clicks).
+- 2026-11-13: autosaves of saved files keep Krita's `<file>.kra-autosave.kra` name (only untitled ones renamed).

@@ -107,6 +107,7 @@
 #include "KisPart.h"
 #include "KisApplication.h"
 #include "KisDocument.h"
+#include <GigaBranding.h>
 #include "KisImportExportManager.h"
 #include "KisView.h"
 #include "kis_grid_config.h"
@@ -1921,7 +1922,9 @@ QString KisDocument::generateAutoSaveFileName(const QString & path) const
                      .arg(KisAutoSaveRecoveryDialog::autoSaveLocation())
                      .arg('/')
                      .arg(prefix)
-                     .arg("krita")
+                     // Giga Sketch: own name, so stock Krita's startup scan
+                     // (which deletes autosaves you decline) never sees ours.
+                     .arg(GigaBranding::appName())
                      .arg(qApp->applicationPid())
                      .arg(objectName())
                      .arg(extension);

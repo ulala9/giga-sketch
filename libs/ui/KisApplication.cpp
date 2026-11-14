@@ -1179,13 +1179,15 @@ void KisApplication::checkAutosaveFiles()
     // we want to offer a restore for every one. Including a nice thumbnail!
 
     // Hidden autosave files
-    QStringList filters = QStringList() << QString(".krita-*-*-autosave.kra");
+    // Giga Sketch: only our own autosaves (named after GigaBranding::appName()
+    // in KisDocument::generateAutoSaveFileName), never stock Krita's.
+    QStringList filters = QStringList() << QString(".%1-*-*-autosave.kra").arg(GigaBranding::appName());
 
     // all autosave files for our application
     QStringList autosaveFiles = dir.entryList(filters, QDir::Files | QDir::Hidden);
 
     // Visible autosave files
-    filters = QStringList() << QString("krita-*-*-autosave.kra");
+    filters = QStringList() << QString("%1-*-*-autosave.kra").arg(GigaBranding::appName());
     autosaveFiles += dir.entryList(filters, QDir::Files);
 
     // Allow the user to make their selection

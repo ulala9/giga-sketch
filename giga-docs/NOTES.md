@@ -43,8 +43,13 @@ Running notes on how the Krita codebase works, kept so they carry over between s
   that don't already end in the app name. Upstream hardcoded "/krita"; we use `GigaBranding::appName()`.
 - `KoToolBox.cpp:164` compares the tool section with the app name, but sections look like "0 Krita/Shape"
   (capital K), so it never matched even upstream. Left alone.
-- Not yet isolated: autosave files `krita-*-autosave.kra` (same pattern and folder as stock Krita);
-  `kritacrash.log` (Windows only).
+- Autosaves (fix/autosave-name): never-saved documents autosave to `$HOME/gigasketch-<pid>-<doc>-autosave.kra`
+  (`KisDocument::generateAutoSaveFileName`, uses GigaBranding::appName()); the startup recovery scan
+  (`KisApplication::checkAutosaveFiles`) only matches `gigasketch-*` / `.gigasketch-*`. Matters because stock Krita's
+  scan DELETES autosaves you decline in its recovery dialog. Saved documents still autosave next to the file as
+  `<name>.kra-autosave.kra` (same as Krita, on purpose). Old `krita-*` Giga autosaves are no longer offered (File > Open).
+  Self-test `autosave` (put a file in the scratch home first to check the scan; it reports whether the dialog opened).
+- Not yet isolated: `kritacrash.log` (Windows only).
 
 ## Build dependencies (Fedora 44)
 - Immer, Zug and Lager (header-only, by arximboldi) aren't packaged in Fedora. Build them into
