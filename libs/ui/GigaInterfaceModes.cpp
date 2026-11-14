@@ -235,8 +235,7 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
         // Floating panels aren't part of Qt's layout: remember them for this
         // mode, then dock them (hidden) so the next layout starts clean.
         if (GigaFloatingPanelManager *floating = m_mainWindow->gigaFloatingPanels()) {
-            floating->saveNow();
-            floating->dockAll(false);
+            floating->saveAndPark();
         }
     }
 

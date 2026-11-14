@@ -11,6 +11,7 @@
 #include "KisMainWindow.h"
 #include "KisDocument.h"
 #include "KisPart.h"
+#include "kis_config.h"
 #include <GigaBranding.h>
 #include <KoColor.h>
 #include <KoColorSpaceRegistry.h>
@@ -529,6 +530,44 @@ void testModeSwitchRestore(KisMainWindow *w)
     }
 }
 
+/// User report: float a panel in Studio, cycle through the other modes,
+/// back in Studio the panel is gone. Each mode should get its floating
+/// panels back.
+void testModeFloating(KisMainWindow *w)
+{
+    GigaInterfaceModes *modes = w->findChild<GigaInterfaceModes *>();
+    GigaFloatingPanelManager *m = w->gigaFloatingPanels();
+    if (!modes || !m) { report(false, "setup", QStringLiteral("no modes or manager")); return; }
+    openTestDocument(w);
+    const char *names[] = {"studio", "photoshop", "procreate"};
+    using M = GigaInterfaceModes;
+    QWidget *canvas = w->centralWidget();
+    for (int start : {int(M::Studio), int(M::Photoshop)}) {
+        const QString tag = QString::fromLatin1(names[start]);
+        modes->setMode(start);
+        pump(20);
+        QDockWidget *hist = w->dockWidget(QStringLiteral("History"));
+        if (!hist) { report(false, "setup", QStringLiteral("no History")); return; }
+        const QRect mid(canvas->geometry().center() - QPoint(150, 150), QSize(300, 300));
+        m->floatPanel(hist, mid);
+        pump(10);
+        info(tag + QStringLiteral(": History floating=%1 visible=%2").arg(m->isFloating(hist)).arg(hist->isVisible()));
+        // Two full cycles, like pressing F9 six times.
+        for (int i = 1; i <= 6; ++i) {
+            const int mode = (start + i) % 3;
+            modes->setMode(mode);
+            pump(20);
+            info(QStringLiteral("  -> %1: History floating=%2 visible=%3 key=%4")
+                     .arg(QString::fromLatin1(names[mode])).arg(m->isFloating(hist)).arg(hist->isVisible())
+                     .arg(KisConfig(true).readEntry<QString>(QStringLiteral("gigaModeFloatingPanels%1").arg(start), QString())));
+        }
+        report(m->isFloating(hist) && hist->isVisible(), qPrintable(tag + QStringLiteral("-floating-kept")),
+               QStringLiteral("floating=%1 visible=%2").arg(m->isFloating(hist)).arg(hist->isVisible()));
+        m->dockAll(true);
+        pump(10);
+    }
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -537,6 +576,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("panelmove"), testPanelMove},
         {QStringLiteral("modecrash"), testModeSwitchTabDrag},
         {QStringLiteral("modeswitch"), testModeSwitchRestore},
+        {QStringLiteral("modefloat"), testModeFloating},
         {QStringLiteral("autosave"), testAutosaveName},
     };
     bool found = false;

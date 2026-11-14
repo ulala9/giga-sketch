@@ -602,6 +602,16 @@ void GigaFloatingPanelManager::saveNow()
                                          QString::fromUtf8(QJsonDocument(list).toJson(QJsonDocument::Compact)));
 }
 
+void GigaFloatingPanelManager::saveAndPark()
+{
+    saveNow();
+    dockAll(false);
+    // dockPanel() scheduled a save; it would run when the next mode sets its
+    // storage key (setStorageKey saves pending changes first) and write the
+    // now-empty list over the one saved above.
+    m_saveTimer.stop();
+}
+
 void GigaFloatingPanelManager::restoreSaved()
 {
     if (!m_enabled || m_storageKey.isEmpty() || !m_mainWindow) return;

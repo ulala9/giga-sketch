@@ -453,6 +453,10 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   the stale State was actually applied TWICE per Studio switch. Speed gain not measurable in the self-test config
   (~50 ms per Studio switch before and after); the win is no stale intermediate layout. Self-test `modeswitch`
   (all mode pairs: no extra restore, same layout signature on re-entry, Procreate hides bars).
+- Floating panels lost after cycling modes (user report, same branch): leaving a mode ran saveNow() then
+  dockAll(false); dockPanel() schedules a save (400 ms timer), and the next mode's setStorageKey() flushes pending
+  saves under the OLD key first -> wrote `[]` over the list just saved. Fix: `GigaFloatingPanelManager::saveAndPark()`
+  (save, dock hidden, stop the timer), used by GigaInterfaceModes::switchTo. Self-test `modefloat`.
 - Qt 6.11 internals: QMainWindowLayout::applyState retires tab bars not in the new state (unuseTabBar = deleteLater);
   restoreState ends with showTabBars() (shows every used bar). tabChanged() raises the central widget.
 
