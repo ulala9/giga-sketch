@@ -53,6 +53,15 @@
 #include <KisAndroidUtils.h>
 #endif
 
+// Giga Sketch: the calm, dark canvas look used in every interface mode.
+// One place for the colours so the defaults and the one-time update agree.
+namespace GigaCanvasLook {
+QColor canvasBorderColor()    { return QColor(30, 30, 30); }
+QColor checkersColor1()       { return QColor(235, 235, 235); }
+QColor gridMainColor()        { return QColor(110, 200, 255, 150); }  // ~60% opacity
+QColor gridSubdivisionColor() { return QColor(110, 200, 255, 64); }   // ~25% opacity
+}
+
 KisConfig::KisConfig(bool readOnly)
     : m_cfg( KSharedConfig::openConfig()->group(""))
     , m_readOnly(readOnly)
@@ -1118,9 +1127,10 @@ void KisConfig::setGridMainStyle(quint32 v) const
 
 quint32 KisConfig::getGridSubdivisionStyle(bool defaultValue) const
 {
-    quint32 v = m_cfg.readEntry("gridsubdivisionstyle", 1);
+    // Giga Sketch: solid subdivisions by default (Krita: 1 = dashed)
+    quint32 v = m_cfg.readEntry("gridsubdivisionstyle", 0);
     if (v > 2) v = 2;
-    return (defaultValue ? 1 : v);
+    return (defaultValue ? 0 : v);
 }
 
 void KisConfig::setGridSubdivisionStyle(quint32 v) const
@@ -1142,7 +1152,8 @@ void KisConfig::setGridIsoVerticalStyle(quint32 v) const
 
 QColor KisConfig::getGridMainColor(bool defaultValue) const
 {
-    QColor col(99, 99, 99);
+    // Giga Sketch: thin light blue, semi-transparent (Krita: 99,99,99)
+    QColor col = GigaCanvasLook::gridMainColor();
     return (defaultValue ? col : m_cfg.readEntry("gridmaincolor", col));
 }
 
@@ -1153,7 +1164,8 @@ void KisConfig::setGridMainColor(const QColor & v) const
 
 QColor KisConfig::getGridSubdivisionColor(bool defaultValue) const
 {
-    QColor col(150, 150, 150);
+    // Giga Sketch: same blue, fainter (Krita: 150,150,150)
+    QColor col = GigaCanvasLook::gridSubdivisionColor();
     return (defaultValue ? col : m_cfg.readEntry("gridsubdivisioncolor", col));
 }
 
@@ -1164,7 +1176,8 @@ void KisConfig::setGridSubdivisionColor(const QColor & v) const
 
 QColor KisConfig::getGridIsoVerticalColor(bool defaultValue) const
 {
-    QColor col(150, 150, 150);
+    // Giga Sketch: same as subdivisions (Krita: 150,150,150)
+    QColor col = GigaCanvasLook::gridSubdivisionColor();
     return (defaultValue ? col : m_cfg.readEntry("gridisoverticalcolor", col));
 }
 
@@ -1262,8 +1275,9 @@ void KisConfig::saveSnapConfig(const KisSnapConfig &config)
 
 qint32 KisConfig::checkSize(bool defaultValue) const
 {
-    qint32 size = (defaultValue ? 32 : m_cfg.readEntry("checksize", 32));
-    if (size == 0) size = 32;
+    // Giga Sketch: finer checkerboard (Krita: 32)
+    qint32 size = (defaultValue ? 16 : m_cfg.readEntry("checksize", 16));
+    if (size == 0) size = 16;
     return size;
 }
 
@@ -1287,7 +1301,8 @@ void KisConfig::setScrollingCheckers(bool sc) const
 
 QColor KisConfig::canvasBorderColor(bool defaultValue) const
 {
-    QColor color(QColor(128,128,128));
+    // Giga Sketch: near-black surround so the canvas "floats" (Krita: 128,128,128)
+    QColor color = GigaCanvasLook::canvasBorderColor();
     return (defaultValue ? color : m_cfg.readEntry("canvasBorderColor", color));
 }
 
@@ -1318,7 +1333,8 @@ void KisConfig::setScrollbarZoomEnabled(bool enabled) const
 
 QColor KisConfig::checkersColor1(bool defaultValue) const
 {
-    QColor col(220, 220, 220);
+    // Giga Sketch: softer checker grey (Krita: 220,220,220)
+    QColor col = GigaCanvasLook::checkersColor1();
     return (defaultValue ? col : m_cfg.readEntry("checkerscolor", col));
 }
 
@@ -2345,6 +2361,39 @@ bool KisConfig::gigaShowBrushSwitchMessage(bool defaultValue) const
 void KisConfig::setGigaShowBrushSwitchMessage(bool show)
 {
     m_cfg.writeEntry("gigaShowBrushSwitchMessage", show);
+}
+
+void KisConfig::gigaMigrateCanvasLook()
+{
+    // Runs once. Krita's Preferences dialog writes every value to the config
+    // file, so older Giga Sketch configs hold Krita's old canvas colours
+    // explicitly and would never see the new defaults. Replace a value only
+    // when it is still exactly Krita's old default; anything the user picked
+    // themselves is kept.
+    KConfigGroup cfg = KSharedConfig::openConfig()->group("");
+    if (cfg.readEntry("gigaCanvasLook", 0) >= 1) return;
+
+    auto replaceColor = [&cfg](const char *key, const QColor &oldDefault, const QColor &newValue) {
+        if (cfg.hasKey(key) && cfg.readEntry(key, QColor()) == oldDefault) {
+            cfg.writeEntry(key, newValue);
+        }
+    };
+    auto replaceInt = [&cfg](const char *key, int oldDefault, int newValue) {
+        if (cfg.hasKey(key) && cfg.readEntry(key, -1) == oldDefault) {
+            cfg.writeEntry(key, newValue);
+        }
+    };
+
+    replaceColor("canvasBorderColor", QColor(128, 128, 128), GigaCanvasLook::canvasBorderColor());
+    replaceColor("checkerscolor", QColor(220, 220, 220), GigaCanvasLook::checkersColor1());
+    replaceInt("checksize", 32, 16);
+    replaceColor("gridmaincolor", QColor(99, 99, 99), GigaCanvasLook::gridMainColor());
+    replaceColor("gridsubdivisioncolor", QColor(150, 150, 150), GigaCanvasLook::gridSubdivisionColor());
+    replaceColor("gridisoverticalcolor", QColor(150, 150, 150), GigaCanvasLook::gridSubdivisionColor());
+    replaceInt("gridsubdivisionstyle", 1, 0);
+
+    cfg.writeEntry("gigaCanvasLook", 1);
+    cfg.sync();
 }
 
 bool KisConfig::compressKra(bool defaultValue) const

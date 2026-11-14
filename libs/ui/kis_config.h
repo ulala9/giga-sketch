@@ -654,6 +654,11 @@ public:
     bool gigaShowBrushSwitchMessage(bool defaultValue = false) const;
     void setGigaShowBrushSwitchMessage(bool show);
 
+    /// Giga Sketch: one-time switch of the canvas surround, checkerboard and
+    /// grid colours to the dark "calm canvas" look, for configs that still hold
+    /// Krita's old defaults. Call once at startup before any canvas exists.
+    static void gigaMigrateCanvasLook();
+
     bool compressKra(bool defaultValue = false) const;
     void setCompressKra(bool compress);
 
