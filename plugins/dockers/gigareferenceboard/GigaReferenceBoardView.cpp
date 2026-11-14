@@ -34,6 +34,7 @@
 #include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QTextEdit>
+#include <QTimer>
 #include <QTouchEvent>
 #include <QVariantAnimation>
 #include <QtMath>
@@ -140,6 +141,7 @@ void GigaReferenceBoardView::setCanvas(KisCanvas2 *canvas)
     m_focused = nullptr;
     m_current = nullptr;
     m_drag = Drag::None;
+    m_dropImage = nullptr;
     m_shownRects.clear();
     m_animFrom.clear();
 
@@ -198,7 +200,7 @@ QPointF GigaReferenceBoardView::imageWidgetCenter(int index) const
 {
     const QVector<KisReferenceImage *> images = liveImages();
     if (index < 0 || index >= images.size()) return QPointF(-1, -1);
-    return cameraTransform().map(images[index]->boardRect().center());
+    return cameraTransform().map(displayRect(images[index]).center()); // where it is drawn right now
 }
 
 void GigaReferenceBoardView::refresh()
@@ -211,6 +213,7 @@ void GigaReferenceBoardView::refresh()
     // wherever they are drawn right now.
     QHash<KisReferenceImage *, QRectF> from;
     for (KisReferenceImage *image : images) {
+        if (image == m_dropImage) continue; // a hand-dropped image never animates
         const auto it = m_shownRects.constFind(image);
         if (it != m_shownRects.constEnd() && it.value() != image->boardRect()) {
             from.insert(image, displayRect(image));
@@ -228,6 +231,9 @@ void GigaReferenceBoardView::refresh()
         m_rectAnimation->start();
     }
 
+    if (m_dropImage && (!images.contains(m_dropImage) || m_dropImage->boardRect() == m_dropRect)) {
+        m_dropImage = nullptr; // landed (or gone)
+    }
     if (m_focused && !images.contains(m_focused)) m_focused = nullptr;
     if (m_current && !images.contains(m_current)) m_current = nullptr;
     if (m_pressImage && !images.contains(m_pressImage)) {
@@ -268,6 +274,7 @@ QPointF GigaReferenceBoardView::toBoard(const QPointF &widgetPos) const
 
 QRectF GigaReferenceBoardView::displayRect(KisReferenceImage *image) const
 {
+    if (image == m_dropImage) return m_dropRect;
     QRectF r = image->boardRect();
     const auto it = m_animFrom.constFind(image);
     if (it != m_animFrom.constEnd() && m_rectT < 1.0) r = lerpRect(it.value(), r, m_rectT);
@@ -495,6 +502,9 @@ void GigaReferenceBoardView::pressAt(const QPointF &pos, Qt::MouseButton button,
         m_drag = Drag::None;
         return;
     }
+    // Grabbing the Board stops any camera fly-to, so what you grab stays
+    // under the pen.
+    stopCameraAnimation();
     m_pressImage = image;
     m_dragOffset = QPointF();
     m_drag = Drag::Pending;
@@ -546,11 +556,24 @@ void GigaReferenceBoardView::releaseAt(const QPointF &pos)
 
     if (drag == Drag::MoveImage && image && liveImages().contains(image)) {
         const QPointF offset = (pos - m_pressPos) / m_camera.zoom;
-        // Keep it drawn where it was dropped while the command lands (no
-        // animation back from the old spot).
-        m_shownRects.insert(image, image->boardRect().translated(offset));
-        pushCommand(GigaReferenceBoard::moveOnBoard(image, image->boardRect().translated(offset)));
+        // Keep it drawn exactly where it was dropped, before and after the
+        // move command lands: no animation from the old spot (that looked
+        // like rubber-banding).
+        m_dropImage = image;
+        m_dropRect = image->boardRect().translated(offset);
         m_dragOffset = QPointF();
+        pushCommand(GigaReferenceBoard::moveOnBoard(image, m_dropRect));
+        if (m_dropImage == image && image->boardRect() == m_dropRect) m_dropImage = nullptr; // landed
+        if (m_dropImage) {
+            // Safety net: never hold the drawn spot for long if the command
+            // didn't land (it always should).
+            QTimer::singleShot(1000, this, [this, image]() {
+                if (m_dropImage == image) {
+                    m_dropImage = nullptr;
+                    update();
+                }
+            });
+        }
     } else if (drag == Drag::Pending) {
         // A click: focus the image, or back to the overview on empty space.
         if (image) {

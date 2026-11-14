@@ -736,6 +736,33 @@ void testReferenceBoard(KisMainWindow *w)
     const QColor picked = canvas->resourceManager()->foregroundColor().toQColor();
     report(picked == QColor(Qt::green), "board-ctrl-click-colour", picked.name());
 
+    // Drag an image on the Board and let go: it must stay where it was
+    // dropped, with no glide from the old spot (user report: rubber-banding).
+    {
+        QElapsedTimer settle; // let the Esc fly-to finish (real time, not event rounds)
+        settle.start();
+        while (settle.elapsed() < 450) pump(1);
+    }
+    QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, center), Q_ARG(int, 1));
+    {
+        const QPoint start = center.toPoint();
+        const QPoint end = start + QPoint(40, 25);
+        drag(boardView, start, boardView->mapToGlobal(end), 8);
+        qreal worst = 0.0;
+        QElapsedTimer watch;
+        watch.start();
+        while (watch.elapsed() < 300) { // longer than any animation
+            QPointF now;
+            QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, now), Q_ARG(int, 1));
+            worst = qMax(worst, QLineF(now, QPointF(end)).length());
+            if (qEnvironmentVariableIsSet("GIGA_TRACE_DROP")) info(QStringLiteral("t=%1 at %2,%3 (drop %4,%5, start %6,%7)").arg(watch.elapsed()).arg(now.x()).arg(now.y()).arg(end.x()).arg(end.y()).arg(start.x()).arg(start.y()));
+            pump(1);
+        }
+        report(worst < 1.5, "board-drop-no-rubberband", QStringLiteral("farthest from drop point: %1 px").arg(worst, 0, 'f', 1));
+        doc->undoStack()->undo(); // put it back for the checks below
+        pump(5);
+    }
+
     // Send back to the canvas: exact same transform as before.
     canvas->addCommand(sendToCanvas({refs[1]}));
     pump(5);

@@ -139,6 +139,8 @@ private:
     QPointF m_lastPos;
     KisReferenceImage *m_pressImage {nullptr};
     QPointF m_dragOffset; // board units, for MoveImage
+    KisReferenceImage *m_dropImage {nullptr}; // just dropped by hand: drawn at m_dropRect until its move lands
+    QRectF m_dropRect;
     bool m_spaceHeld = false;
 
     // Two-finger touch

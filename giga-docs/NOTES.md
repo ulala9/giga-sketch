@@ -493,8 +493,10 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   `KisReferenceImage::paintInRect` (same mipmaps as the canvas). Takes keyboard focus on hover (gives it back on leave,
   never from text fields); ShortcutOverride for Esc/Home/←/→/Space/Ctrl+V. Touch: 1 finger = mouse, 2 = pinch/pan;
   touchpad: NativeGesture zoom, pixelDelta scroll pans.
+- Hand-dropped image: drawn at `m_dropRect` until its move command lands and excluded from the change animation
+  (else it glided from the old spot = "rubber-banding", user report). Pressing on the Board stops camera fly-tos.
 - Tool's Send to Board shows the Board dock if hidden.
-- Self-test `refboard` (13 checks). Q_PROPERTY imageCount/focusedIndex + Q_INVOKABLE imageWidgetCenter exist for it.
+- Self-test `refboard` (14 checks, incl. `board-drop-no-rubberband`). Q_PROPERTY imageCount/focusedIndex + Q_INVOKABLE imageWidgetCenter exist for it.
 - Known: the old `panelsnap` self-test segfaults in a small test window (948×512) even without this feature — its
   History frame gets docked by the drag and the test dereferences the deleted frame (test bug, not app).
 
