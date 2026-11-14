@@ -19,9 +19,12 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QElapsedTimer>
+#include <QMenuBar>
 #include <QMouseEvent>
 #include <QPointer>
+#include <QStatusBar>
 #include <QTabBar>
+#include <QToolBar>
 #include <QTimer>
 
 #include <cstdio>
@@ -462,6 +465,70 @@ void testTabSwitch(KisMainWindow *w)
     }
 }
 
+/// What's on screen after a mode switch: docked panels (with their side),
+/// toolbars, menu bar, status bar. Used to check that two switches into the
+/// same mode give the same layout.
+QString layoutSignature(KisMainWindow *w)
+{
+    QStringList docks;
+    for (QDockWidget *dock : w->findChildren<QDockWidget *>()) {
+        if (dock->isVisible()) docks << dock->objectName() + QLatin1Char('@') + QString::number(int(w->dockWidgetArea(dock)));
+    }
+    docks.sort();
+    QStringList bars;
+    for (QToolBar *bar : w->findChildren<QToolBar *>()) {
+        if (bar->isVisible()) bars << bar->objectName() + QLatin1Char('@') + QString::number(int(w->toolBarArea(bar)));
+    }
+    bars.sort();
+    return QStringLiteral("menu=%1 status=%2 bars=[%3] docks=[%4]")
+        .arg(w->menuBar()->isVisible()).arg(w->statusBar()->isVisible())
+        .arg(bars.join(QLatin1Char(' ')), docks.join(QLatin1Char(' ')));
+}
+
+/// A mode switch that rebuilds the menus (into/out of Studio) used to
+/// re-apply the stale saved layout before restoring the mode's own one.
+/// Checks: no extra restore, same layout each time a mode is entered,
+/// Procreate still hides the bars. Prints how long each switch took.
+void testModeSwitchRestore(KisMainWindow *w)
+{
+    GigaInterfaceModes *modes = w->findChild<GigaInterfaceModes *>();
+    if (!modes) { report(false, "setup", QStringLiteral("no modes")); return; }
+    openTestDocument(w);
+    const char *names[] = {"studio", "photoshop", "procreate"};
+    using M = GigaInterfaceModes;
+    // Every ordered pair of modes appears at least once; the second half
+    // repeats it so each mode is entered more than once.
+    const QList<int> order = {M::Photoshop, M::Studio, M::Photoshop, M::Procreate, M::Studio, M::Procreate, M::Photoshop,
+                              M::Studio, M::Photoshop, M::Procreate, M::Studio, M::Procreate, M::Photoshop};
+    QHash<int, QString> seen;
+    int current = -1;
+    for (int mode : order) {
+        const int before = w->gigaSavedLayoutRestores();
+        QElapsedTimer timer;
+        timer.start();
+        modes->setMode(mode);
+        const qint64 ms = timer.elapsed();
+        pump(20);
+        const QString tag = current < 0 ? QString::fromLatin1(names[mode])
+                                        : QString::fromLatin1(names[current]) + QStringLiteral("->") + QString::fromLatin1(names[mode]);
+        const int extra = w->gigaSavedLayoutRestores() - before;
+        info(QStringLiteral("%1: %2 ms, saved-layout re-applies %3").arg(tag).arg(ms).arg(extra));
+        report(extra == 0, qPrintable(tag + QStringLiteral("-no-extra-restore")), QStringLiteral("%1 extra").arg(extra));
+        const QString sig = layoutSignature(w);
+        if (current >= 0 && seen.contains(mode)) {
+            report(seen.value(mode) == sig, qPrintable(tag + QStringLiteral("-same-layout")),
+                   seen.value(mode) == sig ? sig : QStringLiteral("was %1 now %2").arg(seen.value(mode), sig));
+        } else {
+            info(tag + QStringLiteral(": ") + sig);
+        }
+        if (current >= 0) seen.insert(mode, sig); // (the very first state may predate the test)
+        if (mode == M::Procreate) {
+            report(!w->menuBar()->isVisible(), qPrintable(tag + QStringLiteral("-bars-hidden")), sig);
+        }
+        current = mode;
+    }
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -469,6 +536,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("tabswitch"), testTabSwitch},
         {QStringLiteral("panelmove"), testPanelMove},
         {QStringLiteral("modecrash"), testModeSwitchTabDrag},
+        {QStringLiteral("modeswitch"), testModeSwitchRestore},
         {QStringLiteral("autosave"), testAutosaveName},
     };
     bool found = false;

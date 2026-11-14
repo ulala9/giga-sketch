@@ -447,6 +447,12 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   switchTo restores the new mode's state. Harmless (old tab bars are retired) but wasted work; a candidate if mode
   switching ever needs to be faster (hide the State entry during addClient — note setAutoSaveSettings() itself
   re-applies the settings, so don't use reset/setAutoSaveSettings for that).
+  FIXED (fix/mode-switch-double-restore): `KisMainWindow::applyMainWindowSettings` override; while
+  `gigaLoadMenuFile` runs `addClient()` (flag `gigaSkipSavedLayout`) it passes an in-memory copy of the group
+  (`KConfig(QString(), SimpleConfig)` + `copyTo`, which also copies the Toolbar subgroups) without "State". Measured:
+  the stale State was actually applied TWICE per Studio switch. Speed gain not measurable in the self-test config
+  (~50 ms per Studio switch before and after); the win is no stale intermediate layout. Self-test `modeswitch`
+  (all mode pairs: no extra restore, same layout signature on re-entry, Procreate hides bars).
 - Qt 6.11 internals: QMainWindowLayout::applyState retires tab bars not in the new state (unuseTabBar = deleteLater);
   restoreState ends with showTabBars() (shows every used bar). tabChanged() raises the central widget.
 
