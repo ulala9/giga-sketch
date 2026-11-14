@@ -425,7 +425,7 @@ xsi:schemaLocation="http://www.kde.org/standards/kxmlgui/1.0  http://www.kde.org
       <text>&amp;Plugins</text>
       <Menu name="scripts"><text>Scripts</text></Menu>
     </Menu>
-    <Menu name="giga_window">
+    <Menu name="settings"><!-- Giga Sketch: shown as "Window". Must be named "settings": the "Toolbars Shown" list (ktoolbarhandler.cpp) always merges into a menu with that name, and creates an unlabeled "No text" menu if none exists. -->
       <text>&amp;Window</text>
       <Action name="window"/>
       <Separator/>
