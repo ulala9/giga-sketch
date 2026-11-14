@@ -228,7 +228,9 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   = WideGamutColorSelector + SpecificColorSelector + PaletteDocker.
 - Menus: `krita/gigasketch.xmlgui` (generated from krita5.xmlgui; version `GIGA_XMLGUI_VERSION` in krita/CMakeLists.txt,
   added to krita.qrc). Loaded in KisMainWindow ctor instead of krita5.xmlgui. Keep `<Menu name="tools">` (Python uses
-  tools/scripts). Labels renamed in `KisMainWindow::gigaApplyWording()` (action name → text).
+  tools/scripts). The Window menu must stay `<Menu name="settings">`: KToolBarHandler (ktoolbarhandler.cpp) always
+  merges "Toolbars Shown" into a menu named "settings" and creates an unlabeled "No text" menu if none exists.
+  Taskbar icon: main.cc sets app name + RESOURCE_NAME before KisApplication → WM_CLASS gigasketch. Labels renamed in `KisMainWindow::gigaApplyWording()` (action name → text).
 - New Document: `libs/ui/dialogs/GigaNewDocumentDialog.{h,cpp}`; slotFileNew uses it unless `gigaPsNewDocument=false`.
   Creates via `KisDocument::newImage(..., RASTER_LAYER, ...)` + `KisPart::startCustomDocument`.
 
