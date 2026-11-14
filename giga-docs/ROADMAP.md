@@ -7,8 +7,10 @@ branches, and move things between sections as part of every merge. How the code 
 Last updated: 2026-11-14
 
 ## Resume here
-- **Next up:** nothing queued. Ask the user what's next (other blueprints in Phase 5, or theme options).
-- Repo state: everything merged and pushed (`fix/taskbar-icon`, `fix/no-text-menu` on 2026-11-14).
+- **Next up:** `feature/procreate-canvas-look` (unmerged, waiting for the user's hand test): dark canvas surround,
+  finer checkerboard, light blue grid, Grid panel "Draw on" (Canvas / Canvas + background / Background only with
+  screen-fixed Size), grid limits 10000 px, two upstream grid fixes. Merge after the user OKs it.
+- Repo state: everything else merged and pushed (`feature/layers-duplicate-button` on 2026-11-14).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -49,6 +51,7 @@ Last updated: 2026-11-14
 - [x] Giga Dark theme, Photoshop shortcut scheme + input profile defaults (`feature/ui-*`)
 - [x] Photoshop-like layout, left toolbox with tool groups, top options bar, right panel icon strip
 - [x] Layers panel: lock row, PS button order, New/Delete on the left (`feature/ui-layers-panel`, `feature/layers-buttons-left`)
+- [x] Layers panel: Duplicate button between New and Delete (`feature/layers-duplicate-button`, merged 2026-11-14)
 - [x] Colour panel, menus wording, New Document dialog (`feature/ui-color-panel`, `feature/ui-menus-wording`, …)
 - [x] Space-saving mode, panel flyouts (`feature/ui-space-saving`)
 - [x] Interface modes Studio / Photoshop / Procreate, F9 (`feature/interface-modes`, `feature/procreate-*`, `feature/studio-*`)
