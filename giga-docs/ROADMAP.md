@@ -4,11 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-13
+Last updated: 2026-11-14
 
 ## Resume here
-- **Next up:** nothing queued — ask the user what they want next. Text tools are "okish"; don't push more text work.
-- Repo state: everything merged into `giga-main` and pushed to `origin`. No open feature branches.
+- **Next up:** `fix/panel-snap` — floating panels feel "on a grid" while dragging (user report 2026-11-14). Cause:
+  `snap()` uses every other panel's edges as full-window lines. Fix: only snap to panels you're next to, Ctrl = no snap.
+- Repo state: `fix/mode-switch-double-restore` merged and pushed. Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
 - UI checks: `giga-tools/selftest.sh all` (headless-ish UI self-tests, see NOTES.md "UI self-tests").
@@ -53,13 +54,16 @@ Last updated: 2026-11-13
 - [x] Interface modes Studio / Photoshop / Procreate, F9 (`feature/interface-modes`, `feature/procreate-*`, `feature/studio-*`)
 - [x] Panels float inside the window: tear-off by tab/title/strip, drag back to dock, per-mode memory (`feature/in-window-panels`)
 - [x] Floating panels stay on top on tab changes; header buttons instead of ≡ menu (`fix/floating-panel-tabs`)
+- [x] Mode switch: no stale layout restore, each mode keeps its floating panels (`fix/mode-switch-double-restore`)
+- [ ] Panel snapping only to adjacent panels, Ctrl = free move (`fix/panel-snap`)
 - [x] Save Dated JPG, Ctrl+Space zoom toward pointer, no brush-switch popup
 - [ ] Nothing queued. Add UI requests here as the user reports them.
 
 ## Known issues / watch list
-- Mode switch restores the panel layout twice (menu rebuild + mode). Harmless; fix only if switching feels slow
-  (details in NOTES.md, "In-window panels: buried by tab changes").
 - If dragging a floating panel ever looks choppy again: run with `GIGA_PANEL_TRACE=1` and read the summary lines.
+- After a Fedora update, link errors like `undefined reference to OpenColorIO_v2_4::…` / `Imf_3_2::…` = stale
+  objects built against the old system library. Delete the `.o` files that mention the old namespace and rebuild
+  (seen 2026-11-14: OCIO 2.4→2.5, OpenEXR 3.2→3.4).
 - Pre-existing upstream test failures (not ours): TestSvgParser/Cloned/RoundTrip, SvgTextCursorTest RTL/vertical.
 
 ## Backlog / ideas (not scheduled)
