@@ -585,3 +585,41 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   branch (based on giga-main) → commit there. Record the merge into giga-test without touching files:
   `git add -A; T=$(git write-tree); C=$(git commit-tree $T -p HEAD -p <branch> -m "Merge branch '<branch>' into giga-test");
   git update-ref refs/heads/giga-test $C` (several `-p` = one octopus merge). The tree is exactly what was built.
+
+## Transform Last Stroke (feature/transform-last-stroke, 2026-11-15)
+- Recording: `libs/ui/tool/GigaLastStroke.{h,cpp}` (static holder, GUI thread only). `KisToolFreehandHelper::initPaintImpl`
+  starts a record (image, node, resources snapshot, activeSelection, each stroke info's start KisDistanceInformation,
+  `FreehandStrokeStrategy::gigaRandomSourceCopy()`, transaction text, start time); the low-level
+  `paintAt/paintLine/paintBezierCurve(int strokeInfoId, ...)` append jobs (catches mirror/multihand, stabilizer,
+  Smooth Curve tail, QuickShape repaint, line tool); `endPaintImpl` → finish(), `cancelPaint` → abort().
+  Cap 300k jobs. Records hold the image strongly (snapshot has KisImageSP): controller clears on sigDocumentRemoved.
+- Random numbers: `KisStrokeRandomSource`'s copy ctor *shares* generators (for LoD). `gigaDeepCopy()` clones them;
+  taken before the stroke starts, it makes a repaint identical (jitter/scatter).
+- Controller `libs/ui/GigaLastStrokeTransform.{h,cpp}` (made in KisMainWindow::createActions, action
+  `giga_transform_last_stroke` in gigasketch.action; Edit menu item added in code by `gigaAddEditMenuItems()`):
+  1. checks: top undo entry has the stroke's text and start/end time (KisSavedCommand forwards time()/endTime()),
+     or is the remembered replacement entry; KisPaintLayer, editable, visible, not alpha-locked, no keyframes;
+     compositeOp == COMPOSITE_OVER; paintop not colorsmudge/deformbrush/filter/duplicate.
+  2. repaint: `FreehandStrokeStrategy` (gigaSetNoLod, gigaSetRandomSource) on a KisPaintLayer that is never added
+     to the image; snapshot `setCurrentNode(hidden)`, `gigaSetNoUndo(true)` (postExecutionUndoAdapter() → null →
+     painter strategy uses its FakeUndoData), `setSelectionOverride(recorded)`. Ends with UpdateData(true).
+  3. COW copy of the layer device (`new KisPaintDevice(*dev)`), select only that layer (the transform tool pastes
+     onto every *selected* node), `undoStack()->undo()`.
+  4. `KisTool::newActivationWithExternalSource(strokeOnly)` (= Paste and Transform). Mode via
+     `gigaSetNextActivationMode` (invokeMethod, config `gigaLastStrokeTransformMode`, default 1 = Warp).
+  5. `KisToolTransform::gigaExternalSourceStrokeFinished(applied, mode)` (queued; emitted from endStroke /
+     cancelStroke, and by a guard on startStroke's early returns). Applied: COW copy of result, undo the tool's
+     entry, push `GigaCopyPixelsCommand` "stroke as drawn" + "Transform Last Stroke" via runSingleCommandStroke,
+     rects from `differingRect()` (64-px tile memcmp; shared tiles skipped). No change → only the stroke entry,
+     remembered as replacement (can reopen). Cancelled → push the stroke back from the copy, remembered.
+- Gotchas found:
+  - Never `KisImage::waitForDone()` while any stroke may be open (it waits forever; the test hung on its own open
+    stroke). Use the bounded `waitIdle()` (isIdle + processEvents, timeout); `m_preparing` blocks re-entry.
+  - Starting any stroke purges redo (`clearsRedoOnStart`). Do NOT keep redo across another transaction on the same
+    device: the memento manager frees the redo tiles → "double free" on redo (tried, crashed, removed).
+  - `KisTransaction::endAndTake()` data ignores its first redo(); call redo() once right after taking it, or the
+    entry's later redo does nothing.
+  - Undo during a running stroke: KisDocument's UndoStack only undoes when `tryBarrierLock()` succeeds.
+- Self-test `laststroke`: blue + red crossing lines, cancel, move +60 px (free mode via translateX property +
+  requestImageRecalculation slot), history/undo/redo, Warp + tool switch, reopen, refuse after New Layer.
+

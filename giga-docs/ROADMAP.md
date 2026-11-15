@@ -4,7 +4,7 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-15 (Reference Board rotate/zoom built)
+Last updated: 2026-11-15 (Transform Last Stroke built)
 
 ## Resume here
 - **Next up:** the user's look test of the six aesthetic branches (Phase 4 list below), then icon batches 2–4.
@@ -30,6 +30,10 @@ Last updated: 2026-11-15 (Reference Board rotate/zoom built)
     Self-test `refboard`.
   - `feature/giga-tool-icons` — original tool icons, batch 1 (paint, retouch, fill tools); needs a restart.
     Self-test `icons`. Next batches: the remaining toolbox tools.
+  - `feature/transform-last-stroke` — Edit ▸ Transform Last Stroke (Ctrl+Shift+Alt+T): Transform tool (Warp by
+    default, remembers the last mode) on only the last stroke; what it covered reappears; Esc puts it back; one
+    Ctrl+Z = stroke as drawn. Hand-test: crossing lines, warp/liquify, Esc, Ctrl+Z, mirrored brush, textured brush,
+    Smooth Curve (press right after lifting). Self-test `laststroke` (15 checks).
 - Repo state: everything else merged and pushed (`feature/lasso-fill-erase` on 2026-11-15).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
@@ -41,7 +45,8 @@ Last updated: 2026-11-15 (Reference Board rotate/zoom built)
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
   Pending in `giga-test` now: `feature/procreate-canvas-look`, `fix/shortcut-beats-menu-letter`,
   `feature/brush-cursor-look`, `feature/accent-color`, `feature/slider-look`, `feature/canvas-shadow`,
-  `feature/ui-motion`, `feature/giga-tool-icons`, `feature/refboard-rotate-zoom`, `feature/refboard-flip`.
+  `feature/ui-motion`, `feature/giga-tool-icons`, `feature/refboard-rotate-zoom`, `feature/refboard-flip`,
+  `feature/transform-last-stroke`.
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -111,6 +116,11 @@ Last updated: 2026-11-15 (Reference Board rotate/zoom built)
   drop/paste, look options, Resample to Current Size + shrink-on-save. Self-test `refboard`.
 - [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel, 3D Model Layer: blueprinted only.
 
+## Phase 6 — Edit what you just drew (user request 2026-11-15)
+- [ ] Transform Last Stroke (`feature/transform-last-stroke`, built, waiting for the user's hand test).
+- Later, if wanted: a top-bar button right after a stroke; a crisp "bend the path and repaint" mode (warp grid /
+  distort / liquify push on the stroke's path, brush repaints along it) as a second mode of the same command.
+
 ## Known issues / watch list
 - If dragging a floating panel ever looks choppy again: run with `GIGA_PANEL_TRACE=1` and read the summary lines.
 - After a Fedora update, link errors like `undefined reference to OpenColorIO_v2_4::…` / `Imf_3_2::…` = stale
@@ -125,6 +135,9 @@ Last updated: 2026-11-15 (Reference Board rotate/zoom built)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-15: Transform Last Stroke = pixel transform of the isolated stroke (reuses Krita's Transform tool, user's
+  lasso+Ctrl+T habit) rather than path-redraw first. Refuses smudge/deform/filter/clone brushes, erasers and
+  non-Normal blending instead of "taking the pixels as-is". Shortcut Ctrl+Shift+Alt+T (Ctrl+Alt+T = Konsole in KDE).
 - 2026-11-15: Lasso Fill is its own tool (own settings, lasso only, contour regions on); erase mode has no
   special cursor yet (only the top-bar eraser button shows it) — add a cue only if the user asks.
 - 2026-11-13: brush feel tuning considered done (user tested).
