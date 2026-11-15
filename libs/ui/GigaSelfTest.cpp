@@ -27,6 +27,7 @@
 #include <kis_layer.h>
 #include <KoToolManager.h>
 #include <KoToolRegistry.h>
+#include <kis_action_registry.h>
 #include <KoPointerEvent.h>
 #include <kis_tool.h>
 #include <GigaBranding.h>
@@ -991,6 +992,38 @@ void testLassoFill(KisMainWindow *w)
     pump(10);
 }
 
+/// A shortcut the user gave to Alt+<letter> wins over a menu's Alt+letter
+/// (e.g. Feather Selection on Alt+A vs "&Arrange & Documents").
+void testMenuLetter(KisMainWindow *w)
+{
+    openTestDocument(w);
+    KisView *view = w->activeView();
+    KisAction *feather = view ? view->viewManager()->actionManager()->actionByName(QStringLiteral("featherselection")) : nullptr;
+    QAction *arrange = nullptr;
+    for (QAction *menu : w->menuBar()->actions()) {
+        if (menu->text().contains(QStringLiteral("Arrange"))) arrange = menu;
+    }
+    if (!feather || !arrange) {
+        report(false, "menuletter-setup", QStringLiteral("feather %1, arrange menu %2").arg(!!feather).arg(!!arrange));
+        return;
+    }
+    const QString before = arrange->text();
+    const QList<QKeySequence> oldKeys = feather->shortcuts();
+    auto shortcutsChanged = [&]() {
+        Q_EMIT KisActionRegistry::instance()->shortcutsUpdated();
+        pump(5);
+    };
+    feather->setShortcut(QKeySequence(QStringLiteral("Alt+A")));
+    shortcutsChanged();
+    const QString during = arrange->text();
+    report(!during.contains(QStringLiteral("&A")) && during.contains(QStringLiteral("Arrange"))
+               && feather->shortcut() == QKeySequence(QStringLiteral("Alt+A")),
+           "menuletter-user-shortcut-wins", QStringLiteral("menu \"%1\" -> \"%2\"").arg(before, during));
+    feather->setShortcuts(oldKeys);
+    shortcutsChanged();
+    report(arrange->text() == before, "menuletter-restored", QStringLiteral("menu \"%1\"").arg(arrange->text()));
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -1005,6 +1038,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("refboard"), testReferenceBoard},
         {QStringLiteral("layerbuttons"), testLayerButtons},
         {QStringLiteral("lassofill"), testLassoFill},
+        {QStringLiteral("menuletter"), testMenuLetter},
     };
     bool found = false;
     for (const auto &test : tests) {

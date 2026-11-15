@@ -69,6 +69,7 @@
 #include "GigaSelfTest.h"
 #include "GigaSaveDated.h"
 #include "GigaZoomOption.h"
+#include <kis_action_registry.h>
 #include <QToolBar>
 #include <QGuiApplication>
 #include <QFrame>
@@ -330,6 +331,7 @@ public:
     bool gigaSkipSavedLayout {false};
     int gigaSavedLayoutRestores {0}; ///< times "State" was applied (self-test)
     QHash<QString, QString> gigaKritaWording; ///< original menu texts
+    QHash<QAction *, QString> gigaMenuLetterTexts; ///< menu titles whose Alt+letter was removed, original text
     QPointer<QToolBar> gigaPanelStrip;
     QPointer<GigaFloatingPanelManager> gigaFloating;
     bool gigaStripPressed {false}; ///< a strip button is pressed (may become a drag)
@@ -754,6 +756,10 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     createGigaPanelStrip();
     // After construction, when plugins have added their actions too.
     QTimer::singleShot(0, this, &KisMainWindow::gigaApplyWording);
+    // Giga Sketch: user shortcuts beat menu Alt+letters (now and on change).
+    connect(KisActionRegistry::instance(), &KisActionRegistry::shortcutsUpdated, this, [this]() {
+        QTimer::singleShot(0, this, &KisMainWindow::gigaResolveMenuLetterConflicts);
+    });
 
     applyMainWindowSettings(d->windowStateConfig);
 
@@ -1291,6 +1297,62 @@ void KisMainWindow::gigaApplyWording()
                 d->gigaKritaWording.insert(name, action->text());
             }
             action->setText(d->gigaClassic ? d->gigaKritaWording.value(name) : entry.second);
+        }
+    }
+    gigaResolveMenuLetterConflicts(); // the menus were (re)built just before this
+}
+
+// The menu's Alt+letter: the character after a single '&' ("&&" is a plain &).
+static QChar gigaMenuLetter(const QString &text)
+{
+    for (int i = 0; i + 1 < text.size(); ++i) {
+        if (text[i] != QLatin1Char('&')) continue;
+        if (text[i + 1] == QLatin1Char('&')) { ++i; continue; }
+        return text[i + 1].toUpper();
+    }
+    return QChar();
+}
+
+// The text without its Alt+letter marker (keeps "&&").
+static QString gigaWithoutMenuLetter(const QString &text)
+{
+    QString out;
+    for (int i = 0; i < text.size(); ++i) {
+        if (text[i] == QLatin1Char('&')) {
+            if (i + 1 < text.size() && text[i + 1] == QLatin1Char('&')) { out += QStringLiteral("&&"); ++i; }
+            continue;
+        }
+        out += text[i];
+    }
+    return out;
+}
+
+void KisMainWindow::gigaResolveMenuLetterConflicts()
+{
+    if (!guiFactory()) return;
+    // Every key the user (or the scheme) gave to an action.
+    QSet<QKeySequence> used;
+    for (const KisKXMLGUIClient *client : guiFactory()->clients()) {
+        if (!client || !client->actionCollection()) continue;
+        for (QAction *action : client->actionCollection()->actions()) {
+            for (const QKeySequence &key : action->shortcuts()) used.insert(key);
+        }
+    }
+    // Menus rebuilt since last time get fresh texts: forget stale entries.
+    const QList<QAction *> menus = menuBar()->actions();
+    for (auto it = d->gigaMenuLetterTexts.begin(); it != d->gigaMenuLetterTexts.end();) {
+        it = menus.contains(it.key()) ? std::next(it) : d->gigaMenuLetterTexts.erase(it);
+    }
+    for (QAction *menu : menus) {
+        const QString original = d->gigaMenuLetterTexts.value(menu, menu->text());
+        const QChar letter = gigaMenuLetter(original);
+        if (letter.isNull()) continue;
+        const QKeySequence altKey(QStringLiteral("Alt+") + letter);
+        if (used.contains(altKey)) {
+            d->gigaMenuLetterTexts.insert(menu, original);
+            menu->setText(gigaWithoutMenuLetter(original));
+        } else if (d->gigaMenuLetterTexts.contains(menu)) {
+            menu->setText(d->gigaMenuLetterTexts.take(menu)); // no longer taken: give it back
         }
     }
 }
