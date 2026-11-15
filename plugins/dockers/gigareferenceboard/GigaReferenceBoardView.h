@@ -9,8 +9,10 @@
 #include <QHash>
 #include <QPointer>
 #include <QRectF>
+#include <QSet>
 #include <QWidget>
 
+#include <GigaCanvasInputKeys.h>
 #include <GigaReferenceBoard.h>
 #include <kis_types.h>
 #include <KisReferenceImagesLayer.h>
@@ -24,7 +26,10 @@ class QVariantAnimation;
  * camera (pan / zoom), independent of the painting canvas.
  *
  * Board coordinates are document points (the image's boardRect()). The
- * camera maps them to widget pixels: widget = board * zoom + pan.
+ * camera maps them to "view" pixels: view = board * zoom + pan. The view
+ * is then turned by m_rotation around the widget centre (like the canvas
+ * rotation): widget = centre + rotate(view - centre). With rotation 0,
+ * view and widget pixels are the same.
  *
  * Everything runs on the interface thread; it only reads the reference
  * images and changes them through undo commands.
@@ -35,6 +40,8 @@ class GigaReferenceBoardView : public QWidget
     // For the UI self-test (libs/ui/GigaSelfTest.cpp), which can't link this plugin.
     Q_PROPERTY(int imageCount READ imageCount)
     Q_PROPERTY(int focusedIndex READ focusedIndex)
+    Q_PROPERTY(qreal rotation READ rotation)
+    Q_PROPERTY(qreal zoom READ zoom)
 public:
     explicit GigaReferenceBoardView(QWidget *parent = nullptr);
     ~GigaReferenceBoardView() override;
@@ -44,6 +51,8 @@ public:
     int imageCount() const;
     KisReferenceImage *focusedImage() const { return m_focused; }
     int focusedIndex() const; ///< in z order, -1 = overview
+    qreal rotation() const { return m_rotation; } ///< degrees, clockwise
+    qreal zoom() const { return m_camera.zoom; }
     /// Widget position of the centre of image @p index (z order).
     Q_INVOKABLE QPointF imageWidgetCenter(int index) const;
 
@@ -56,6 +65,7 @@ public Q_SLOTS:
     void paste();
     void focusImage(KisReferenceImage *image);
     void focusStep(int direction); ///< -1 previous, +1 next (arrangement order)
+    void resetRotation(); ///< back to upright, animated (F1 / the canvas reset key)
 
 Q_SIGNALS:
     void contentChanged();
@@ -70,6 +80,7 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
+    void focusOutEvent(QFocusEvent *event) override;
     void enterEvent(QEnterEvent *event) override;
     void leaveEvent(QEvent *event) override;
     void dragEnterEvent(QDragEnterEvent *event) override;
@@ -96,6 +107,12 @@ private:
     QRectF displayRect(KisReferenceImage *image) const;
     KisReferenceImage *imageAt(const QPointF &widgetPos) const;
     QPointF toBoard(const QPointF &widgetPos) const;
+    /// Widget pixels <-> view pixels (undoes / applies m_rotation).
+    QTransform rotationTransform() const; ///< view -> widget
+    QPointF toView(const QPointF &widgetPos) const;
+    QPointF viewDelta(const QPointF &widgetDelta) const; ///< a widget-space move, in view space
+    void setRotation(qreal degrees);
+    bool isResetRotationKey(QKeyEvent *event) const;
 
     Camera cameraFitting(const QRectF &boardRect, qreal margin) const;
     void animateCamera(const Camera &target, int durationMs);
@@ -133,7 +150,7 @@ private:
     KisReferenceImage *m_focused {nullptr};
     KisReferenceImage *m_current {nullptr}; // last clicked, for highlight
 
-    enum class Drag { None, Pending, Pan, MoveImage, Touch };
+    enum class Drag { None, Pending, Pan, MoveImage, Touch, Zoom, Rotate };
     Drag m_drag = Drag::None;
     QPointF m_pressPos;
     QPointF m_lastPos;
@@ -142,6 +159,18 @@ private:
     KisReferenceImage *m_dropImage {nullptr}; // just dropped by hand: drawn at m_dropRect until its move lands
     QRectF m_dropRect;
     bool m_spaceHeld = false;
+    QSet<int> m_heldKeys; // non-modifier keys held (Space...), for the canvas bindings
+
+    // Canvas-style zoom / rotate drags (Settings > Canvas Input Settings).
+    GigaCanvasInputKeys::Binding m_navBinding;
+    qreal m_startZoom = 1.0;
+    QPointF m_zoomAnchor;       // widget point that stays put while zooming
+    qreal m_startRotation = 0.0;
+    bool m_rotateSnapping = false; // stepped rotate: snapping started (after half a step)
+
+    qreal m_rotation = 0.0; // degrees
+    QVariantAnimation *m_rotationAnimation {nullptr};
+    qreal m_rotationFrom = 0.0;
 
     // Two-finger touch
     QPointF m_touchCenter;

@@ -90,6 +90,7 @@ set(kritaui_LIB_SRCS
     GigaSelfTest.cpp
     GigaSaveDated.cpp
     GigaZoomOption.cpp
+    GigaCanvasInputKeys.cpp
     GigaPanelTitleBar.cpp
     GigaReferenceLayout.cpp
     GigaReferenceBoard.cpp
