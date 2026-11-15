@@ -30,6 +30,7 @@
 #include <KoPointerEvent.h>
 #include <kis_tool.h>
 #include <GigaBranding.h>
+#include <kis_icon_utils.h>
 #include <kundo2stack.h>
 #include <KoCanvasResourceProvider.h>
 #include <KoColor.h>
@@ -248,6 +249,23 @@ KisDocument *openTestDocument(KisMainWindow *w)
 /// Autosaves of never-saved documents go to $HOME (the test's throw-away
 /// home) and must be named after Giga Sketch, not "krita-...", so stock
 /// Krita's startup recovery never offers (or deletes) them.
+// Giga tool icons: loadIcon() returns our line-art icon when one exists
+// (feature/giga-tool-icons).
+void testToolIcons(KisMainWindow *w)
+{
+    Q_UNUSED(w);
+    const char *prefix = KisIconUtils::useDarkIcons() ? "dark_" : "light_";
+    int same = 0, total = 0;
+    for (const char *name : {"krita_tool_freehand", "krita_tool_color_fill", "krita_tool_gradient", "calligraphy"}) {
+        const QImage a = KisIconUtils::loadIcon(QLatin1String(name)).pixmap(32, 32).toImage();
+        const QImage b = QIcon(QStringLiteral(":/giga-icons/") + QLatin1String(prefix) + QLatin1String(name)
+                               + QStringLiteral(".svg")).pixmap(32, 32).toImage();
+        total++;
+        if (!a.isNull() && a == b) same++;
+    }
+    report(same == total, "icons-giga-used", QStringLiteral("%1/%2").arg(same).arg(total));
+}
+
 void testAutosaveName(KisMainWindow *w)
 {
     // Startup recovery: was a recovery dialog opened for files already in $HOME?
@@ -1003,6 +1021,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("modefloat"), testModeFloating},
         {QStringLiteral("autosave"), testAutosaveName},
         {QStringLiteral("refboard"), testReferenceBoard},
+        {QStringLiteral("icons"), testToolIcons},
         {QStringLiteral("layerbuttons"), testLayerButtons},
         {QStringLiteral("lassofill"), testLassoFill},
     };

@@ -109,6 +109,8 @@ public:
     bool renamePastedLayers();
     bool renameDuplicatedLayers();
     QString exportMimeType();
+    // Giga Sketch: line-art tool icons on/off, added in code
+    QCheckBox *m_chkGigaToolIcons {nullptr};
     int forcedFontDpi();
 
     static void setColorSamplerPreviewStyleItems(QComboBox *cmb);
