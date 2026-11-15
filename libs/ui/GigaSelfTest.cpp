@@ -31,6 +31,7 @@
 #include <kis_tool.h>
 #include <GigaBranding.h>
 #include "GigaAccent.h"
+#include "kis_config_notifier.h"
 #include <kundo2stack.h>
 #include <KoCanvasResourceProvider.h>
 #include <KoColor.h>
