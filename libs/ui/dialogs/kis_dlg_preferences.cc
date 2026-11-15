@@ -9,6 +9,9 @@
 
 #include "kis_dlg_preferences.h"
 #include <GigaBranding.h>
+#include "GigaAccent.h"
+#include <QColorDialog>
+#include <QPainter>
 
 #include <config-hdr.h>
 #include <opengl/kis_opengl.h>
@@ -392,6 +395,54 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
         QFormLayout::ItemRole role;
         panelsForm->getWidgetPosition(m_chkGigaBrushSwitchMessage, &row, &role);
         panelsForm->insertRow(row + 1, QString(), m_chkGigaInWindowPanels);
+    }
+
+    // Giga Sketch: accent colour. A combo of colour swatches; the last entry
+    // ("Custom...") opens a colour dialog. Applied when Preferences is closed with OK.
+    {
+        m_cmbGigaAccent = new QComboBox(this);
+        auto swatch = [](const QColor &c) {
+            QPixmap pm(16, 16);
+            pm.fill(Qt::transparent);
+            QPainter p(&pm);
+            p.setRenderHint(QPainter::Antialiasing, true);
+            if (c.isValid()) {
+                p.setBrush(c);
+                p.setPen(QPen(c.darker(140), 1));
+            } else {
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(QColor(150, 150, 150), 1, Qt::DashLine));
+            }
+            p.drawEllipse(QRectF(1.5, 1.5, 13, 13));
+            return QIcon(pm);
+        };
+        for (const auto &preset : GigaAccent::presets()) {
+            m_cmbGigaAccent->addItem(swatch(preset.second), preset.first,
+                                     preset.second.isValid() ? preset.second.name() : QString());
+        }
+        const QString current = cfg.readEntry<QString>(GigaAccent::configKey(), QString());
+        int index = m_cmbGigaAccent->findData(current);
+        m_gigaCustomAccent = (index < 0 && QColor(current).isValid()) ? QColor(current) : QColor(52, 120, 200);
+        m_cmbGigaAccent->addItem(swatch(m_gigaCustomAccent), i18nc("accent colour", "Custom..."), m_gigaCustomAccent.name());
+        const int customIndex = m_cmbGigaAccent->count() - 1;
+        if (index < 0) index = QColor(current).isValid() ? customIndex : 0;
+        m_cmbGigaAccent->setCurrentIndex(index);
+        m_cmbGigaAccent->setToolTip(i18n("Colour of highlighted items, slider fills, checked buttons and focus. "
+                                         "\"Theme default\" uses the colour from the theme."));
+        connect(m_cmbGigaAccent, QOverload<int>::of(&QComboBox::activated), this, [this, swatch, customIndex](int i) {
+            if (i != customIndex) return;
+            const QColor c = QColorDialog::getColor(m_gigaCustomAccent, this, i18n("Accent Colour"));
+            if (!c.isValid()) return;
+            m_gigaCustomAccent = c;
+            m_cmbGigaAccent->setItemData(customIndex, c.name());
+            m_cmbGigaAccent->setItemIcon(customIndex, swatch(c));
+        });
+        if (QFormLayout *form = qobject_cast<QFormLayout*>(m_chkCanvasMessages->parentWidget()->layout())) {
+            int row = -1;
+            QFormLayout::ItemRole role;
+            form->getWidgetPosition(m_chkGigaInWindowPanels, &row, &role);
+            form->insertRow(row + 1, i18n("Accent colour:"), m_cmbGigaAccent);
+        }
     }
 
     const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
@@ -813,6 +864,7 @@ void GeneralTab::setDefault()
 
     m_backupFileCheckBox->setChecked(cfg.backupFile(true));
     cmbBackupFileLocation->setCurrentIndex(0);
+    if (m_cmbGigaAccent) m_cmbGigaAccent->setCurrentIndex(0);
     txtBackupFileSuffix->setText("~");
     intNumBackupFiles->setValue(1);
 
@@ -1029,6 +1081,11 @@ int GeneralTab::mdiMode()
 bool GeneralTab::showCanvasMessages()
 {
     return m_chkCanvasMessages->isChecked();
+}
+
+QString GeneralTab::gigaAccentColor() const
+{
+    return m_cmbGigaAccent ? m_cmbGigaAccent->currentData().toString() : QString();
 }
 
 bool GeneralTab::gigaInWindowPanels()
@@ -2956,6 +3013,7 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
         cfg.setShowCanvasMessages(m_general->showCanvasMessages());
         cfg.setGigaShowBrushSwitchMessage(m_general->gigaShowBrushSwitchMessage());
         cfg.writeEntry<bool>("gigaInWindowPanels", m_general->gigaInWindowPanels());
+        cfg.writeEntry<QString>(GigaAccent::configKey(), m_general->gigaAccentColor());
         cfg.setCompressKra(m_general->compressKra());
         cfg.setTrimKra(m_general->trimKra());
         cfg.setTrimFramesImport(m_general->trimFramesImport());

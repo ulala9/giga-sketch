@@ -115,6 +115,12 @@ public:
     static void setColorSamplerPreviewStyleIndexByValue(QComboBox *cmb, KisConfig::ColorSamplerPreviewStyle style);
     static KisConfig::ColorSamplerPreviewStyle getColorSamplerPreviewStyleValue(const QComboBox *cmb);
 
+    // Giga Sketch: interface accent colour ("" = theme default, else "#rrggbb")
+    QString gigaAccentColor() const;
+private:
+    QComboBox *m_cmbGigaAccent {nullptr};
+    QColor m_gigaCustomAccent;
+
 private Q_SLOTS:
     void getBackgroundImage();
     void clearBackgroundImage();
