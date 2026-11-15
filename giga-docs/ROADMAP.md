@@ -75,7 +75,13 @@ Last updated: 2026-11-15 (after crash recovery)
   also with custom blending (`feature/lasso-fill-erase`, merged 2026-11-15, hand-tested). Self-test `lassofill`.
 - [x] Taskbar icon: WM_CLASS `gigasketch` set before the app starts (`fix/taskbar-icon`)
 - [x] No stray "No text" menu: Window menu is named `settings` in gigasketch.xmlgui so Toolbars Shown merges into it (`fix/no-text-menu`)
-- [ ] Nothing queued. Add UI requests here as the user reports them.
+- Aesthetic polish (approved 2026-11-15, one branch each, in this order):
+  - [ ] Brush cursor: two-tone outline, fade while painting, size readout (`feature/brush-cursor-look`)
+  - [ ] Accent colour choice in Preferences (`feature/accent-color`)
+  - [ ] Softer slider look (`feature/slider-look`)
+  - [ ] Soft shadow around the canvas (`feature/canvas-shadow`)
+  - [ ] Interface motion: panel/flyout fades, mode-switch cross-fade, off switch (`feature/ui-motion`)
+  - [ ] Original line-art toolbox + panel strip icons, in batches (`feature/giga-tool-icons`)
 
 ## Phase 5 — Feature blueprints (doc "Giga Sketch Feature Blueprints")
 - [x] Reference Board (`feature/reference-board`, merged 2026-11-14, hand-tested): Normalize, Arrange (5 styles,
