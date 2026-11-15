@@ -61,6 +61,7 @@ struct KRITAUI_EXPORT Settings {
     bool roundedCorners = true;
     bool captions = false;
     bool flipWithCanvas = true; ///< mirror the Board when the canvas is mirrored
+    bool rotateWithCanvas = true; ///< turn the Board by the canvas rotation (plus its own)
     bool dimOthers = true;
 
     /// Shrink oversized references in the saved file (open document untouched).

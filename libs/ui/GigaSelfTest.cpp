@@ -906,6 +906,39 @@ void testReferenceBoard(KisMainWindow *w)
             pump(3);
             report(!stillFlipped && !boardView->property("mirrored").toBool(), "board-flip-option-off", QString());
             wait(400);
+
+            // Rotating the canvas turns the Board too (Look > Rotate With Canvas).
+            wait(100);
+            controller->rotateCanvas(30.0);
+            pump(5);
+            const qreal followed = boardView->property("rotation").toReal();
+            report(qAbs(followed - 30.0) < 0.5, "board-rotates-with-canvas", QStringLiteral("%1°").arg(followed, 0, 'f', 1));
+            // Shift+Space on the Board adds its own turn; the reset key over
+            // the Board removes only that, back to the canvas angle.
+            navDrag(mid + QPointF(r, 0), mid + QPointF(0, r), Qt::ShiftModifier);
+            const qreal withOwn = boardView->property("rotation").toReal();
+            {
+                const QKeyCombination combo = resetKey[0];
+                QKeyEvent key(QEvent::KeyPress, combo.key(), combo.keyboardModifiers());
+                QCoreApplication::sendEvent(boardView, &key);
+                QKeyEvent up(QEvent::KeyRelease, combo.key(), combo.keyboardModifiers());
+                QCoreApplication::sendEvent(boardView, &up);
+                wait(350);
+            }
+            const qreal afterOwnReset = boardView->property("rotation").toReal();
+            report(qAbs(withOwn - 120.0) < 1.0 && qAbs(afterOwnReset - 30.0) < 0.5, "board-reset-keeps-canvas-angle",
+                   QStringLiteral("%1° -> %2°").arg(withOwn, 0, 'f', 1).arg(afterOwnReset, 0, 'f', 1));
+            Settings noRotate = Settings::load();
+            noRotate.rotateWithCanvas = false;
+            noRotate.save();
+            pump(3);
+            const qreal unfollowed = boardView->property("rotation").toReal();
+            noRotate.rotateWithCanvas = true;
+            noRotate.save();
+            controller->resetCanvasRotation();
+            pump(5);
+            report(qAbs(unfollowed) < 0.01 && qAbs(boardView->property("rotation").toReal()) < 0.01, "board-rotate-option-off",
+                   QStringLiteral("off: %1°").arg(unfollowed, 0, 'f', 1));
         } else {
             report(false, "board-flips-with-canvas", QStringLiteral("no canvas controller"));
         }
