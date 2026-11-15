@@ -2339,6 +2339,17 @@ DisplaySettingsTab::DisplaySettingsTab(QWidget *parent, const char *name)
     hideScrollbars->setChecked(cfg.hideScrollbars());
     chkCurveAntialiasing->setChecked(cfg.antialiasCurves());
     chkSelectionOutlineAntialiasing->setChecked(cfg.antialiasSelectionOutline());
+
+    // Giga Sketch: soft shadow around the image, under "Hide canvas scrollbars".
+    m_chkGigaCanvasShadow = new QCheckBox(i18n("Soft shadow around the image"), this);
+    m_chkGigaCanvasShadow->setToolTip(i18n("Draw a faint shadow on the canvas surround so the image looks like a sheet lying on it."));
+    m_chkGigaCanvasShadow->setChecked(cfg.readEntry<bool>("gigaCanvasShadow", true));
+    if (QFormLayout *form = qobject_cast<QFormLayout*>(hideScrollbars->parentWidget()->layout())) {
+        int row = -1;
+        QFormLayout::ItemRole role;
+        form->getWidgetPosition(hideScrollbars, &row, &role);
+        form->insertRow(row + 1, QString(), m_chkGigaCanvasShadow);
+    }
     chkChannelsAsColor->setChecked(cfg.showSingleChannelAsColor());
     chkHidePopups->setChecked(cfg.hidePopups());
 
@@ -2398,6 +2409,7 @@ void DisplaySettingsTab::setDefault()
     canvasBorder->setColor(cvb);
     hideScrollbars->setChecked(cfg.hideScrollbars(true));
     chkCurveAntialiasing->setChecked(cfg.antialiasCurves(true));
+    if (m_chkGigaCanvasShadow) m_chkGigaCanvasShadow->setChecked(true);
     chkSelectionOutlineAntialiasing->setChecked(cfg.antialiasSelectionOutline(true));
     chkChannelsAsColor->setChecked(cfg.showSingleChannelAsColor(true));
     chkHidePopups->setChecked(cfg.hidePopups(true));
@@ -3114,6 +3126,7 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
         cfgImage.setSelectionOverlayMaskColor(c.toQColor());
         cfgImage.setSelectionOutlineOpacity(m_displaySettings->sldSelectionOutlineOpacity->value());
         cfg.setAntialiasCurves(m_displaySettings->chkCurveAntialiasing->isChecked());
+        cfg.writeEntry<bool>("gigaCanvasShadow", m_displaySettings->m_chkGigaCanvasShadow->isChecked());
         cfg.setAntialiasSelectionOutline(m_displaySettings->chkSelectionOutlineAntialiasing->isChecked());
         cfg.setShowSingleChannelAsColor(m_displaySettings->chkChannelsAsColor->isChecked());
         cfg.setHidePopups(m_displaySettings->chkHidePopups->isChecked());

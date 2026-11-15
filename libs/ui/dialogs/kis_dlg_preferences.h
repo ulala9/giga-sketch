@@ -332,6 +332,8 @@ protected Q_SLOTS:
     void slotPreferredSurfaceFormatChanged(int index);
 
 public:
+    // Giga Sketch: soft shadow around the image (added in code)
+    QCheckBox *m_chkGigaCanvasShadow {nullptr};
 };
 
 //=======================

@@ -38,6 +38,7 @@
 #include <KoColorModelStandardIds.h>
 #include "KisOpenGLBufferCircularStorage.h"
 #include "kis_painting_tweaks.h"
+#include "canvas/GigaCanvasShadow.h"
 #include <KisOptimizedBrushOutline.h>
 #include <KisDisplayConfig.h>
 
@@ -111,6 +112,7 @@ public:
     QColor cursorColor;
 
     bool lodSwitchInProgress = false;
+    bool gigaCanvasShadow = true;   // Giga Sketch: soft shadow around the image
 
     CanvasBridge *canvasBridge;
     QSizeF pixelAlignedWidgetSize;
@@ -609,6 +611,66 @@ void KisOpenGLCanvasRenderer::drawBackground(const QRect &updateRect)
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
+void KisOpenGLCanvasRenderer::gigaDrawCanvasShadow()
+{
+    // No shadow when the image repeats (wrap-around) or there is no surround to see.
+    if (!d->gigaCanvasShadow || d->wrapAroundMode || !d->solidColorShader) return;
+
+    KisCoordinatesConverter *converter = coordinatesConverter();
+    const QPolygonF corners = GigaCanvasShadow::imageCorners(QRectF(converter->imageRectInImagePixels()),
+                                                             converter->imageToWidgetTransform());
+    if (corners.size() != 4) return;
+
+    if (!d->solidColorShader->bind()) return;
+
+    const QSizeF &widgetSize = d->pixelAlignedWidgetSize;
+    QMatrix4x4 projectionMatrix;
+    projectionMatrix.setToIdentity();
+    projectionMatrix.ortho(0, widgetSize.width(), widgetSize.height(), 0, NEAR_VAL, FAR_VAL);
+    d->solidColorShader->setUniformValue(d->solidColorShader->location(Uniform::ModelViewProjection), projectionMatrix);
+    d->solidColorShader->setUniformValue(d->solidColorShader->location(Uniform::FragmentColor),
+                                         QVector4D(0.0f, 0.0f, 0.0f, float(GigaCanvasShadow::ringAlpha)));
+
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    if (KisOpenGL::supportsVAO()) {
+        d->outlineVAO.bind();
+        d->lineVertexBuffer.bind();
+    }
+
+    // One triangle strip per ring: outer corner, inner corner, next outer, ...
+    // back to the first pair, which closes the ring around the image.
+    for (int i = 0; i < GigaCanvasShadow::ringCount; i++) {
+        const QPolygonF outer = GigaCanvasShadow::ringOuter(corners, i);
+        if (outer.size() != 4) break;
+        d->lineVerticesStagingBuffer.clear();
+        for (int k = 0; k <= 4; k++) {
+            d->lineVerticesStagingBuffer.append(QVector3D(outer[k % 4]));
+            d->lineVerticesStagingBuffer.append(QVector3D(corners[k % 4]));
+        }
+        const int verticesCount = d->lineVerticesStagingBuffer.size();
+        if (KisOpenGL::supportsVAO()) {
+            d->lineVertexBuffer.allocate(d->lineVerticesStagingBuffer.constData(), 3 * verticesCount * sizeof(float));
+        } else {
+            d->solidColorShader->enableAttributeArray(PROGRAM_VERTEX_ATTRIBUTE);
+            d->solidColorShader->setAttributeArray(PROGRAM_VERTEX_ATTRIBUTE, d->lineVerticesStagingBuffer.constData());
+        }
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, verticesCount);
+    }
+
+    if (KisOpenGL::supportsVAO()) {
+        d->lineVertexBuffer.release();
+        d->outlineVAO.release();
+        // renderCanvasGL() keeps the quad VAO bound for the passes that follow.
+        d->quadVAO.bind();
+    }
+    glBlendFunc(GL_ONE, GL_ZERO);
+    glDisable(GL_BLEND);
+    d->solidColorShader->release();
+}
+
 void KisOpenGLCanvasRenderer::drawCheckers(const QRect &updateRect)
 {
     Q_UNUSED(updateRect);
@@ -1008,6 +1070,7 @@ void KisOpenGLCanvasRenderer::updateConfig()
     d->openGLImageTextures->generateCheckerTexture(KisCanvasWidgetBase::createCheckersImage(cfg.checkSize()));
     d->openGLImageTextures->updateConfig(cfg.useOpenGLTextureBuffer(), cfg.numMipmapLevels());
     d->filterMode = (KisOpenGL::FilterMode) cfg.openGLFilteringMode();
+    d->gigaCanvasShadow = cfg.readEntry<bool>(GigaCanvasShadow::configKey(), true);
 
     updateCursorColor();
 }
@@ -1078,6 +1141,7 @@ void KisOpenGLCanvasRenderer::renderCanvasGL(const QRect &updateRect)
     }
 
     drawBackground(alignedUpdateRect);
+    gigaDrawCanvasShadow();
     drawCheckers(alignedUpdateRect);
     drawImage(alignedUpdateRect);
 
