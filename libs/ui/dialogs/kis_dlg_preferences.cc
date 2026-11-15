@@ -16,6 +16,7 @@
 #include <QBitmap>
 #include <QCheckBox>
 #include <QComboBox>
+#include <GigaSliderStyle.h>
 #include <QClipboard>
 #include <QCursor>
 #include <QScreen>
@@ -397,6 +398,18 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
     const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     QSettings kritarc(configPath + QLatin1Char('/') + GigaBranding::displayConfigFile(), QSettings::IniFormat);
     m_chkHiDPI->setChecked(kritarc.value("EnableHiDPI", true).toBool());
+
+    // Giga Sketch: softer slider look; off = Krita's original sliders.
+    m_chkGigaSliderStyle = new QCheckBox(i18n("Softer sliders"), this);
+    m_chkGigaSliderStyle->setToolTip(i18n("Sliders get a softer fill with rounded corners and a thin value edge. "
+                                          "Turn off for Krita's original sliders."));
+    m_chkGigaSliderStyle->setChecked(GigaSliderStyle::enabled());
+    if (QFormLayout *sliderForm = qobject_cast<QFormLayout*>(m_chkCanvasMessages->parentWidget()->layout())) {
+        int row = -1;
+        QFormLayout::ItemRole role;
+        sliderForm->getWidgetPosition(m_chkCanvasMessages, &row, &role);
+        sliderForm->insertRow(row, QString(), m_chkGigaSliderStyle);
+    }
 #if defined(Q_OS_WIN) && defined(HAVE_HIGH_DPI_SCALE_FACTOR_ROUNDING_POLICY)
     m_chkHiDPIFractionalScaling->setChecked(kritarc.value("EnableHiDPIFractionalScaling", false).toBool());
 #else
@@ -802,6 +815,7 @@ void GeneralTab::setDefault()
 
 
     chkShowRootLayer->setChecked(cfg.showRootLayer(true));
+    if (m_chkGigaSliderStyle) m_chkGigaSliderStyle->setChecked(true);
     m_autosaveCheckBox->setChecked(cfg.autoSaveInterval(true) > 0);
     //convert to minutes
     m_autosaveSpinBox->setValue(cfg.autoSaveInterval(true) / 60);
@@ -2958,6 +2972,7 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
         cfg.writeEntry<bool>("gigaInWindowPanels", m_general->gigaInWindowPanels());
         cfg.setCompressKra(m_general->compressKra());
         cfg.setTrimKra(m_general->trimKra());
+        GigaSliderStyle::setEnabled(m_general->m_chkGigaSliderStyle->isChecked());
         cfg.setTrimFramesImport(m_general->trimFramesImport());
         cfg.setExportMimeType(m_general->exportMimeType());
         cfg.setUseZip64(m_general->useZip64());

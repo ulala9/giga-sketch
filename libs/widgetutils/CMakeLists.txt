@@ -10,6 +10,7 @@ set(kritawidgetutils_LIB_SRCS
     WidgetUtilsDebug.cpp
 
     kis_icon_utils.cpp
+    GigaSliderStyle.cpp
     kis_action_registry.cpp
     KisActionsSnapshot.cpp
     KoGroupButton.cpp

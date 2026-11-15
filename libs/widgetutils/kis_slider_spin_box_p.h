@@ -35,6 +35,8 @@
 #include <kis_num_parser.h>
 #include <klocalizedstring.h>
 #include <kis_painting_tweaks.h>
+#include "GigaSliderStyle.h"
+#include <QPainterPath>
 #include <kis_int_parse_spin_box.h>
 #include <kis_double_parse_spin_box.h>
 #include <kis_algebra_2d.h>
@@ -625,8 +627,64 @@ public:
         paintSliderText(painter, text, rect, sliderRect, m_lineEdit->palette().highlightedText().color(), textOption);
     };
 
+    /**
+     * Giga Sketch look: a softer fill (the accent mixed toward the field
+     * colour), 3 px rounded corners, a thin bright edge where the value is, and
+     * the number in one colour throughout. Krita's look fills with the full
+     * accent colour and switches the text colour where the fill ends.
+     */
+    void gigaPaintSlider(QPainter &painter, const QString &text, double slider01Width, double slider02Width)
+    {
+        const QRectF rect = m_lineEdit->rect();
+        const QColor accent = m_q->palette().highlight().color();
+        const QColor base = m_q->palette().base().color();
+        const QColor fill = KisPaintingTweaks::blendColors(accent, base, 0.55);
+        const QColor softFill = KisPaintingTweaks::blendColors(accent, base, 0.25);
+        const qreal radius = 3.0;
+
+        // Clip to a rounded field so the fill's left end gets the same corners.
+        QPainterPath field;
+        field.addRoundedRect(rect, radius, radius);
+        painter.save();
+        painter.setClipPath(field);
+        painter.setPen(Qt::NoPen);
+
+        auto drawFill = [&](double width, const QColor &c, const QRectF &band) {
+            if (width <= 0.0) return;
+            painter.setBrush(c);
+            painter.drawRect(QRectF(band.left(), band.top(), width, band.height()));
+            // Value edge: 2 px of the full accent at the end of the fill.
+            if (width < rect.width() - 0.5) {
+                painter.setBrush(accent);
+                painter.drawRect(QRectF(band.left() + width - 2.0, band.top(), 2.0, band.height()));
+            }
+        };
+
+        if (slider02Width < 0.0) {
+            drawFill(slider01Width, fill, rect);
+        } else {
+            // Soft range shown too: the soft (wider) range as a faint band at
+            // the top, the real value as the main fill, like Krita's layout.
+            const double animationPos = m_sliderAnimation.currentValue().toReal();
+            const double band = KisAlgebra2D::lerp(rect.height() - heightOfCollapsedSlider, heightOfCollapsedSlider, animationPos);
+            drawFill(slider02Width, softFill, QRectF(rect.left(), rect.top(), rect.width(), band));
+            drawFill(slider01Width, fill, QRectF(rect.left(), rect.top() + band, rect.width(), rect.height() - band));
+        }
+        painter.restore();
+
+        if (!text.isNull()) {
+            QTextOption textOption(Qt::AlignAbsolute | Qt::AlignHCenter | Qt::AlignVCenter);
+            textOption.setWrapMode(QTextOption::NoWrap);
+            paintSliderText(painter, text, rect, rect, m_lineEdit->palette().text().color(), textOption);
+        }
+    }
+
     void paintSlider(QPainter &painter, const QString &text, double slider01Width, double slider02Width = -1.0)
     {
+        if (GigaSliderStyle::enabled()) {
+            gigaPaintSlider(painter, text, slider01Width, slider02Width);
+            return;
+        }
         const QRectF rect = m_lineEdit->rect();
         const QColor highlightColor = m_q->palette().highlight().color();
         if (slider02Width < 0.0) {
