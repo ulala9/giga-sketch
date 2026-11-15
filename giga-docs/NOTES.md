@@ -510,6 +510,10 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   shortcut (F1 for the user) or the profile reset key (5), 200 ms animation. Zoom drag = canvas maths
   (`zoomDragSteps`: 100 px per doubling, stepped = ×√2 per 50 px, honours zoomHorizontal/InvertMiddleClickZoom).
   Test `TestGigaCanvasInputKeys`.
+- Flip with canvas (`feature/refboard-flip`): listens to `KoCanvasControllerProxyObject::documentMirrorStatusChanged`
+  (initial state from `coordinatesConverter()->xAxisMirrored()`); `rotationTransform()` = c + M·R(view − c), M on screen
+  axes like the canvas. Rotate drag sweep is negated when exactly one axis is flipped. Captions are counter-flipped.
+  Setting `flipWithCanvas` (KisConfig `gigaRefBoardFlipWithCanvas`, default true), Look menu.
 - Known: the old `panelsnap` self-test segfaults in a small test window (948×512) even without this feature — its
   History frame gets docked by the drag and the test dereferences the deleted frame (test bug, not app).
 

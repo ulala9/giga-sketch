@@ -24,6 +24,8 @@ Last updated: 2026-11-15 (Reference Board rotate/zoom built)
   - `feature/refboard-rotate-zoom` — Reference Board gets the canvas navigation: Ctrl+Space drag zoom, Shift+Space
     drag rotate (+Alt = stepped), Reset Canvas Rotation key (F1 for the user) turns it upright. Follows Canvas Input
     Settings / Keyboard Shortcuts. Self-test `refboard` (4 new checks).
+  - `feature/refboard-flip` (built on `feature/refboard-rotate-zoom`; merging it merges both) — Board flips with the
+    canvas (Mirror View, F2), Board ▸ Look ▸ "Flip With Canvas" (default on). Self-test `refboard`.
   - `feature/giga-tool-icons` — original tool icons, batch 1 (paint, retouch, fill tools); needs a restart.
     Self-test `icons`. Next batches: the remaining toolbox tools.
 - Repo state: everything else merged and pushed (`feature/lasso-fill-erase` on 2026-11-15).
@@ -37,7 +39,7 @@ Last updated: 2026-11-15 (Reference Board rotate/zoom built)
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
   Pending in `giga-test` now: `feature/procreate-canvas-look`, `fix/shortcut-beats-menu-letter`,
   `feature/brush-cursor-look`, `feature/accent-color`, `feature/slider-look`, `feature/canvas-shadow`,
-  `feature/ui-motion`, `feature/giga-tool-icons`, `feature/refboard-rotate-zoom`.
+  `feature/ui-motion`, `feature/giga-tool-icons`, `feature/refboard-rotate-zoom`, `feature/refboard-flip`.
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
