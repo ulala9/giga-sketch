@@ -499,6 +499,17 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   (else it glided from the old spot = "rubber-banding", user report). Pressing on the Board stops camera fly-tos.
 - Tool's Send to Board shows the Board dock if hidden.
 - Self-test `refboard` (14 checks, incl. `board-drop-no-rubberband`). Q_PROPERTY imageCount/focusedIndex + Q_INVOKABLE imageWidgetCenter exist for it.
+- Navigation like the canvas (`feature/refboard-rotate-zoom`): `m_rotation` (degrees) is applied by the painter
+  around the widget centre on top of the camera: view = board × zoom + pan, widget = c + R(view − c). So camera
+  fly-tos/fit code stays in view space; `toView()`/`viewDelta()` undo the rotation for hit tests, pans, image drags,
+  touch. `cameraFitting` uses the rotated outline size. Rotation is not saved and fly-tos/Esc keep it.
+  Bindings come from `libs/ui/GigaCanvasInputKeys` (exported reader of the current input profile: key+drag Zoom /
+  Rotate modes and the RotateReset key; button-only drags like middle-drag stay the Board's pan). Read fresh on every
+  press. Exact key-set match like the canvas; the Board tracks only non-modifier keys that a binding uses (Space),
+  cleared on leave/focus-out (a stale Esc once blocked every match). Reset = the `reset_canvas_rotation` action's
+  shortcut (F1 for the user) or the profile reset key (5), 200 ms animation. Zoom drag = canvas maths
+  (`zoomDragSteps`: 100 px per doubling, stepped = ×√2 per 50 px, honours zoomHorizontal/InvertMiddleClickZoom).
+  Test `TestGigaCanvasInputKeys`.
 - Known: the old `panelsnap` self-test segfaults in a small test window (948×512) even without this feature — its
   History frame gets docked by the drag and the test dereferences the deleted frame (test bug, not app).
 

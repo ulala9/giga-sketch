@@ -4,7 +4,7 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-15 (aesthetic polish built)
+Last updated: 2026-11-15 (Reference Board rotate/zoom built)
 
 ## Resume here
 - **Next up:** the user's look test of the six aesthetic branches (Phase 4 list below), then icon batches 2–4.
@@ -21,6 +21,9 @@ Last updated: 2026-11-15 (aesthetic polish built)
     (Preferences > General > "Interface animations"). Self-test `motion`.
   - `feature/brush-cursor-look` — two-tone brush outline, fade while painting, "24 px" readout on Shift+drag
     resize. Self-test `cursorlook`.
+  - `feature/refboard-rotate-zoom` — Reference Board gets the canvas navigation: Ctrl+Space drag zoom, Shift+Space
+    drag rotate (+Alt = stepped), Reset Canvas Rotation key (F1 for the user) turns it upright. Follows Canvas Input
+    Settings / Keyboard Shortcuts. Self-test `refboard` (4 new checks).
   - `feature/giga-tool-icons` — original tool icons, batch 1 (paint, retouch, fill tools); needs a restart.
     Self-test `icons`. Next batches: the remaining toolbox tools.
 - Repo state: everything else merged and pushed (`feature/lasso-fill-erase` on 2026-11-15).
@@ -34,7 +37,7 @@ Last updated: 2026-11-15 (aesthetic polish built)
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
   Pending in `giga-test` now: `feature/procreate-canvas-look`, `fix/shortcut-beats-menu-letter`,
   `feature/brush-cursor-look`, `feature/accent-color`, `feature/slider-look`, `feature/canvas-shadow`,
-  `feature/ui-motion`, `feature/giga-tool-icons`.
+  `feature/ui-motion`, `feature/giga-tool-icons`, `feature/refboard-rotate-zoom`.
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
