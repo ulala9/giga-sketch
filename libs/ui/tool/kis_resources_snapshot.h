@@ -91,6 +91,14 @@ public:
     void setSelectionOverride(KisSelectionSP selection);
     void setBrush(const KisPaintOpPresetSP &brush);
 
+    /**
+     * Giga Sketch (Transform Last Stroke): when true, strokes using this
+     * snapshot never add an entry to the undo history (they get a private
+     * throw-away undo adapter instead). Used to repaint a stroke onto a
+     * hidden layer that isn't part of the document.
+     */
+    void gigaSetNoUndo(bool value);
+
 private:
     struct Private;
     Private * const m_d;

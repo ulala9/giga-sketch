@@ -89,6 +89,7 @@ set(kritaui_LIB_SRCS
     GigaFloatingPanelManager.cpp
     GigaSelfTest.cpp
     GigaSaveDated.cpp
+    GigaLastStrokeTransform.cpp
     GigaZoomOption.cpp
     GigaPanelTitleBar.cpp
     GigaReferenceLayout.cpp
@@ -218,6 +219,7 @@ set(kritaui_LIB_SRCS
     tool/kis_painting_information_builder.cpp
     tool/kis_stabilized_events_sampler.cpp
     tool/kis_tool_freehand_helper.cpp
+    tool/GigaLastStroke.cpp
     tool/kis_tool_multihand_helper.cpp
     tool/kis_figure_painting_tool_helper.cpp
     tool/KisAsynchronousStrokeUpdateHelper.cpp

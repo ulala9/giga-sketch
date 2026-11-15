@@ -60,6 +60,17 @@ KisPerStrokeRandomSourceSP KisStrokeRandomSource::perStrokeSource() const
 }
 
 
+KisStrokeRandomSource KisStrokeRandomSource::gigaDeepCopy() const
+{
+    KisStrokeRandomSource result;
+    result.m_d->levelOfDetail = m_d->levelOfDetail;
+    result.m_d->lod0RandomSource = new KisRandomSource(*m_d->lod0RandomSource);
+    result.m_d->lodNRandomSource = new KisRandomSource(*m_d->lodNRandomSource);
+    result.m_d->lod0PerStrokeRandomSource = new KisPerStrokeRandomSource(*m_d->lod0PerStrokeRandomSource);
+    result.m_d->lodNPerStrokeRandomSource = new KisPerStrokeRandomSource(*m_d->lodNPerStrokeRandomSource);
+    return result;
+}
+
 int KisStrokeRandomSource::levelOfDetail() const
 {
     return m_d->levelOfDetail;

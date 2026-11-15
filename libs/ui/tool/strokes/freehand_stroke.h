@@ -17,6 +17,7 @@
 #include <brushengine/kis_paint_information.h>
 #include "kis_lod_transform.h"
 #include "KoColor.h"
+#include <brushengine/kis_stroke_random_source.h>
 
 
 
@@ -196,6 +197,18 @@ public:
 
     void notifyUserStartedStroke() override;
     void notifyUserEndedStroke() override;
+
+    /**
+     * Giga Sketch (Transform Last Stroke): an independent copy of this
+     * stroke's random numbers, taken before the stroke paints anything,
+     * and a way to give a new stroke those same numbers. Together they
+     * let a recorded stroke be repainted identically.
+     */
+    KisStrokeRandomSource gigaRandomSourceCopy() const;
+    void gigaSetRandomSource(const KisStrokeRandomSource &source);
+
+    /// Giga Sketch: never make an Instant Preview (LoD) copy of this stroke.
+    void gigaSetNoLod(bool value);
 
 protected:
     FreehandStrokeStrategy(const FreehandStrokeStrategy &rhs, int levelOfDetail);

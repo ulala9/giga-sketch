@@ -59,6 +59,7 @@ struct KisResourcesSnapshot::Private {
     bool presetAllowsLod {false};
     KisSelectionSP selectionOverride;
     bool hasOverrideSelection {false};
+    bool gigaNoUndo {false}; // Giga Sketch: see gigaSetNoUndo()
 
     KoCanvasResourcesInterfaceSP globalCanvasResourcesInterface;
 };
@@ -254,7 +255,13 @@ void KisResourcesSnapshot::setupMaskingBrushPainter(KisPainter *painter)
 
 KisPostExecutionUndoAdapter* KisResourcesSnapshot::postExecutionUndoAdapter() const
 {
+    if (m_d->gigaNoUndo) return 0;
     return m_d->image ? m_d->image->postExecutionUndoAdapter() : 0;
+}
+
+void KisResourcesSnapshot::gigaSetNoUndo(bool value)
+{
+    m_d->gigaNoUndo = value;
 }
 
 void KisResourcesSnapshot::setCurrentNode(KisNodeSP node)

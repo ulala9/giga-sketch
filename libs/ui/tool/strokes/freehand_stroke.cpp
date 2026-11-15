@@ -64,6 +64,7 @@ struct FreehandStrokeStrategy::Private
 
     const bool needsAsynchronousUpdates = false;
     std::mutex updateEntryMutex;
+    bool gigaNoLod = false; // Giga Sketch: see gigaSetNoLod()
 };
 
 FreehandStrokeStrategy::FreehandStrokeStrategy(KisResourcesSnapshotSP resources,
@@ -330,11 +331,29 @@ void FreehandStrokeStrategy::issueSetDirtySignals()
 
 KisStrokeStrategy* FreehandStrokeStrategy::createLodClone(int levelOfDetail)
 {
+    if (m_d->gigaNoLod) return 0;
     if (!m_d->resources->presetAllowsLod()) return 0;
     if (!m_d->resources->currentNode()->supportsLodPainting()) return 0;
 
     FreehandStrokeStrategy *clone = new FreehandStrokeStrategy(*this, levelOfDetail);
     return clone;
+}
+
+KisStrokeRandomSource FreehandStrokeStrategy::gigaRandomSourceCopy() const
+{
+    return m_d->randomSource.gigaDeepCopy();
+}
+
+void FreehandStrokeStrategy::gigaSetRandomSource(const KisStrokeRandomSource &source)
+{
+    // Deep copy again so the caller's copy stays untouched (it may be
+    // used for another repaint later).
+    m_d->randomSource = source.gigaDeepCopy();
+}
+
+void FreehandStrokeStrategy::gigaSetNoLod(bool value)
+{
+    m_d->gigaNoLod = value;
 }
 
 void FreehandStrokeStrategy::notifyUserStartedStroke()

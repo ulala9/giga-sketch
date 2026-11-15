@@ -6,6 +6,7 @@
 
 #include "kis_tool_freehand_helper.h"
 #include "KisQuickShapeRecognizer.h"
+#include "GigaLastStroke.h"
 #include <QGuiApplication>
 
 #include <QTimer>
@@ -437,6 +438,26 @@ void KisToolFreehandHelper::initPaintImpl(qreal startAngle,
                                    m_d->transactionText,
                                    FreehandStrokeStrategy::SupportsContinuedInterstrokeData |
                                    FreehandStrokeStrategy::SupportsTimedMergeId);
+
+    // Giga Sketch (Transform Last Stroke): start recording this stroke so it
+    // can be painted again later on its own. Everything recorded here is a
+    // copy, taken on the GUI thread before the paint thread sees the stroke.
+    {
+        GigaLastStrokeRecordSP rec(new GigaLastStrokeRecord);
+        rec->image = image;
+        rec->node = m_d->resources->currentNode();
+        rec->resources = m_d->resources;
+        rec->selection = m_d->resources->activeSelection();
+        Q_FOREACH (KisFreehandStrokeInfo *info, m_d->strokeInfos) {
+            rec->startDistances.append(*info->dragDistance);
+        }
+        if (FreehandStrokeStrategy *freehand = dynamic_cast<FreehandStrokeStrategy*>(stroke)) {
+            rec->randomSource = freehand->gigaRandomSourceCopy();
+        }
+        rec->name = m_d->transactionText;
+        rec->startTime = QTime::currentTime();
+        GigaLastStroke::begin(rec);
+    }
 
     m_d->strokeId = m_d->strokesFacade->startStroke(stroke);
 
@@ -913,6 +934,8 @@ void KisToolFreehandHelper::endPaintImpl()
     m_d->strokesFacade->endStroke(m_d->strokeId);
     m_d->strokeId.clear();
     m_d->infoBuilder->reset();
+
+    GigaLastStroke::finish(); // Giga Sketch: this is now "the last stroke"
 }
 
 void KisToolFreehandHelper::cancelPaint()
@@ -956,6 +979,7 @@ void KisToolFreehandHelper::cancelPaint()
     m_d->strokesFacade->cancelStroke(m_d->strokeId);
     m_d->strokeId.clear();
 
+    GigaLastStroke::abort(); // Giga Sketch: nothing was painted
 }
 
 int KisToolFreehandHelper::elapsedStrokeTime() const
@@ -1442,6 +1466,12 @@ void KisToolFreehandHelper::paintAt(int strokeInfoId,
     m_d->strokesFacade->addJob(m_d->strokeId,
                                new FreehandStrokeStrategy::Data(strokeInfoId, pi));
 
+    GigaLastStrokeRecord::Job job; // Giga Sketch: record for Transform Last Stroke
+    job.type = GigaLastStrokeRecord::Point;
+    job.strokeInfoId = strokeInfoId;
+    job.pi1 = pi;
+    GigaLastStroke::addJob(job);
+
 }
 
 void KisToolFreehandHelper::paintLine(int strokeInfoId,
@@ -1451,6 +1481,13 @@ void KisToolFreehandHelper::paintLine(int strokeInfoId,
     m_d->hasPaintAtLeastOnce = true;
     m_d->strokesFacade->addJob(m_d->strokeId,
                                new FreehandStrokeStrategy::Data(strokeInfoId, pi1, pi2));
+
+    GigaLastStrokeRecord::Job job; // Giga Sketch: record for Transform Last Stroke
+    job.type = GigaLastStrokeRecord::Line;
+    job.strokeInfoId = strokeInfoId;
+    job.pi1 = pi1;
+    job.pi2 = pi2;
+    GigaLastStroke::addJob(job);
 
 }
 
@@ -1489,6 +1526,15 @@ void KisToolFreehandHelper::paintBezierCurve(int strokeInfoId,
     m_d->strokesFacade->addJob(m_d->strokeId,
                                new FreehandStrokeStrategy::Data(strokeInfoId,
                                                                 pi1, control1, control2, pi2));
+
+    GigaLastStrokeRecord::Job job; // Giga Sketch: record for Transform Last Stroke
+    job.type = GigaLastStrokeRecord::Curve;
+    job.strokeInfoId = strokeInfoId;
+    job.pi1 = pi1;
+    job.pi2 = pi2;
+    job.control1 = control1;
+    job.control2 = control2;
+    GigaLastStroke::addJob(job);
 
 }
 

@@ -491,6 +491,7 @@ private:
     void gigaAddViewMenuItems();
     /// Giga Sketch: File > Save Dated JPG, placed right after Save As.
     void gigaAddFileMenuItems();
+    void gigaAddEditMenuItems(); // Giga Sketch: Transform Last Stroke
     void gigaToggleCollapseAll();
 public Q_SLOTS:
 

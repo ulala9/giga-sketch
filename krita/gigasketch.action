@@ -17,4 +17,19 @@
       <statusTip></statusTip>
     </Action>
   </Actions>
+  <Actions category="Edit">
+    <text>Edit</text>
+    <Action name="giga_transform_last_stroke">
+      <icon>transform_icons_main</icon>
+      <text>Transform Last Stroke</text>
+      <whatsThis>Open the Transform tool on just the stroke you painted last, so you can warp or liquify it without touching anything else on the layer. Esc puts the stroke back as drawn.</whatsThis>
+      <toolTip>Warp or liquify only the stroke you painted last</toolTip>
+      <iconText>Transform Last Stroke</iconText>
+      <activationFlags>1</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut>Ctrl+Shift+Alt+T</shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+  </Actions>
 </ActionCollection>
