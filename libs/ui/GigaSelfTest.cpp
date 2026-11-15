@@ -30,6 +30,7 @@
 #include <KoPointerEvent.h>
 #include <kis_tool.h>
 #include <GigaBranding.h>
+#include "GigaMotion.h"
 #include <kundo2stack.h>
 #include <KoCanvasResourceProvider.h>
 #include <KoColor.h>
@@ -670,6 +671,49 @@ void testModeFloating(KisMainWindow *w)
 
 /// Reference Board: send to Board / back, arrange + undo, save/reload,
 /// resample, and click-to-focus in the panel.
+// Interface motion: reveal() and crossFade() put a cover on top that removes
+// itself when the fade ends; nothing when animations are off (feature/ui-motion).
+void testMotion(KisMainWindow *w)
+{
+    auto covers = [](QWidget *on) {
+        int n = 0;
+        for (QObject *c : on->children()) {
+            if (QString::fromLatin1(c->metaObject()->className()) == QLatin1String("QWidget")
+                && static_cast<QWidget *>(c)->testAttribute(Qt::WA_TransparentForMouseEvents)
+                && static_cast<QWidget *>(c)->geometry() == on->rect()) n++;
+        }
+        return n;
+    };
+    auto wait = [](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) pump(1); };
+    openTestDocument(w); // a canvas on screen, so the snapshot shows one
+    pump(10);
+    GigaMotion::setEnabled(true);
+    QWidget *target = w->centralWidget();
+    if (!target) { report(false, "motion-setup", QStringLiteral("no central widget")); return; }
+    const int base = covers(target);
+    GigaMotion::reveal(target, 120);
+    pump(2);
+    report(covers(target) == base + 1, "motion-reveal-cover", QString::number(covers(target) - base));
+    wait(400);
+    report(covers(target) == base, "motion-reveal-cleans-up", QString::number(covers(target) - base));
+
+    const QPixmap before = GigaMotion::snapshot(w);
+    report(!before.isNull(), "motion-snapshot", QStringLiteral("%1x%2").arg(before.width()).arg(before.height()));
+    if (!qEnvironmentVariableIsEmpty("GIGA_MOTION_DUMP")) before.save(qEnvironmentVariable("GIGA_MOTION_DUMP"));
+    const int wbase = covers(w);
+    GigaMotion::crossFade(w, before, 180);
+    pump(2);
+    report(covers(w) == wbase + 1, "motion-crossfade-cover", QString::number(covers(w) - wbase));
+    wait(450);
+    report(covers(w) == wbase, "motion-crossfade-cleans-up", QString::number(covers(w) - wbase));
+
+    GigaMotion::setEnabled(false);
+    GigaMotion::reveal(target, 120);
+    pump(2);
+    report(covers(target) == base, "motion-off", QString::number(covers(target) - base));
+    GigaMotion::setEnabled(true);
+}
+
 void testReferenceBoard(KisMainWindow *w)
 {
     using namespace GigaReferenceBoard;
@@ -1001,6 +1045,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("modecrash"), testModeSwitchTabDrag},
         {QStringLiteral("modeswitch"), testModeSwitchRestore},
         {QStringLiteral("modefloat"), testModeFloating},
+        {QStringLiteral("motion"), testMotion},
         {QStringLiteral("autosave"), testAutosaveName},
         {QStringLiteral("refboard"), testReferenceBoard},
         {QStringLiteral("layerbuttons"), testLayerButtons},

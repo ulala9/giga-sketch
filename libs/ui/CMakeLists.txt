@@ -86,6 +86,7 @@ set(kritaui_LIB_SRCS
     GigaProcreateWidgets.cpp
     GigaInterfaceModes.cpp
     GigaFloatingPanel.cpp
+    GigaMotion.cpp
     GigaFloatingPanelManager.cpp
     GigaSelfTest.cpp
     GigaSaveDated.cpp
