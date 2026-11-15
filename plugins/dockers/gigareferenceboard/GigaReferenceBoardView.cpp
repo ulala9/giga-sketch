@@ -15,6 +15,8 @@
 #include <KoSelection.h>
 #include <KoShapeManager.h>
 #include <kis_canvas2.h>
+#include <kis_coordinates_converter.h>
+#include <KoCanvasController.h>
 #include <kis_icon_utils.h>
 #include <KisCursorOverrideLock.h>
 #include <kis_action.h>
@@ -152,6 +154,8 @@ GigaReferenceBoardView::~GigaReferenceBoardView()
 void GigaReferenceBoardView::setCanvas(KisCanvas2 *canvas)
 {
     if (m_canvas == canvas) return;
+    if (m_mirrorSource) m_mirrorSource->disconnect(this);
+    m_mirrorSource = nullptr;
     if (m_canvas) {
         m_canvas->imageView()->document()->disconnect(this);
         m_canvas->image()->disconnect(this);
@@ -172,6 +176,16 @@ void GigaReferenceBoardView::setCanvas(KisCanvas2 *canvas)
         connect(m_canvas->imageView()->document(), &KisDocument::sigReferenceImagesLayerChanged, this,
                 &GigaReferenceBoardView::slotLayerChanged);
         connect(m_canvas->image().data(), SIGNAL(sigLayersChangedAsync()), this, SLOT(slotLayerChanged()));
+        // Follow the canvas flip (Mirror View).
+        if (KoCanvasController *controller = m_canvas->canvasController()) {
+            m_mirrorSource = controller->proxyObject.data();
+            connect(controller->proxyObject, &KoCanvasControllerProxyObject::documentMirrorStatusChanged, this,
+                    &GigaReferenceBoardView::slotCanvasMirrorChanged);
+        }
+        m_canvasMirrorX = m_canvas->coordinatesConverter()->xAxisMirrored();
+        m_canvasMirrorY = m_canvas->coordinatesConverter()->yAxisMirrored();
+    } else {
+        m_canvasMirrorX = m_canvasMirrorY = false;
     }
     m_autoFit = true;
     slotLayerChanged();
@@ -278,6 +292,14 @@ void GigaReferenceBoardView::refresh()
     update();
 }
 
+void GigaReferenceBoardView::slotCanvasMirrorChanged(bool mirrorX, bool mirrorY)
+{
+    if (mirrorX == m_canvasMirrorX && mirrorY == m_canvasMirrorY) return;
+    m_canvasMirrorX = mirrorX;
+    m_canvasMirrorY = mirrorY;
+    update();
+}
+
 void GigaReferenceBoardView::slotSettingsChanged()
 {
     m_settings = GigaReferenceBoard::Settings::load();
@@ -302,6 +324,7 @@ QTransform GigaReferenceBoardView::rotationTransform() const
     const QPointF c(width() / 2.0, height() / 2.0);
     QTransform t;
     t.translate(c.x(), c.y());
+    t.scale(isMirrored() ? -1.0 : 1.0, isMirroredVertically() ? -1.0 : 1.0); // flip on screen axes, like the canvas
     t.rotate(m_rotation);
     t.translate(-c.x(), -c.y());
     return t;
@@ -309,14 +332,18 @@ QTransform GigaReferenceBoardView::rotationTransform() const
 
 QPointF GigaReferenceBoardView::toView(const QPointF &widgetPos) const
 {
-    if (qFuzzyIsNull(m_rotation)) return widgetPos;
+    if (m_rotation == 0.0 && !isMirrored() && !isMirroredVertically()) return widgetPos;
     return rotationTransform().inverted().map(widgetPos);
 }
 
 QPointF GigaReferenceBoardView::viewDelta(const QPointF &widgetDelta) const
 {
-    if (qFuzzyIsNull(m_rotation)) return widgetDelta;
-    return QTransform().rotate(-m_rotation).map(widgetDelta);
+    if (m_rotation == 0.0 && !isMirrored() && !isMirroredVertically()) return widgetDelta;
+    // Undo the flip, then the rotation (Qt applies the last call first).
+    QTransform t;
+    t.rotate(-m_rotation);
+    t.scale(isMirrored() ? -1.0 : 1.0, isMirroredVertically() ? -1.0 : 1.0);
+    return t.map(widgetDelta);
 }
 
 void GigaReferenceBoardView::setRotation(qreal degrees)
@@ -513,7 +540,8 @@ void GigaReferenceBoardView::paintEvent(QPaintEvent *)
     const QTransform rotation = rotationTransform();
     p.setTransform(rotation);
     const QRectF visible = rotation.inverted().mapRect(QRectF(rect())).adjusted(-20, -20, 20, 20);
-    if (m_rotation != 0.0) p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    const bool flipped = isMirrored() || isMirroredVertically();
+    if (m_rotation != 0.0 || flipped) p.setRenderHint(QPainter::SmoothPixmapTransform, true);
     const QTransform camera = cameraTransform();
     const qreal radius = m_settings.roundedCorners ? qBound(2.0, 6.0 * qSqrt(m_camera.zoom), 10.0) : 0.0;
     p.setRenderHint(QPainter::Antialiasing, true);
@@ -571,7 +599,17 @@ void GigaReferenceBoardView::paintEvent(QPaintEvent *)
             p.fillRect(band, QColor(0, 0, 0, 150));
             p.restore();
             p.setPen(QColor(255, 255, 255, 230));
-            p.drawText(band.adjusted(4, 0, -4, 0), Qt::AlignVCenter | Qt::AlignHCenter, text);
+            if (flipped) {
+                // Keep the name readable: only the picture flips.
+                p.save();
+                p.translate(band.center());
+                p.scale(isMirrored() ? -1.0 : 1.0, isMirroredVertically() ? -1.0 : 1.0);
+                p.drawText(QRectF(-band.width() / 2.0 + 4, -band.height() / 2.0, band.width() - 8, band.height()),
+                           Qt::AlignVCenter | Qt::AlignHCenter, text);
+                p.restore();
+            } else {
+                p.drawText(band.adjusted(4, 0, -4, 0), Qt::AlignVCenter | Qt::AlignHCenter, text);
+            }
         }
     }
 }
@@ -688,7 +726,10 @@ void GigaReferenceBoardView::moveAt(const QPointF &pos)
         // Angle swept around the widget centre since the press (canvas maths).
         const QPointF c(width() / 2.0, height() / 2.0);
         const QPointF a = m_pressPos - c, b = pos - c;
-        const qreal swept = qRadiansToDegrees(std::atan2(b.y(), b.x()) - std::atan2(a.y(), a.x()));
+        qreal swept = qRadiansToDegrees(std::atan2(b.y(), b.x()) - std::atan2(a.y(), a.x()));
+        // On a flipped Board the angle runs the other way on screen: turn it
+        // back so the Board still follows the pen.
+        if (isMirrored() != isMirroredVertically()) swept = -swept;
         qreal target = m_startRotation + swept;
         if (m_navBinding.kind == GigaCanvasInputKeys::Kind::RotateDiscrete) {
             // Don't jump on press: only snap once turned half a step.

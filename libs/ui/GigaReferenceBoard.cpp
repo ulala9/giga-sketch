@@ -125,6 +125,7 @@ Settings Settings::load()
     s.shadows = cfg.readEntry<bool>("gigaRefBoardShadows", true);
     s.roundedCorners = cfg.readEntry<bool>("gigaRefBoardRounded", true);
     s.captions = cfg.readEntry<bool>("gigaRefBoardCaptions", false);
+    s.flipWithCanvas = cfg.readEntry<bool>("gigaRefBoardFlipWithCanvas", true);
     s.dimOthers = cfg.readEntry<bool>("gigaRefBoardDim", true);
     s.shrinkOnSave = cfg.readEntry<bool>("gigaRefBoardShrinkOnSave", false);
     s_shrinkOnSave = s.shrinkOnSave ? 1 : 0;
@@ -143,6 +144,7 @@ void Settings::save() const
     cfg.writeEntry<bool>("gigaRefBoardShadows", shadows);
     cfg.writeEntry<bool>("gigaRefBoardRounded", roundedCorners);
     cfg.writeEntry<bool>("gigaRefBoardCaptions", captions);
+    cfg.writeEntry<bool>("gigaRefBoardFlipWithCanvas", flipWithCanvas);
     cfg.writeEntry<bool>("gigaRefBoardDim", dimOthers);
     cfg.writeEntry<bool>("gigaRefBoardShrinkOnSave", shrinkOnSave);
     s_shrinkOnSave = shrinkOnSave ? 1 : 0;

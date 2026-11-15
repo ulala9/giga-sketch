@@ -194,6 +194,10 @@ void GigaReferenceBoardDock::buildLookMenu()
               [](bool v) { changeSettings([v](Settings &s) { s.captions = v; }); });
     addToggle(m_lookMenu, i18n("Dim Others When Focused"), s.dimOthers,
               [](bool v) { changeSettings([v](Settings &s) { s.dimOthers = v; }); });
+    addToggle(m_lookMenu, i18n("Flip With Canvas"), s.flipWithCanvas,
+              [](bool v) { changeSettings([v](Settings &s) { s.flipWithCanvas = v; }); });
+    m_lookMenu->actions().last()->setToolTip(
+        i18n("When the canvas is flipped (Mirror View), flip the Board too."));
     m_lookMenu->addSeparator();
     addToggle(m_lookMenu, i18n("Shrink Oversized References When Saving"), s.shrinkOnSave,
               [](bool v) { changeSettings([v](Settings &s) { s.shrinkOnSave = v; }); });

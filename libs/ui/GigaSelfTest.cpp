@@ -14,6 +14,7 @@
 #include "kis_config.h"
 #include "GigaReferenceBoard.h"
 #include "GigaZoomOption.h"
+#include "canvas/kis_canvas_controller.h"
 #include "KisReferenceImage.h"
 #include "KisReferenceImagesLayer.h"
 #include "KisView.h"
@@ -872,6 +873,42 @@ void testReferenceBoard(KisMainWindow *w)
             QCoreApplication::sendEvent(boardView, &esc);
         }
         wait(400);
+
+        // Flipping the canvas flips the Board (Look > Flip With Canvas, on by default).
+        KisCanvasController *controller = dynamic_cast<KisCanvasController *>(canvas->canvasController());
+        if (controller) {
+            controller->mirrorCanvas(true);
+            pump(5);
+            const bool flipped = boardView->property("mirrored").toBool();
+            QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, center), Q_ARG(int, 1));
+            {
+                const QPoint p = center.toPoint();
+                QMouseEvent press(QEvent::MouseButtonPress, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(boardView, &press);
+                QMouseEvent release(QEvent::MouseButtonRelease, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(boardView, &release);
+                pump(3);
+            }
+            report(flipped && boardView->property("focusedIndex").toInt() == 1, "board-flips-with-canvas",
+                   QStringLiteral("mirrored %1, clicked image %2").arg(flipped).arg(boardView->property("focusedIndex").toInt()));
+            {
+                QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+                QCoreApplication::sendEvent(boardView, &esc);
+            }
+            Settings off = Settings::load();
+            off.flipWithCanvas = false;
+            off.save();
+            pump(3);
+            const bool stillFlipped = boardView->property("mirrored").toBool();
+            off.flipWithCanvas = true;
+            off.save();
+            controller->mirrorCanvas(false);
+            pump(3);
+            report(!stillFlipped && !boardView->property("mirrored").toBool(), "board-flip-option-off", QString());
+            wait(400);
+        } else {
+            report(false, "board-flips-with-canvas", QStringLiteral("no canvas controller"));
+        }
     }
 
     // Send back to the canvas: exact same transform as before.

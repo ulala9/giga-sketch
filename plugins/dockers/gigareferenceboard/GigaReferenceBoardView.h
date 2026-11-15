@@ -29,7 +29,9 @@ class QVariantAnimation;
  * camera maps them to "view" pixels: view = board * zoom + pan. The view
  * is then turned by m_rotation around the widget centre (like the canvas
  * rotation): widget = centre + rotate(view - centre). With rotation 0,
- * view and widget pixels are the same.
+ * view and widget pixels are the same. When the canvas is flipped (Mirror
+ * View) the Board flips with it, around the widget centre as well:
+ * widget = centre + mirror(rotate(view - centre)).
  *
  * Everything runs on the interface thread; it only reads the reference
  * images and changes them through undo commands.
@@ -42,6 +44,7 @@ class GigaReferenceBoardView : public QWidget
     Q_PROPERTY(int focusedIndex READ focusedIndex)
     Q_PROPERTY(qreal rotation READ rotation)
     Q_PROPERTY(qreal zoom READ zoom)
+    Q_PROPERTY(bool mirrored READ isMirrored)
 public:
     explicit GigaReferenceBoardView(QWidget *parent = nullptr);
     ~GigaReferenceBoardView() override;
@@ -53,6 +56,9 @@ public:
     int focusedIndex() const; ///< in z order, -1 = overview
     qreal rotation() const { return m_rotation; } ///< degrees, clockwise
     qreal zoom() const { return m_camera.zoom; }
+    /// Drawn flipped left-right right now (canvas mirrored + "Flip With Canvas").
+    bool isMirrored() const { return m_settings.flipWithCanvas && m_canvasMirrorX; }
+    bool isMirroredVertically() const { return m_settings.flipWithCanvas && m_canvasMirrorY; }
     /// Widget position of the centre of image @p index (z order).
     Q_INVOKABLE QPointF imageWidgetCenter(int index) const;
 
@@ -92,6 +98,7 @@ private Q_SLOTS:
     void refresh(); ///< re-reads which images are on the Board
     void slotLayerChanged();
     void slotSettingsChanged();
+    void slotCanvasMirrorChanged(bool mirrorX, bool mirrorY);
 
 private:
     struct Camera {
@@ -107,7 +114,7 @@ private:
     QRectF displayRect(KisReferenceImage *image) const;
     KisReferenceImage *imageAt(const QPointF &widgetPos) const;
     QPointF toBoard(const QPointF &widgetPos) const;
-    /// Widget pixels <-> view pixels (undoes / applies m_rotation).
+    /// Widget pixels <-> view pixels (undoes / applies m_rotation and the flip).
     QTransform rotationTransform() const; ///< view -> widget
     QPointF toView(const QPointF &widgetPos) const;
     QPointF viewDelta(const QPointF &widgetDelta) const; ///< a widget-space move, in view space
@@ -169,6 +176,10 @@ private:
     bool m_rotateSnapping = false; // stepped rotate: snapping started (after half a step)
 
     qreal m_rotation = 0.0; // degrees
+    // Canvas flip (Mirror View), followed when Settings::flipWithCanvas.
+    bool m_canvasMirrorX = false;
+    bool m_canvasMirrorY = false;
+    QPointer<QObject> m_mirrorSource; // the canvas controller's proxy object
     QVariantAnimation *m_rotationAnimation {nullptr};
     qreal m_rotationFrom = 0.0;
 
