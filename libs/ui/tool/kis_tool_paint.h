@@ -125,8 +125,18 @@ private Q_SLOTS:
     void rotateBrushTipCounterClockwise();
     void rotateBrushTipCounterClockwisePrecise();
 
+public:
+    /// Giga Sketch: current brush outline opacity (1 = shown, 0 = faded out). For self-tests.
+    qreal gigaOutlineOpacity() const;
+
 protected:
     bool m_paintOutline {false};
+    /// Giga Sketch: drive the outline fade; returns true while a fading-out
+    /// outline should still be drawn.
+    bool gigaUpdateOutlineFade(bool shownNormally, bool hiddenByPainting);
+    /// Giga Sketch: "24 px" label under the outline while resizing.
+    void gigaPaintSizeReadout(QPainter &gc, const QRectF &outlineViewRect);
+
     QPointF m_outlineDocPoint;
     KisOptimizedBrushOutline m_currentOutline;
     QRectF m_oldOutlineRect;

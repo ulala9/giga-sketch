@@ -61,6 +61,9 @@
 #include <brushengine/kis_paintop_preset.h>
 #include <brushengine/KisOptimizedBrushOutline.h>
 #include <kis_action_manager.h>
+#include <QVariantAnimation>
+#include <QPainter>
+#include <QFontMetricsF>
 #include <kis_action.h>
 #include "strokes/kis_color_sampler_stroke_strategy.h"
 #include "kis_popup_palette.h"
@@ -72,6 +75,13 @@ struct KisToolPaint::Private
     // Keeps track of past cursor positions. This is used to determine the drawing angle when
     // drawing the brush outline or starting a stroke.
     KisPaintOpUtils::PositionHistory lastCursorPos;
+
+    // Giga Sketch: fade of the brush outline when it hides while painting.
+    // Opacity 1 = fully shown. The animation runs on the GUI thread (a Qt timer),
+    // never on the paint thread, and only repaints the outline area.
+    qreal gigaOutlineOpacity = 1.0;
+    qreal gigaFadeTarget = 1.0;
+    QVariantAnimation *gigaFade = nullptr;
 };
 
 
@@ -264,9 +274,88 @@ void KisToolPaint::paint(QPainter &gc, const KoViewConverter &converter)
     Q_UNUSED(converter);
 
     KisOptimizedBrushOutline path = tryFixBrushOutline(pixelToView(m_currentOutline));
-    paintToolOutline(&gc, path);
+    paintToolOutline(&gc, path, m_d->gigaOutlineOpacity);
+
+    // Giga Sketch: size readout while resizing the brush (Shift+drag).
+    if (mode() == KisTool::GESTURE_MODE && currentPaintOpPreset() && KisConfig(true).gigaShowBrushSizeReadout()) {
+        gigaPaintSizeReadout(gc, path.boundingRect());
+    }
 
     m_colorSamplerHelper.paint(gc, converter);
+}
+
+void KisToolPaint::gigaPaintSizeReadout(QPainter &gc, const QRectF &outlineViewRect)
+{
+    const qreal size = currentPaintOpPreset()->settings()->paintOpSize();
+    const QString text = size < 10.0 ? QString::number(size, 'f', 1) + QStringLiteral(" px")
+                                     : QString::number(qRound(size)) + QStringLiteral(" px");
+
+    // The painter may be rotated/zoomed with the canvas. Find the outline on
+    // screen, then draw the label without any transform so it stays upright.
+    const QRectF screenOutline = gc.transform().mapRect(outlineViewRect);
+    gc.save();
+    gc.resetTransform();
+    gc.setRenderHint(QPainter::Antialiasing, true);
+    QFont f = gc.font();
+    f.setPixelSize(12);
+    gc.setFont(f);
+    const QFontMetricsF fm(f);
+    const QSizeF box(fm.horizontalAdvance(text) + 14, fm.height() + 6);
+    QRectF label(QPointF(screenOutline.center().x() - 0.5 * box.width(), screenOutline.bottom() + 6), box);
+    gc.setPen(Qt::NoPen);
+    gc.setBrush(QColor(24, 24, 24, 210));
+    gc.drawRoundedRect(label, 0.5 * box.height(), 0.5 * box.height());
+    gc.setPen(QColor(240, 240, 240));
+    gc.drawText(label, Qt::AlignCenter, text);
+    gc.restore();
+}
+
+qreal KisToolPaint::gigaOutlineOpacity() const
+{
+    return m_d->gigaOutlineOpacity;
+}
+
+bool KisToolPaint::gigaUpdateOutlineFade(bool shownNormally, bool hiddenByPainting)
+{
+    KisConfig cfg(true);
+    if (!cfg.gigaFadeOutlineWhilePainting() || !cfg.gigaTwoToneCursor()) {
+        if (m_d->gigaFade) m_d->gigaFade->stop();
+        m_d->gigaOutlineOpacity = 1.0;
+        m_d->gigaFadeTarget = 1.0;
+        return false;
+    }
+
+    auto fadeTo = [this](qreal target, int ms) {
+        if (qFuzzyCompare(m_d->gigaFadeTarget, target) &&
+            (qFuzzyCompare(m_d->gigaOutlineOpacity, target) ||
+             (m_d->gigaFade && m_d->gigaFade->state() == QAbstractAnimation::Running))) {
+            return; // already there or on the way
+        }
+        if (!m_d->gigaFade) {
+            m_d->gigaFade = new QVariantAnimation(this);
+            m_d->gigaFade->setEasingCurve(QEasingCurve::OutCubic);
+            connect(m_d->gigaFade, &QVariantAnimation::valueChanged, this, [this](const QVariant &v) {
+                m_d->gigaOutlineOpacity = v.toReal();
+                // Repaint just the outline area (also hides it at opacity 0).
+                requestUpdateOutline(m_outlineDocPoint, nullptr);
+            });
+        }
+        m_d->gigaFade->stop();
+        m_d->gigaFadeTarget = target;
+        m_d->gigaFade->setDuration(ms);
+        m_d->gigaFade->setStartValue(m_d->gigaOutlineOpacity);
+        m_d->gigaFade->setEndValue(target);
+        m_d->gigaFade->start();
+    };
+
+    if (hiddenByPainting) {
+        fadeTo(0.0, 150);
+        return m_d->gigaOutlineOpacity > 0.001;   // keep drawing it while it fades
+    }
+    if (shownNormally && m_d->gigaOutlineOpacity < 1.0) {
+        fadeTo(1.0, 120);
+    }
+    return false;
 }
 
 void KisToolPaint::setMode(ToolMode mode)
@@ -593,11 +682,16 @@ void KisToolPaint::requestUpdateOutline(const QPointF &outlineDocPoint, const Ko
         const auto shouldShowOutlineWhilePainting = [&]() {
             return !useSeparateEraserCursor ? cfg.showOutlineWhilePainting() : cfg.showEraserOutlineWhilePainting();
         };
-        if (isOutlineEnabled() && isOutlineVisible() &&
+        const bool shownNormally = isOutlineEnabled() && isOutlineVisible() &&
                 (mode() == KisTool::GESTURE_MODE ||
                     (outlineStyleIsVisible() &&
                         (mode() == HOVER_MODE ||
-                         (mode() == PAINT_MODE && shouldShowOutlineWhilePainting()))))) { // lisp forever!
+                         (mode() == PAINT_MODE && shouldShowOutlineWhilePainting())))); // lisp forever!
+        // Giga Sketch: when painting hides the outline, let it fade out instead.
+        const bool hiddenByPainting = isOutlineEnabled() && isOutlineVisible() && outlineStyleIsVisible() &&
+                mode() == PAINT_MODE && !shouldShowOutlineWhilePainting();
+        const bool keepForFade = gigaUpdateOutlineFade(shownNormally, hiddenByPainting);
+        if (shownNormally || keepForFade) {
 
             outlineMode.isVisible = true;
 
@@ -635,6 +729,12 @@ void KisToolPaint::requestUpdateOutline(const QPointF &outlineDocPoint, const Ko
 
         if (!outlineDocRect.isEmpty()) {
             outlineDocRect.adjust(-xoffset,-yoffset,xoffset,yoffset);
+        }
+
+        // Giga Sketch: room for the size readout under the outline (any rotation).
+        if (mode() == KisTool::GESTURE_MODE && !outlineDocRect.isEmpty() && cfg.gigaShowBrushSizeReadout()) {
+            const qreal m = 60.0;
+            outlineDocRect.adjust(-m / zoomX, -m / zoomY, m / zoomX, m / zoomY);
         }
 
         colorPreviewDocUpdateRect = m_colorSamplerHelper.colorPreviewDocRect(m_outlineDocPoint);

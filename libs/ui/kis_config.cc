@@ -2337,6 +2337,36 @@ void KisConfig::setShowCanvasMessages(bool show)
     m_cfg.writeEntry("showOnCanvasMessages", show);
 }
 
+bool KisConfig::gigaTwoToneCursor(bool defaultValue) const
+{
+    return (defaultValue ? true : m_cfg.readEntry("gigaTwoToneCursor", true));
+}
+
+void KisConfig::setGigaTwoToneCursor(bool value)
+{
+    m_cfg.writeEntry("gigaTwoToneCursor", value);
+}
+
+bool KisConfig::gigaFadeOutlineWhilePainting(bool defaultValue) const
+{
+    return (defaultValue ? true : m_cfg.readEntry("gigaFadeOutlineWhilePainting", true));
+}
+
+void KisConfig::setGigaFadeOutlineWhilePainting(bool value)
+{
+    m_cfg.writeEntry("gigaFadeOutlineWhilePainting", value);
+}
+
+bool KisConfig::gigaShowBrushSizeReadout(bool defaultValue) const
+{
+    return (defaultValue ? true : m_cfg.readEntry("gigaShowBrushSizeReadout", true));
+}
+
+void KisConfig::setGigaShowBrushSizeReadout(bool value)
+{
+    m_cfg.writeEntry("gigaShowBrushSizeReadout", value);
+}
+
 bool KisConfig::gigaShowBrushSwitchMessage(bool defaultValue) const
 {
     return (defaultValue ? false : m_cfg.readEntry("gigaShowBrushSwitchMessage", false));

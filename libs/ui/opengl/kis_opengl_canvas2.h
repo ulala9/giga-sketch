@@ -62,6 +62,8 @@ public: // QOpenGLWidget
 
 public:
     void paintToolOutline(const KisOptimizedBrushOutline &path, int thickness = 1);
+    /// Giga Sketch: with an overall opacity (fade while painting) and the two-tone look.
+    void paintToolOutline(const KisOptimizedBrushOutline &path, int thickness, qreal opacity);
 
 
 public: // Implement kis_abstract_canvas_widget interface

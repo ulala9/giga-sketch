@@ -344,6 +344,12 @@ void KisOpenGLCanvas2::paintToolOutline(const KisOptimizedBrushOutline &path, in
     d->renderer->paintToolOutline(path, updateRect, thickness);
 }
 
+void KisOpenGLCanvas2::paintToolOutline(const KisOptimizedBrushOutline &path, int thickness, qreal opacity)
+{
+    const QRect updateRect = d->updateRect ? *d->updateRect : QRect();
+    d->renderer->paintToolOutline(path, updateRect, thickness, opacity);
+}
+
 bool KisOpenGLCanvas2::isBusy() const
 {
     const bool isBusyStatus = d->glSyncObject && !d->glSyncObject->isSignaled();

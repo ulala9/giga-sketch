@@ -281,6 +281,8 @@ protected:
     /// paint the path which is in view coordinates, default paint mode is XOR_MODE, BW_MODE is also possible
     /// never apply transformations to the painter, they would be useless, if drawing in OpenGL mode. The coordinates in the path should be in view coordinates.
     void paintToolOutline(QPainter * painter, const KisOptimizedBrushOutline &path);
+    /// Giga Sketch: same with an overall opacity (0..1), used to fade the brush outline.
+    void paintToolOutline(QPainter * painter, const KisOptimizedBrushOutline &path, qreal opacity);
 
     /// Checks checks if the current node is editable
     bool nodeEditable();

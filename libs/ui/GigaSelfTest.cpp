@@ -29,6 +29,7 @@
 #include <KoToolRegistry.h>
 #include <KoPointerEvent.h>
 #include <kis_tool.h>
+#include <kis_tool_paint.h>
 #include <GigaBranding.h>
 #include <kundo2stack.h>
 #include <KoCanvasResourceProvider.h>
@@ -991,6 +992,82 @@ void testLassoFill(KisMainWindow *w)
     pump(10);
 }
 
+// Brush outline fade: hidden-while-painting outline fades to 0 during a stroke
+// and back to 1 when hovering again (feature/brush-cursor-look).
+void testCursorLook(KisMainWindow *w)
+{
+    {
+        KisConfig cfg(false);
+        cfg.setShowOutlineWhilePainting(false);   // the fade only runs when painting hides the outline
+        cfg.setGigaTwoToneCursor(true);
+        cfg.setGigaFadeOutlineWhilePainting(true);
+    }
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
+    w->setActiveView(view);
+    view->viewManager()->setCurrentView(view);
+    pump(10);
+    KisNodeSP layer = doc->image()->root()->lastChild();
+    if (layer) {
+        view->viewManager()->nodeManager()->slotNonUiActivatedNode(layer);
+        if (!view->currentNode()) {
+            view->setCurrentNode(layer);
+            canvas->resourceManager()->setResource(KoCanvasResource::CurrentKritaNode, QVariant::fromValue(KisNodeWSP(layer)));
+        }
+    }
+    const QString brushId = QStringLiteral("KritaShape/KisToolBrush");
+    KoToolManager::instance()->switchToolRequested(brushId);
+    pump(20);
+    KisToolPaint *tool = dynamic_cast<KisToolPaint *>(KoToolManager::instance()->toolById(canvas, brushId));
+    if (!tool) { report(false, "cursorlook-tool", QStringLiteral("no brush tool")); return; }
+    tool->optionWidgets();
+    pump(5);
+
+    QWidget *cw = canvas->canvasWidget();
+    const QPoint c = cw->rect().center();
+    auto event = [&](QEvent::Type type, const QPoint &p, Qt::MouseButtons buttons) {
+        QMouseEvent e(type, p, cw->mapToGlobal(p), Qt::LeftButton, buttons, Qt::NoModifier);
+        return KoPointerEvent(&e, canvas->coordinatesConverter()->widgetToDocument(QPointF(p)));
+    };
+    auto wait = [&](int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < ms) pump(1);
+    };
+    {
+        KoPointerEvent hover = event(QEvent::MouseMove, c, Qt::NoButton);
+        tool->mouseMoveEvent(&hover);
+    }
+    wait(250);
+    const qreal before = tool->gigaOutlineOpacity();
+    {
+        KoPointerEvent press = event(QEvent::MouseButtonPress, c, Qt::LeftButton);
+        tool->beginPrimaryAction(&press);
+    }
+    for (int i = 1; i <= 10; i++) {
+        KoPointerEvent move = event(QEvent::MouseMove, c + QPoint(i * 4, i), Qt::LeftButton);
+        tool->continuePrimaryAction(&move);
+        wait(30);
+    }
+    const qreal during = tool->gigaOutlineOpacity();
+    {
+        KoPointerEvent release = event(QEvent::MouseButtonRelease, c + QPoint(40, 10), Qt::NoButton);
+        tool->endPrimaryAction(&release);
+    }
+    doc->image()->waitForDone();
+    {
+        KoPointerEvent hover = event(QEvent::MouseMove, c + QPoint(42, 10), Qt::NoButton);
+        tool->mouseMoveEvent(&hover);
+    }
+    wait(300);
+    const qreal after = tool->gigaOutlineOpacity();
+    report(before > 0.99, "cursorlook-shown-on-hover", QString::number(before));
+    report(during < 0.01, "cursorlook-faded-while-painting", QString::number(during));
+    report(after > 0.99, "cursorlook-back-after-stroke", QString::number(after));
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -1005,6 +1082,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("refboard"), testReferenceBoard},
         {QStringLiteral("layerbuttons"), testLayerButtons},
         {QStringLiteral("lassofill"), testLassoFill},
+        {QStringLiteral("cursorlook"), testCursorLook},
     };
     bool found = false;
     for (const auto &test : tests) {
