@@ -12,5 +12,15 @@
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
     </Action>
+   <Action name="GigaToolLassoFill">
+      <icon>giga_tool_lasso_fill</icon>
+      <text>Lasso Fill Tool</text>
+      <whatsThis></whatsThis>
+      <toolTip>Lasso Fill Tool</toolTip>
+      <iconText>Lasso Fill Tool</iconText>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
   </Actions>
 </ActionCollection>

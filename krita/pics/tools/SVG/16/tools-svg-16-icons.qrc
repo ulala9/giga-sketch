@@ -94,5 +94,7 @@
         <file>light_krita_tool_reference_images.svg</file>
         <file>dark_krita_tool_enclose_and_fill.svg</file>
         <file>light_krita_tool_enclose_and_fill.svg</file>
+        <file>dark_giga_tool_lasso_fill.svg</file>
+        <file>light_giga_tool_lasso_fill.svg</file>
     </qresource>
 </RCC>

@@ -57,6 +57,7 @@
 #include <kis_canvas_resource_provider.h>
 
 #include <KoCompositeOpRegistry.h>
+#include <KoCanvasResourceProvider.h>
 
 #include <processing/KisEncloseAndFillProcessingVisitor.h>
 
@@ -67,10 +68,11 @@
 #include "subtools/KisLassoEnclosingProducer.h"
 #include "subtools/KisBrushEnclosingProducer.h"
 
-KisToolEncloseAndFill::KisToolEncloseAndFill(KoCanvasBase * canvas)
+KisToolEncloseAndFill::KisToolEncloseAndFill(KoCanvasBase * canvas, bool lassoFill)
     : KisDynamicDelegatedTool<KisToolShape>(canvas, QCursor())
+    , m_gigaLassoFill(lassoFill)
 {
-    setObjectName("tool_enclose_and_fill");
+    setObjectName(lassoFill ? "tool_giga_lasso_fill" : "tool_enclose_and_fill");
 }
 
 KisToolEncloseAndFill::~KisToolEncloseAndFill()
@@ -263,8 +265,20 @@ void KisToolEncloseAndFill::beginAlternateDoubleClickAction(KoPointerEvent *even
 
 void KisToolEncloseAndFill::slot_delegateTool_enclosingMaskProduced(KisPixelSelectionSP enclosingMask)
 {
+    // Giga Sketch: eraser mode (E) turns the fill into an erase, like it does
+    // for brushes. Without custom blending options this already happens: the
+    // fill uses the brush's effective blend mode, which is Erase in eraser
+    // mode. With custom blending options the custom blend mode would win, so
+    // Erase is forced here (the custom opacity is kept). Read once, on the GUI
+    // thread, before the fill job starts.
+    const bool gigaErasing =
+        canvas()->resourceManager()->resource(KoCanvasResource::EraserMode).toBool();
+
     KisStrokeStrategyUndoCommandBased *strategy =
-            new KisStrokeStrategyUndoCommandBased(kundo2_i18n("Enclose and Fill"), false, image().data());
+            new KisStrokeStrategyUndoCommandBased(
+                !m_gigaLassoFill ? kundo2_i18n("Enclose and Fill")
+                    : (gigaErasing ? kundo2_i18n("Lasso Erase") : kundo2_i18n("Lasso Fill")),
+                false, image().data());
     strategy->setSupportsWrapAroundMode(true);
     m_fillStrokeId = image()->startStroke(strategy);
     KIS_SAFE_ASSERT_RECOVER_RETURN(m_fillStrokeId);
@@ -345,7 +359,7 @@ void KisToolEncloseAndFill::slot_delegateTool_enclosingMaskProduced(KisPixelSele
                                                m_fillType == FillWithBackgroundColor,
                                                m_useCustomBlendingOptions,
                                                m_customOpacity / 100.0,
-                                               m_customCompositeOp,
+                                               gigaErasing ? QString(COMPOSITE_ERASE) : m_customCompositeOp,
                                                m_dirtyRect);
 
     image()->addJob(
@@ -651,6 +665,11 @@ QWidget* KisToolEncloseAndFill::createOptionWidget()
 
     m_optionWidget->appendWidget("buttonReset", buttonReset);
 
+    // Giga Sketch: the Lasso Fill tool is always a lasso.
+    if (m_gigaLassoFill) {
+        m_optionWidget->setWidgetVisible("sectionEnclosingMethod", false);
+    }
+
     // Initialize widgets
     if (m_enclosingMethod == Rectangle) {
         m_buttonEnclosingMethodRectangle->setChecked(true);
@@ -800,11 +819,13 @@ QWidget* KisToolEncloseAndFill::createOptionWidget()
 
 void KisToolEncloseAndFill::loadConfiguration()
 {
-    m_enclosingMethod = loadEnclosingMethodFromConfig();
+    // Giga Sketch: Lasso Fill is always a lasso and fills the whole loop by
+    // default (regions touching the loop's edge included).
+    m_enclosingMethod = m_gigaLassoFill ? Lasso : loadEnclosingMethodFromConfig();
     m_regionSelectionMethod = loadRegionSelectionMethodFromConfig();
     m_regionSelectionColor = loadRegionSelectionColorFromConfig();
     m_regionSelectionInvert = m_configGroup.readEntry<bool>("regionSelectionInvert", false);
-    m_regionSelectionIncludeContourRegions = m_configGroup.readEntry<bool>("regionSelectionIncludeContourRegions", false);
+    m_regionSelectionIncludeContourRegions = m_configGroup.readEntry<bool>("regionSelectionIncludeContourRegions", m_gigaLassoFill);
     {
         const QString fillTypeStr = m_configGroup.readEntry<QString>("fillWith", "");
         if (fillTypeStr == "foregroundColor") {
@@ -1316,7 +1337,7 @@ void KisToolEncloseAndFill::slot_buttonReset_clicked()
     );
     m_buttonRegionSelectionColor->setColor(KoColor());
     m_checkBoxRegionSelectionInvert->setChecked(false);
-    m_checkBoxRegionSelectionIncludeContourRegions->setChecked(false);
+    m_checkBoxRegionSelectionIncludeContourRegions->setChecked(m_gigaLassoFill);
     m_buttonFillWithFG->setChecked(true);
     m_sliderPatternScale->setValue(100.0);
     m_angleSelectorPatternRotation->setAngle(0.0);

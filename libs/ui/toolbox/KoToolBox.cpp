@@ -63,7 +63,7 @@ static const QList<GigaToolGroup> &gigaToolGroups()
         // Paint, retouch, fill
         {"brush",   "giga-2-paint",  {"KritaShape/KisToolBrush", "KritaShape/KisToolMultiBrush", "KritaShape/KisToolDyna", "KarbonCalligraphyTool"}},
         {"heal",    "giga-2-paint",  {"KritaShape/KisToolSmartPatch"}},
-        {"fill",    "giga-2-paint",  {"KritaFill/KisToolGradient", "KritaFill/KisToolFill", "KisToolEncloseAndFill", "KritaShape/KisToolLazyBrush"}},
+        {"fill",    "giga-2-paint",  {"KritaFill/KisToolGradient", "KritaFill/KisToolFill", "KisToolEncloseAndFill", "GigaToolLassoFill", "KritaShape/KisToolLazyBrush"}},
         // Vector, text, shapes
         {"pen",     "giga-3-vector", {"KisToolPath", "KisToolPencil", "PathTool"}},
         {"type",    "giga-3-vector", {"SvgTextTool"}},
