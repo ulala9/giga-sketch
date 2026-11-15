@@ -4,10 +4,11 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-15 (after crash recovery)
+Last updated: 2026-11-15 (aesthetic polish built)
 
 ## Resume here
-- **Next up:** `feature/procreate-canvas-look` (unmerged, waiting for the user's hand test): dark canvas surround,
+- **Next up:** the user's look test of the six aesthetic branches (Phase 4 list below), then icon batches 2–4.
+- Also waiting: `feature/procreate-canvas-look` (unmerged, waiting for the user's hand test): dark canvas surround,
   finer checkerboard, light blue grid, Grid panel "Draw on" (Canvas / Canvas + background / Background only with
   screen-fixed Size), grid limits 10000 px, two upstream grid fixes. Merge after the user OKs it.
 - Also waiting for a hand test: `fix/shortcut-beats-menu-letter` — a user shortcut on Alt+<letter> (e.g. Feather
@@ -22,7 +23,10 @@ Last updated: 2026-11-15 (after crash recovery)
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/procreate-canvas-look`, `fix/shortcut-beats-menu-letter`.
+  Pending in `giga-test` now: `feature/procreate-canvas-look`, `fix/shortcut-beats-menu-letter`,
+  `feature/brush-cursor-look`, `feature/accent-color`, `feature/slider-look`, `feature/canvas-shadow`,
+  `feature/ui-motion`, `feature/giga-tool-icons`.
+  To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
 - UI checks: `giga-tools/selftest.sh all` (headless-ish UI self-tests, see NOTES.md "UI self-tests").
@@ -75,13 +79,15 @@ Last updated: 2026-11-15 (after crash recovery)
   also with custom blending (`feature/lasso-fill-erase`, merged 2026-11-15, hand-tested). Self-test `lassofill`.
 - [x] Taskbar icon: WM_CLASS `gigasketch` set before the app starts (`fix/taskbar-icon`)
 - [x] No stray "No text" menu: Window menu is named `settings` in gigasketch.xmlgui so Toolbars Shown merges into it (`fix/no-text-menu`)
-- Aesthetic polish (approved 2026-11-15, one branch each, in this order):
-  - [ ] Brush cursor: two-tone outline, fade while painting, size readout (`feature/brush-cursor-look`)
-  - [ ] Accent colour choice in Preferences (`feature/accent-color`)
-  - [ ] Softer slider look (`feature/slider-look`)
-  - [ ] Soft shadow around the canvas (`feature/canvas-shadow`)
-  - [ ] Interface motion: panel/flyout fades, mode-switch cross-fade, off switch (`feature/ui-motion`)
-  - [ ] Original line-art toolbox + panel strip icons, in batches (`feature/giga-tool-icons`)
+- Aesthetic polish (approved 2026-11-15, one branch each). Built, in `giga-test`, **waiting for the user's look/hand test**:
+  - [ ] Brush cursor: two-tone outline, fade while painting, size readout (`feature/brush-cursor-look`). Self-test `cursorlook`.
+    The fade only runs when Preferences > Cursor > While painting > "Show outline" is off (user has it on).
+  - [ ] Accent colour choice in Preferences > General (`feature/accent-color`). Self-test `accent`.
+  - [ ] Softer slider look, Preferences > General "Softer sliders" (`feature/slider-look`)
+  - [ ] Soft shadow around the canvas, Preferences > Display (`feature/canvas-shadow`)
+  - [ ] Interface motion: panel/flyout/tool-menu fades, mode-switch cross-fade, "Interface animations" (`feature/ui-motion`). Self-test `motion`.
+  - [ ] Original line-art tool icons (`feature/giga-tool-icons`): **batch 1 (paint/fill) done**, waiting for the user's
+    style feedback before batch 2 (select/move/crop/sample), 3 (vector/text/shapes), 4 (hand/zoom + panel strip). Self-test `icons`.
 
 ## Phase 5 — Feature blueprints (doc "Giga Sketch Feature Blueprints")
 - [x] Reference Board (`feature/reference-board`, merged 2026-11-14, hand-tested): Normalize, Arrange (5 styles,

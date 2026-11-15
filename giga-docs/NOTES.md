@@ -531,3 +531,37 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - `pump()` flushes deferred deletes too (see the modecrash note) — keep it that way or tests see dead widgets.
 - `panelmove` times panel drags; `GIGA_PANEL_TRACE=1` (any run) prints a summary line per real panel drag.
 - Gotcha: a non-front tab in a dock group keeps a stale position; `raise()` it before aiming at it.
+
+## Aesthetic polish (2026-11-15; branches feature/brush-cursor-look … feature/giga-tool-icons)
+- **Brush cursor** (`feature/brush-cursor-look`): `KisOpenGLCanvasRenderer::gigaPaintTwoToneOutline()` draws each outline
+  polygon as a mitered GL_TRIANGLE_STRIP in widget coordinates (points mapped with flakeToWidget, projection only),
+  alpha-blended: black 3 px α0.55, then white (eraser: eraser cursor colour) 1 px. `KisTool::paintToolOutline(painter,
+  path, opacity)` is the new entry; the old one forwards to it when `gigaTwoToneCursor`. Fade: `KisToolPaint::Private`
+  holds `gigaOutlineOpacity` + a QVariantAnimation (GUI thread); `gigaUpdateOutlineFade()` is called from
+  `requestUpdateOutline()` and keeps a hidden-by-painting outline visible while it fades. Size readout:
+  `gigaPaintSizeReadout()` in `KisToolPaint::paint()` when mode == GESTURE_MODE; the update rect grows 60 view px.
+  Keys gigaTwoToneCursor / gigaFadeOutlineWhilePainting / gigaShowBrushSizeReadout (KisConfig getters).
+- **Accent** (`feature/accent-color`): `libs/ui/GigaAccent.h` (presets, textOn, mix). `ThemeManager::slotChangePalette()`
+  overrides Highlight/HighlightedText/Link after the theme loop; re-runs on configChanged when the key changed.
+  Key gigaAccentColor ("" = theme). Preferences combo is built in code in the General form.
+- **Sliders** (`feature/slider-look`): `libs/widgetutils/GigaSliderStyle.{h,cpp}` (static switch, key gigaSliderStyle);
+  `gigaPaintSlider()` in `kis_slider_spin_box_p.h` (only included by kis_slider_spin_box.cpp, so cheap to rebuild).
+- **Canvas shadow** (`feature/canvas-shadow`): `libs/ui/canvas/GigaCanvasShadow.h` ring geometry; OpenGL
+  `gigaDrawCanvasShadow()` between drawBackground and drawCheckers (re-binds quadVAO afterwards); QPainter canvas paints
+  ring paths minus the image. Key gigaCanvasShadow (Display tab).
+- **Motion** (`feature/ui-motion`): `libs/ui/GigaMotion.{h,cpp}`: a cover child widget (mouse-transparent) that fades
+  out. reveal() = fill with palette window colour (GigaFloatingPanel::showEvent, panel flyout, toolbox group QMenu
+  aboutToShow); snapshot()+crossFade() in `GigaInterfaceModes::switchTo`. QWidget::grab() of the main window does
+  include the OpenGL canvas (checked via GIGA_MOTION_DUMP). Key gigaUiAnimations.
+- **Tool icons** (`feature/giga-tool-icons`): edit `giga-tools/make_tool_icons.py` (ICONS dict: icon name → SVG parts on
+  a 16 px grid, `{c}` = colour) and run it; it writes `krita/pics/giga-icons/{light,dark}_<name>.svg` + qrc.
+  `KisIconUtils::loadIcon()` tries `:/giga-icons/<variant>_<name>.svg` first (key gigaToolIcons, read once → restart).
+  Preview: `magick -background '#2b2b2b' -density 600 x.svg -resize 64x64 x.png` + `montage`.
+- Preferences rows for all of these are added in code; each branch uses a different anchor line so they merge cleanly.
+
+## giga-test without rebuilds
+- Branch switches/checkouts rewrite files → ninja rebuilds (kis_config.h ≈ 900 steps). Instead, develop in the build
+  checkout (on giga-test, uncommitted), build/test there, then `git diff` → `git apply -3` in a worktree of the feature
+  branch (based on giga-main) → commit there. Record the merge into giga-test without touching files:
+  `git add -A; T=$(git write-tree); C=$(git commit-tree $T -p HEAD -p <branch> -m "Merge branch '<branch>' into giga-test");
+  git update-ref refs/heads/giga-test $C` (several `-p` = one octopus merge). The tree is exactly what was built.
