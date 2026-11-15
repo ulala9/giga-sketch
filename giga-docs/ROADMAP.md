@@ -11,9 +11,18 @@ Last updated: 2026-11-15 (aesthetic polish built)
 - Also waiting: `feature/procreate-canvas-look` (unmerged, waiting for the user's hand test): dark canvas surround,
   finer checkerboard, light blue grid, Grid panel "Draw on" (Canvas / Canvas + background / Background only with
   screen-fixed Size), grid limits 10000 px, two upstream grid fixes. Merge after the user OKs it.
-- Also waiting for a hand test: `fix/shortcut-beats-menu-letter` — a user shortcut on Alt+<letter> (e.g. Feather
-  Selection on Alt+A) wins over a menu's Alt+letter; the menu drops its underline letter while the key is taken.
-  Self-test `menuletter`.
+- Also waiting for a hand test (all 2026-11-15, all in `giga-test`, all with a Preferences on/off switch):
+  - `fix/shortcut-beats-menu-letter` — a user shortcut on Alt+<letter> (e.g. Feather Selection on Alt+A) wins over a
+    menu's Alt+letter; the menu drops its underline letter while the key is taken. Self-test `menuletter`.
+  - `feature/accent-color` — Preferences > General > Accent colour (presets + Custom). Self-test `accent`.
+  - `feature/slider-look` — softer slider spin boxes (Preferences > General > "Softer sliders").
+  - `feature/canvas-shadow` — soft shadow around the image (Preferences > Display).
+  - `feature/ui-motion` — fades for floating panels/flyouts/tool menus, cross-fade on mode switch
+    (Preferences > General > "Interface animations"). Self-test `motion`.
+  - `feature/brush-cursor-look` — two-tone brush outline, fade while painting, "24 px" readout on Shift+drag
+    resize. Self-test `cursorlook`.
+  - `feature/giga-tool-icons` — original tool icons, batch 1 (paint, retouch, fill tools); needs a restart.
+    Self-test `icons`. Next batches: the remaining toolbox tools.
 - Repo state: everything else merged and pushed (`feature/lasso-fill-erase` on 2026-11-15).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
