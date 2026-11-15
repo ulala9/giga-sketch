@@ -14,6 +14,14 @@ Last updated: 2026-11-15
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
+- **The installed app is built from `giga-test`** (local only, never pushed or merged): `giga-main` + every branch
+  still waiting for the user's hand test. Feature branches still start from `giga-main`. After committing on a
+  feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
+  everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
+  gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
+  Pending in `giga-test` now: `feature/procreate-canvas-look`.
+- Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
+  switches in the build checkout (they touch file times → long rebuilds).
 - UI checks: `giga-tools/selftest.sh all` (headless-ish UI self-tests, see NOTES.md "UI self-tests").
   Never screenshot the desktop; ask the user to look.
 
