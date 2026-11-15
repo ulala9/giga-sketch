@@ -4,13 +4,13 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-14
+Last updated: 2026-11-15
 
 ## Resume here
 - **Next up:** `feature/procreate-canvas-look` (unmerged, waiting for the user's hand test): dark canvas surround,
   finer checkerboard, light blue grid, Grid panel "Draw on" (Canvas / Canvas + background / Background only with
   screen-fixed Size), grid limits 10000 px, two upstream grid fixes. Merge after the user OKs it.
-- Repo state: everything else merged and pushed (`feature/layers-duplicate-button` on 2026-11-14).
+- Repo state: everything else merged and pushed (`feature/lasso-fill-erase` on 2026-11-15).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -60,6 +60,8 @@ Last updated: 2026-11-14
 - [x] Mode switch: no stale layout restore, each mode keeps its floating panels (`fix/mode-switch-double-restore`)
 - [x] Smooth panel dragging (no self-snap), snapping only to adjacent panels, Ctrl = free move (`fix/panel-snap`)
 - [x] Save Dated JPG, Ctrl+Space zoom toward pointer, no brush-switch popup
+- [x] Lasso Fill tool (one-stroke loop fill, in the Fill group) + E erases with Lasso Fill / Enclose and Fill,
+  also with custom blending (`feature/lasso-fill-erase`, merged 2026-11-15, hand-tested). Self-test `lassofill`.
 - [x] Taskbar icon: WM_CLASS `gigasketch` set before the app starts (`fix/taskbar-icon`)
 - [x] No stray "No text" menu: Window menu is named `settings` in gigasketch.xmlgui so Toolbars Shown merges into it (`fix/no-text-menu`)
 - [ ] Nothing queued. Add UI requests here as the user reports them.
@@ -82,6 +84,8 @@ Last updated: 2026-11-14
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-15: Lasso Fill is its own tool (own settings, lasso only, contour regions on); erase mode has no
+  special cursor yet (only the top-bar eraser button shows it) — add a cue only if the user asks.
 - 2026-11-13: brush feel tuning considered done (user tested).
 - 2026-11-13: hyphenation → super low priority.
 - 2026-11-13: text scale → low priority; text tools are "okish" for now.
