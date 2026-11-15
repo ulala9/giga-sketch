@@ -25,7 +25,9 @@ Last updated: 2026-11-15 (Reference Board rotate/zoom built)
     drag rotate (+Alt = stepped), Reset Canvas Rotation key (F1 for the user) turns it upright. Follows Canvas Input
     Settings / Keyboard Shortcuts. Self-test `refboard` (4 new checks).
   - `feature/refboard-flip` (built on `feature/refboard-rotate-zoom`; merging it merges both) — Board flips with the
-    canvas (Mirror View, F2), Board ▸ Look ▸ "Flip With Canvas" (default on). Self-test `refboard`.
+    canvas (Mirror View, F2), Board ▸ Look ▸ "Flip With Canvas" (default on), and turns with the canvas rotation,
+    "Rotate With Canvas" (default on; Shift+Space on the Board adds its own turn, F1 over the Board removes it).
+    Self-test `refboard`.
   - `feature/giga-tool-icons` — original tool icons, batch 1 (paint, retouch, fill tools); needs a restart.
     Self-test `icons`. Next batches: the remaining toolbox tools.
 - Repo state: everything else merged and pushed (`feature/lasso-fill-erase` on 2026-11-15).

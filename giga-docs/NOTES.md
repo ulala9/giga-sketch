@@ -514,6 +514,11 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   (initial state from `coordinatesConverter()->xAxisMirrored()`); `rotationTransform()` = c + M·R(view − c), M on screen
   axes like the canvas. Rotate drag sweep is negated when exactly one axis is flipped. Captions are counter-flipped.
   Setting `flipWithCanvas` (KisConfig `gigaRefBoardFlipWithCanvas`, default true), Look menu.
+- Rotate with canvas: `documentRotationChanged` (live during drags) → `m_canvasRotation`; shown angle
+  `effectiveRotation()` = canvas (if `rotateWithCanvas`, `gigaRefBoardRotateWithCanvas`) + own `m_rotation`. Reset key
+  animates only the own part. Composition matches KisCoordinatesConverter: its widget transform is R(angle)·M (mirror,
+  then screen rotation; Krita negates the stored angle when the flip toggles), so the Board uses c + R·M(view − c)
+  and the rotate drag needs no sign flip. Stepped rotate snaps the shown angle.
 - Known: the old `panelsnap` self-test segfaults in a small test window (948×512) even without this feature — its
   History frame gets docked by the drag and the test dereferences the deleted frame (test bug, not app).
 
