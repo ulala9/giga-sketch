@@ -67,7 +67,10 @@ public:
 
     using RegionSelectionMethod = KisEncloseAndFillPainter::RegionSelectionMethod;
 
-    KisToolEncloseAndFill(KoCanvasBase * canvas);
+    // Giga Sketch: lassoFill = true makes the "Lasso Fill" tool: always the
+    // lasso, the whole loop fills (contour regions included by default), the
+    // enclosing method row is hidden, and settings are saved separately.
+    KisToolEncloseAndFill(KoCanvasBase * canvas, bool lassoFill = false);
     ~KisToolEncloseAndFill() override;
 
     void beginPrimaryAction(KoPointerEvent *event) override;
@@ -86,6 +89,8 @@ public Q_SLOTS:
     void deactivate() override;
 
 private:
+    const bool m_gigaLassoFill {false};
+
     EnclosingMethod m_enclosingMethod {Lasso};
 
     RegionSelectionMethod m_regionSelectionMethod {defaultRegionSelectionMethod()};

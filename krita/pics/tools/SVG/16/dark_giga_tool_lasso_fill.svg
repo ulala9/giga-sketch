@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" version="1.1" viewBox="0 0 16 16">
+  <!-- Giga Sketch: Lasso Fill tool icon. SPDX-FileCopyrightText: 2026 The Giga Sketch contributors. SPDX-License-Identifier: GPL-3.0-or-later -->
+  <path style="fill:#373737;fill-opacity:1" d="M8.6 1.5c3.2 0 6 1.7 6 4.6 0 2.9-2.9 4.9-6.3 4.9-1.1 0-2.1-.2-3-.6C3.2 9.6 1.4 8.1 1.4 6.1 1.4 3.4 4.8 1.5 8.6 1.5z"/>
+  <path style="fill:none;stroke:#373737;stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round" d="M5.3 10.4c-.5.9-.4 1.8.4 2.2.9.4 1.5-.3 1.1-1-.4-.6-1.6-.3-2 .6-.4.9-.2 1.9.4 2.6"/>
+</svg>

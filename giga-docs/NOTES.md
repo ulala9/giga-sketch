@@ -502,11 +502,29 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Known: the old `panelsnap` self-test segfaults in a small test window (948×512) even without this feature — its
   History frame gets docked by the drag and the test dereferences the deleted frame (test bug, not app).
 
+## Lasso Fill tool + lasso erase (feature/lasso-fill-erase)
+- `GigaToolLassoFill` = `KisToolEncloseAndFill(canvas, lassoFill=true)` (factory `GigaToolLassoFillFactory.h` in
+  `plugins/tools/tool_enclose_and_fill/`). Own tool id → own config group, so its settings don't touch Enclose and
+  Fill's. Lasso forced, Enclosing-method row hidden, "Include contour regions" defaults to on (also on Reset).
+  Icon `giga_tool_lasso_fill` (original SVGs in `krita/pics/tools/SVG/16`). In the toolbox "fill" group after
+  Enclose and Fill; recorder blacklists it like Enclose and Fill.
+- Enclose and Fill gotcha: with "Include contour regions" off (upstream default), regions touching the loop's edge
+  are subtracted (`KisEncloseAndFillPainter::Private::selectAllRegions`) — on a blank/flat layer that is the whole
+  loop, so nothing fills.
+- Eraser mode (E): fills already follow the brush's *effective* blend mode (`KisResourcesSnapshot` →
+  `CurrentEffectiveCompositeOp` → `effectivePaintOpCompositeOp()` = Erase in eraser mode). Only custom blending
+  options overrode it; `slot_delegateTool_enclosingMaskProduced` now forces `COMPOSITE_ERASE` there when
+  `EraserMode` is on (read once on the GUI thread before the fill job). Undo names "Lasso Fill" / "Lasso Erase".
+- Self-test `lassofill`. Headless tricks it needed: set the current node by hand (view + `CurrentKritaNode`
+  resource), call `tool->optionWidgets()` (the tool builds its subtool there), drive the tool's primary actions
+  directly, and mark events spontaneous (`QSpontaneKeyEvent` impersonation) — `KisToolOutlineBase` cancels a stroke
+  whose release isn't spontaneous.
+
 ## UI self-tests (dev hook)
 - `giga-tools/selftest.sh <name|all>` runs Giga Sketch in a throw-away HOME/XDG_CONFIG_HOME with `GIGA_SELFTEST=<name>`, prints only `GIGA_SELFTEST PASS/FAIL/INFO/DONE` lines, exit code = failures.
 - Code: `libs/ui/GigaSelfTest.cpp` (called from the KisMainWindow ctor via `GigaSelfTest::maybeRun`; no-op without the env var). Helpers: `report()`, `info()`, `pump()`, `drag(widget, localStart, globalEnd, steps, beforeRelease)`. Add a test function and a row in `runNamed()`'s table. `GIGA_SELFTEST_DELAY` (ms, default 5000) delays the start.
 - Ends with `_Exit(failures)` to skip Krita's shutdown prompts.
-- Existing tests: `panels` (float/dock, drop onto Layers, left/right edge, middle, title-bar tear-off);
+- Existing tests: `lassofill` (Lasso Fill fills, E erases, custom blending + E erases); `panels` (float/dock, drop onto Layers, left/right edge, middle, title-bar tear-off);
   `tabswitch` (opens a document — the Welcome page hides all panels — floats History by API / tab drag / title drag in
   Studio then Photoshop, clicks every group tab, checks the panel is on top). `GIGA_MODE=<0|1>`, `GIGA_HOW=<0|1|2>` pin it.
 - The `drag()` helper sends events to `QWidget::mouseGrabber()` when there is one (like Qt does).

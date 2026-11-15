@@ -37,6 +37,7 @@ namespace
         "KisToolSelectOutline",
         "KisToolSelectPolygonal",
         "KisToolEncloseAndFill",
+        "GigaToolLassoFill", // Giga Sketch
         "KisToolPath",
         "KisToolCrop",
         "KisToolSelectPath",

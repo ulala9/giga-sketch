@@ -17,6 +17,18 @@
 #include "KisReferenceImagesLayer.h"
 #include "KisView.h"
 #include "kis_canvas2.h"
+#include "KisViewManager.h"
+#include "kis_action_manager.h"
+#include "kis_action.h"
+#include "kis_node_manager.h"
+#include "kis_coordinates_converter.h"
+#include <kis_image.h>
+#include <kis_paint_device.h>
+#include <kis_layer.h>
+#include <KoToolManager.h>
+#include <KoToolRegistry.h>
+#include <KoPointerEvent.h>
+#include <kis_tool.h>
 #include <GigaBranding.h>
 #include <kundo2stack.h>
 #include <KoCanvasResourceProvider.h>
@@ -24,6 +36,7 @@
 #include <KoColorSpaceRegistry.h>
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QDir>
 #include <QDockWidget>
 #include <QElapsedTimer>
@@ -37,8 +50,18 @@
 #include <QToolButton>
 #include <QTimer>
 
+#include <cmath>
 #include <cstdio>
 #include <functional>
+
+// Mark synthetic events as coming from the system, the way QtTest and
+// QtWebEngine do (QEvent befriends this class name). Some tools cancel a
+// stroke whose release is not "spontaneous" (e.g. KisToolOutlineBase).
+class QSpontaneKeyEvent
+{
+public:
+    static void setSpontaneous(QEvent *event) { event->setSpontaneous(); }
+};
 
 namespace
 {
@@ -849,6 +872,125 @@ void testLayerButtons(KisMainWindow *w)
     // Krita's own "duplicatelayer" action.)
 }
 
+/// Lasso Fill tool: one lasso stroke fills the whole loop; with eraser mode
+/// (E) on, the next lasso erases it again.
+void testLassoFill(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
+    report(KoToolRegistry::instance()->contains(QStringLiteral("GigaToolLassoFill")), "lassofill-registered", QString());
+    QToolButton *button = w->findChild<QToolButton *>(QStringLiteral("GigaToolLassoFill"));
+    report(button != nullptr, "lassofill-toolbox-button", button ? QStringLiteral("found") : QStringLiteral("missing"));
+
+    KisImageSP image = doc->image();
+    KisNodeSP layer = image->root()->lastChild();
+    if (!layer || !layer->paintDevice()) { report(false, "setup", QStringLiteral("no paint layer")); return; }
+    // In a test run the window never becomes active, so Krita never hands
+    // the view to the view manager; do it by hand (no active layer otherwise).
+    w->setActiveView(view);
+    view->viewManager()->setCurrentView(view);
+    pump(10);
+    info(QStringLiteral("layer %1 (%2 children), view manager image ok: %3, view node: %4")
+             .arg(layer->name()).arg(image->root()->childCount())
+             .arg(view->viewManager()->image().data() == image.data())
+             .arg(view->currentNode() ? view->currentNode()->name() : QStringLiteral("none")));
+    view->viewManager()->nodeManager()->slotNonUiActivatedNode(layer);
+    pump(5);
+    if (!view->currentNode()) {
+        // Still none (headless): set the node where the tools read it.
+        view->setCurrentNode(layer);
+        canvas->resourceManager()->setResource(KoCanvasResource::CurrentKritaNode, QVariant::fromValue(KisNodeWSP(layer)));
+        pump(5);
+    }
+    const KoColorSpace *cs = layer->paintDevice()->colorSpace();
+    canvas->resourceManager()->setForegroundColor(KoColor(Qt::red, cs));
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("GigaToolLassoFill"));
+    pump(20);
+    report(KoToolManager::instance()->activeToolId() == QLatin1String("GigaToolLassoFill"), "lassofill-active",
+           KoToolManager::instance()->activeToolId());
+
+    QWidget *cw = canvas->canvasWidget();
+    const QPoint c = cw->rect().center();
+    info(QStringLiteral("active node: %1").arg(view->viewManager()->activeNode() ? view->viewManager()->activeNode()->name() : QStringLiteral("none")));
+    // Synthetic mouse events don't get through Krita's input manager in a
+    // test run, so drive the tool directly, like the input manager does.
+    KoToolBase *tool = KoToolManager::instance()->toolById(canvas, QStringLiteral("GigaToolLassoFill"));
+    // The tool sets itself up when its options widget is built (normally by
+    // the Tool Options panel); make sure that happened.
+    if (tool) tool->optionWidgets();
+    pump(5);
+    auto lasso = [&]() {
+        if (!tool) return;
+        auto send = [&](int phase, const QPoint &p) {
+            QMouseEvent e(phase == 0 ? QEvent::MouseButtonPress : phase == 1 ? QEvent::MouseMove : QEvent::MouseButtonRelease,
+                          p, cw->mapToGlobal(p), Qt::LeftButton, phase == 2 ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            QSpontaneKeyEvent::setSpontaneous(&e);
+            KoPointerEvent ev(&e, canvas->coordinatesConverter()->widgetToDocument(QPointF(p)));
+            KisTool *kt = static_cast<KisTool *>(tool);
+            if (phase == 0) kt->beginPrimaryAction(&ev);
+            else if (phase == 1) kt->continuePrimaryAction(&ev);
+            else kt->endPrimaryAction(&ev);
+        };
+        const int r = qMin(cw->width(), cw->height()) / 5;
+        send(0, c + QPoint(r, 0));
+        for (int i = 1; i <= 36; ++i) {
+            const qreal a = i * 2 * M_PI / 36;
+            send(1, c + QPoint(qRound(r * std::cos(a)), qRound(r * std::sin(a))));
+            pump(1);
+        }
+        send(2, c + QPoint(r, 0));
+        pump(5);
+        image->waitForDone();
+        pump(5);
+    };
+    const QPoint px = canvas->coordinatesConverter()->widgetToImage(QPointF(c)).toPoint();
+    auto pixel = [&]() {
+        QColor q;
+        layer->paintDevice()->pixel(px.x(), px.y(), &q);
+        return q;
+    };
+    const QColor before = pixel();
+    lasso();
+    const QColor filled = pixel();
+    report(filled.red() > 200 && filled.green() < 50 && filled.alpha() == 255, "lassofill-fills",
+           QStringLiteral("centre before %1, after %2 (undo: %3)").arg(before.name(QColor::HexArgb), filled.name(QColor::HexArgb),
+                                                          doc->undoStack()->undoText()));
+
+    KisAction *erase = view->viewManager()->actionManager()->actionByName(QStringLiteral("erase_action"));
+    if (!erase) { report(false, "lassofill-erases", QStringLiteral("no erase_action")); return; }
+    erase->trigger();
+    pump(10);
+    lasso();
+    const QColor erased = pixel();
+    report(erased.alpha() == 0, "lassofill-erases",
+           QStringLiteral("centre after erase %1 (undo: %2)").arg(erased.name(QColor::HexArgb), doc->undoStack()->undoText()));
+    erase->trigger();
+    pump(10);
+
+    // With custom blending options (blend mode Normal), E must still erase.
+    QCheckBox *custom = nullptr;
+    for (const QPointer<QWidget> &ow : tool->optionWidgets()) {
+        if (!ow) continue;
+        for (QCheckBox *cb : ow->findChildren<QCheckBox *>()) {
+            if (cb->text().contains(QStringLiteral("custom blending"), Qt::CaseInsensitive)) custom = cb;
+        }
+    }
+    if (!custom) { report(false, "lassofill-custom-blending", QStringLiteral("checkbox not found")); return; }
+    lasso(); // fill again (eraser mode is off now)
+    custom->setChecked(true);
+    erase->trigger();
+    pump(10);
+    lasso();
+    const QColor erasedCustom = pixel();
+    report(erasedCustom.alpha() == 0, "lassofill-custom-blending-erases",
+           QStringLiteral("centre %1 (undo: %2)").arg(erasedCustom.name(QColor::HexArgb), doc->undoStack()->undoText()));
+    erase->trigger();
+    custom->setChecked(false);
+    pump(10);
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -862,6 +1004,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("autosave"), testAutosaveName},
         {QStringLiteral("refboard"), testReferenceBoard},
         {QStringLiteral("layerbuttons"), testLayerButtons},
+        {QStringLiteral("lassofill"), testLassoFill},
     };
     bool found = false;
     for (const auto &test : tests) {

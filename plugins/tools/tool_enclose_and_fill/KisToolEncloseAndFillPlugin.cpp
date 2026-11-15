@@ -11,6 +11,7 @@
 
 #include "KisToolEncloseAndFillPlugin.h"
 #include "KisToolEncloseAndFillFactory.h"
+#include "GigaToolLassoFillFactory.h"
 
 K_PLUGIN_FACTORY_WITH_JSON(KisToolEncloseAndFillPluginFactory, "kritatoolencloseandfill.json", registerPlugin<KisToolEncloseAndFillPlugin>();)
 
@@ -18,6 +19,8 @@ KisToolEncloseAndFillPlugin::KisToolEncloseAndFillPlugin(QObject *parent, const 
         : QObject(parent)
 {
     KoToolRegistry::instance()->add(new KisToolEncloseAndFillFactory());
+    // Giga Sketch
+    KoToolRegistry::instance()->add(new GigaToolLassoFillFactory());
 }
 
 KisToolEncloseAndFillPlugin::~KisToolEncloseAndFillPlugin()
