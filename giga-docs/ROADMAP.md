@@ -4,12 +4,15 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-15
+Last updated: 2026-11-15 (after crash recovery)
 
 ## Resume here
 - **Next up:** `feature/procreate-canvas-look` (unmerged, waiting for the user's hand test): dark canvas surround,
   finer checkerboard, light blue grid, Grid panel "Draw on" (Canvas / Canvas + background / Background only with
   screen-fixed Size), grid limits 10000 px, two upstream grid fixes. Merge after the user OKs it.
+- Also waiting for a hand test: `fix/shortcut-beats-menu-letter` — a user shortcut on Alt+<letter> (e.g. Feather
+  Selection on Alt+A) wins over a menu's Alt+letter; the menu drops its underline letter while the key is taken.
+  Self-test `menuletter`.
 - Repo state: everything else merged and pushed (`feature/lasso-fill-erase` on 2026-11-15).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
@@ -19,7 +22,7 @@ Last updated: 2026-11-15
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/procreate-canvas-look`.
+  Pending in `giga-test` now: `feature/procreate-canvas-look`, `fix/shortcut-beats-menu-letter`.
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
 - UI checks: `giga-tools/selftest.sh all` (headless-ish UI self-tests, see NOTES.md "UI self-tests").
@@ -86,6 +89,8 @@ Last updated: 2026-11-15
   objects built against the old system library. Delete the `.o` files that mention the old namespace and rebuild
   (seen 2026-11-14: OCIO 2.4→2.5, OpenEXR 3.2→3.4).
 - `panelsnap` self-test segfaults in a small test window (test dereferences a panel frame its drag docked).
+- After a crash/power loss: a 0-byte `build/libs/ui/kritaui_autogen/include/moc_*.cpp` causes link errors
+  (`undefined reference to vtable/staticMetaObject`). Delete it and `touch` its header, then rebuild (2026-11-15).
 - Pre-existing upstream test failures (not ours): TestSvgParser/Cloned/RoundTrip, SvgTextCursorTest RTL/vertical.
 
 ## Backlog / ideas (not scheduled)
