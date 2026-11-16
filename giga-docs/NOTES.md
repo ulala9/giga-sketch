@@ -758,19 +758,33 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Its settings are G'MIC's own, shared with any other G'MIC (GIMP etc.): `~/.config/GREYC/gmic_qt.conf` and filter
   updates in `~/.config/gmic/`. Not Krita's config, so left alone. Some dialog titles still say "Krita" (`QMic.cpp`).
 
-## Blender Viewport Layer, step 0 (feature/blender-bridge, 2026-11-16)
-- Blender add-on `giga-tools/blender/giga_viewport_send.py` (legacy add-on with bl_info; Blender 5.2.2 installed at
-  /usr/bin/blender). Install: Preferences > Add-ons > Install from Disk. Panel: 3D viewport sidebar (N) > GigaSketch.
-- Send: `GPUOffScreen(w,h,'RGBA8')` + `draw_view3d(..., do_color_management=True, draw_background=not transparent)`
+## Blender bridge (feature/blender-bridge, 2026-11-16)
+- Blender add-on `giga-tools/blender/giga_viewport_send.py` (legacy add-on with bl_info; Blender 5.2.2 at
+  /usr/bin/blender; user's installed copy: ~/.config/blender/5.2/scripts/addons/). "Send to GigaSketch" is in the
+  viewport right-click menus (object/edit mesh/pose), View menu, and sidebar (N) > GigaSketch (options).
+- Capture: `GPUOffScreen(w,h,'RGBA8')` + `draw_view3d(..., do_color_management=True, draw_background=not transparent)`
   from the active camera (`calc_matrix_camera` with the output size), else the current view (`rv3d.window_matrix`,
-  region aspect). Overlays switched off during the draw and restored. `texture_color.read()` = uint8, bottom-up rows;
-  `np.frombuffer` works on gpu.types.Buffer. Transparent output is premultiplied → un-premultiplied before PNG.
-- Own tiny PNG writer (zlib level 3, sRGB chunk) instead of bpy images, so no hidden colour conversions.
-  Written to `<file>.tmp` + `os.replace` (atomic). Settings live on the Scene (saved per .blend). Default file
-  `~/Pictures/GigaSketch/blender-view.png`. Cycles "Rendered" is refused (draws nothing useful).
-- Measured (640x360): Solid ~7 ms, transparent ~14 ms, first Material Preview ~0.9 s (shader compile).
-- GigaSketch side: plain File Layer. `KisSafeDocumentLoader` re-attaches its watcher when the file is replaced
-  (rename), reloads after the 500 ms compressor.
-- Headless test: `blender --factory-startup --python test.py` with a `bpy.app.timers` callback that calls the
-  operator under `context.temp_override(window, area, region, space_data)` and then `wm.quit_blender()`
-  (opens a window briefly; `-b` has no viewport to draw).
+  region aspect). Overlays off during the draw, restored after. `texture_color.read()` = uint8, bottom-up rows;
+  `np.frombuffer` works on gpu.types.Buffer. Transparent output is premultiplied → un-premultiplied.
+  Own tiny PNG writer (no bpy image colour conversions), `<file>.tmp` + `os.replace`. One PNG per .blend+camera:
+  `~/Pictures/GigaSketch/blender/<blend>-<camera>.png`. Max 8192 on the long side. Cycles Rendered is refused.
+  Measured: Solid ~7-12 ms at 800x600, first Material Preview ~0.9 s (shader compile).
+- Link: Unix socket `$XDG_RUNTIME_DIR/gigasketch-blender.sock` (override: env `GIGA_BLENDER_SOCKET`, used by
+  selftest.sh; AF_UNIX paths max ~107 chars, so the scratchpad is too deep for test sockets). JSON lines, version 1.
+  Blender→Giga: hello{folder}, frame{path,width,height,name,reason:"send"|"refresh"}.
+  Giga→Blender: canvas{width,height} (on hello / active view change), refresh{width,height}, ack{result,layer}.
+  Blender side polls with a persistent `bpy.app.timers` timer every 0.25 s (reconnect every 2 s), non-blocking.
+  Refresh renders the largest 3D viewport under `temp_override`; skipped when nothing changed (signature =
+  depsgraph_update_post counter + matrices + shading + size; taken *after* drawing, drawing may bump the counter).
+- Giga side `libs/ui/GigaBlenderBridge.{h,cpp}`: started from the KisMainWindow ctor (`ensureStarted`), one
+  QLocalServer per process (UserAccessOption; if another Giga Sketch answers on the path it stays out).
+  frame → File Layers of the active document whose path == frame path get `resetCache()` (= instant reload); else
+  on "send" a `KisFileLayer(ToImageSize, absolute path)` is added via KisNodeCommandsAdapter::addNode above the
+  active layer (on top if none), active layer re-selected; no document → new one at the frame size + "Paint" layer.
+  Refresh on `QGuiApplication::applicationStateChanged(Active)` (1 s debounce), only if a File Layer path lies in a
+  folder a connected Blender announced. Pref `gigaBlenderRefreshOnFocus` (General > File Handling, last row).
+- Self-test `blender` (fake client over the socket). Headless: `vm->activeNode()` stays null unless the view is set
+  on the view manager and `setCurrentNode` + CurrentKritaNode resource are set by hand (same as lassofill).
+- Blender-side tests: `blender --factory-startup --python test.py` with a `bpy.app.timers` callback calling the
+  operator under `context.temp_override(window, area, region, space_data)`, then `wm.quit_blender()` (opens a
+  window; `-b` has no viewport). A fake Giga server in Python on a short socket path covers refresh/ack.

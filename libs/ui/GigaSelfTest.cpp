@@ -44,6 +44,12 @@
 #include <kis_icon_utils.h>
 #include "GigaMotion.h"
 #include "GigaAccent.h"
+#include "GigaBlenderBridge.h"
+#include "kis_file_layer.h"
+#include "kis_layer_utils.h"
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocalSocket>
 #include <kundo2stack.h>
 #include <klocalizedstring.h>
 #include <KoCanvasResourceProvider.h>
@@ -271,6 +277,128 @@ KisDocument *openTestDocument(KisMainWindow *w)
 /// Autosaves of never-saved documents go to $HOME (the test's throw-away
 /// home) and must be named after Giga Sketch, not "krita-...", so stock
 /// Krita's startup recovery never offers (or deletes) them.
+
+// Blender bridge (feature/blender-bridge): a fake Blender add-on talks to the
+// bridge over its socket; a "send" frame adds one File Layer above the active
+// layer (active layer unchanged), a second one only reloads it, a "refresh"
+// frame never adds layers, and requestRefresh() asks Blender for a picture.
+void testBlenderBridge(KisMainWindow *w)
+{
+    GigaBlenderBridge *bridge = GigaBlenderBridge::instance();
+    report(bridge != nullptr, "blender-bridge-started", bridge ? bridge->socketPath() : QString());
+    if (!bridge) return;
+    KisDocument *doc = openTestDocument(w);
+    KisImageSP image = doc->image();
+    KisViewManager *vm = w->viewManager();
+
+    const QString folder = QDir::home().filePath(QStringLiteral("blender"));
+    QDir().mkpath(folder);
+    const QString png = QDir(folder).filePath(QStringLiteral("test-Camera.png"));
+    const QString png2 = QDir(folder).filePath(QStringLiteral("test-Other.png"));
+    QImage pic(image->width(), image->height(), QImage::Format_ARGB32);
+    pic.fill(QColor(255, 0, 0));
+    pic.save(png);
+    pic.save(png2);
+
+    QLocalSocket client;
+    client.connectToServer(bridge->socketPath());
+    QElapsedTimer t; t.start();
+    while ((client.state() != QLocalSocket::ConnectedState || bridge->clientCount() < 1) && t.elapsed() < 3000) pump(1);
+    report(bridge->clientCount() == 1, "blender-connect", QString::number(bridge->clientCount()));
+
+    auto sendMsg = [&](const QJsonObject &o) {
+        client.write(QJsonDocument(o).toJson(QJsonDocument::Compact) + '\n');
+        client.flush();
+    };
+    auto readMsg = [&]() -> QJsonObject {
+        QElapsedTimer rt; rt.start();
+        while (!client.canReadLine() && rt.elapsed() < 3000) { pump(1); client.waitForReadyRead(10); }
+        if (!client.canReadLine()) return QJsonObject();
+        return QJsonDocument::fromJson(client.readLine()).object();
+    };
+    auto frame = [&](const QString &path, const QString &reason) {
+        QJsonObject o{{"type", "frame"}, {"version", 1}, {"path", path}, {"width", image->width()},
+                      {"height", image->height()}, {"name", "Blender: Camera"}, {"reason", reason}};
+        sendMsg(o);
+        return readMsg();
+    };
+    auto countLayers = [&](const QString &path) {
+        int n = 0;
+        KisLayerUtils::recursiveApplyNodes(image->root(), [&](KisNodeSP node) {
+            if (KisFileLayer *fl = qobject_cast<KisFileLayer*>(node.data())) {
+                if (QFileInfo(fl->path()).absoluteFilePath() == QFileInfo(path).absoluteFilePath()) n++;
+            }
+        });
+        return n;
+    };
+
+    sendMsg(QJsonObject{{"type", "hello"}, {"version", 1}, {"app", "selftest"}, {"folder", folder}});
+    const QJsonObject canvas = readMsg();
+    report(canvas.value("type").toString() == "canvas" && canvas.value("width").toInt() == image->width()
+           && canvas.value("height").toInt() == image->height(),
+           "blender-canvas-size", QString::fromUtf8(QJsonDocument(canvas).toJson(QJsonDocument::Compact)));
+
+    if (KisView *view = w->activeView()) { // headless: hand the view to the view manager
+        view->viewManager()->setCurrentView(view);
+        pump(10);
+    }
+    vm->nodeManager()->slotNonUiActivatedNode(image->root()->firstChild());
+    pump(5);
+    if (!vm->activeNode() && w->activeView()) {
+        // Still none (headless): set the node where Krita reads it.
+        w->activeView()->setCurrentNode(image->root()->firstChild());
+        w->activeView()->canvasBase()->resourceManager()->setResource(
+            KoCanvasResource::CurrentKritaNode, QVariant::fromValue(KisNodeWSP(image->root()->firstChild())));
+        pump(5);
+    }
+    KisNodeSP activeBefore = vm->activeNode();
+    report(activeBefore && activeBefore == image->root()->firstChild(), "blender-test-active-set",
+           activeBefore ? activeBefore->name() : QStringLiteral("none"));
+    const int topBefore = image->root()->childCount();
+    QJsonObject ack = frame(png, "send");
+    pump(10);
+    report(ack.value("result").toString() == "created" && countLayers(png) == 1
+           && image->root()->childCount() == topBefore + 1,
+           "blender-send-creates-layer", QString::fromUtf8(QJsonDocument(ack).toJson(QJsonDocument::Compact)));
+    report(vm->activeNode() == activeBefore, "blender-active-layer-kept",
+           vm->activeNode() ? vm->activeNode()->name() : QStringLiteral("none"));
+    KisNodeSP added = activeBefore ? activeBefore->nextSibling() : KisNodeSP();
+    report(added && qobject_cast<KisFileLayer*>(added.data()) && added->name() == "Blender: Camera",
+           "blender-layer-above-active", added ? added->name() : QStringLiteral("nothing above"));
+
+    // The picture arrives in the background: wait until the canvas shows red.
+    t.restart();
+    QColor c;
+    while (t.elapsed() < 5000) {
+        pump(2);
+        image->projection()->pixel(image->width() / 2, image->height() / 2, &c);
+        if (c.red() > 200 && c.green() < 50) break;
+    }
+    report(c.red() > 200 && c.green() < 50, "blender-picture-shown", c.name());
+
+    ack = frame(png, "send");
+    report(ack.value("result").toString() == "updated" && countLayers(png) == 1,
+           "blender-send-again-updates", QString::fromUtf8(QJsonDocument(ack).toJson(QJsonDocument::Compact)));
+
+    ack = frame(png2, "refresh");
+    report(ack.value("result").toString() == "ignored" && countLayers(png2) == 0,
+           "blender-refresh-never-adds", QString::fromUtf8(QJsonDocument(ack).toJson(QJsonDocument::Compact)));
+
+    const int asked = bridge->requestRefresh();
+    const QJsonObject refresh = readMsg();
+    report(asked == 1 && refresh.value("type").toString() == "refresh" && refresh.value("width").toInt() == image->width(),
+           "blender-refresh-request", QString::fromUtf8(QJsonDocument(refresh).toJson(QJsonDocument::Compact)));
+
+    ack = frame(QDir(folder).filePath("missing.png"), "send");
+    report(ack.value("result").toString() == "ignored", "blender-missing-file-ignored",
+           QString::fromUtf8(QJsonDocument(ack).toJson(QJsonDocument::Compact)));
+
+    client.disconnectFromServer();
+    t.restart();
+    while (bridge->clientCount() > 0 && t.elapsed() < 3000) pump(1);
+    report(bridge->clientCount() == 0 && bridge->requestRefresh() == 0, "blender-disconnect", QString());
+}
+
 // Giga tool icons: loadIcon() returns our line-art icon when one exists
 // (feature/giga-tool-icons).
 void testToolIcons(KisMainWindow *w)
@@ -2376,6 +2504,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("refboard"), testReferenceBoard},
         {QStringLiteral("refsearch"), testReferenceBoardSearch},
         {QStringLiteral("icons"), testToolIcons},
+        {QStringLiteral("blender"), testBlenderBridge},
         {QStringLiteral("canvaslook"), testCanvasLook},
         {QStringLiteral("layerbuttons"), testLayerButtons},
         {QStringLiteral("lassofill"), testLassoFill},

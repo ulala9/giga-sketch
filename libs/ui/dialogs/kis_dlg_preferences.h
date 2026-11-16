@@ -113,6 +113,9 @@ public:
     QCheckBox *m_chkGigaToolIcons {nullptr};
     int forcedFontDpi();
 
+    // Giga Sketch: Blender layers refresh when Giga Sketch becomes active, added in code
+    QCheckBox *m_chkGigaBlenderRefresh {nullptr};
+
     // Giga Sketch: interface animations on/off (GigaMotion), added in code
     QCheckBox *m_chkGigaUiAnimations {nullptr};
 

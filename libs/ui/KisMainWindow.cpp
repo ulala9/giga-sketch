@@ -70,6 +70,7 @@
 #include "GigaSelfTest.h"
 #include "GigaSaveDated.h"
 #include "GigaLastStrokeTransform.h"
+#include "GigaBlenderBridge.h"
 #include "GigaZoomOption.h"
 #include <kis_action_registry.h>
 #include <QToolBar>
@@ -743,6 +744,8 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     // windows, which Wayland won't let us place).
     d->gigaFloating = new GigaFloatingPanelManager(this);
     Q_FOREACH (QDockWidget *dock, dockWidgets()) d->gigaFloating->watchDock(dock);
+    // Giga Sketch: listen for the "Send to GigaSketch" Blender add-on.
+    GigaBlenderBridge::ensureStarted(this);
     GigaSelfTest::maybeRun(this); // dev only: does nothing unless GIGA_SELFTEST is set
     static bool gigaFloatHandlerSet = false;
     if (!gigaFloatHandlerSet) {
