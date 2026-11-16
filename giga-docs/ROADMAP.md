@@ -4,10 +4,11 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (new icons → extreme low priority)
+Last updated: 2026-11-16 (Blender bridge step 0 waiting for a hand test)
 
 ## Resume here
-- **Next up:** not chosen yet. Candidates: Blender Viewport Layer step 0, a Phase 5 blueprint, Phase 6 extras.
+- **Next up:** user hand-tests Blender bridge step 0 (`feature/blender-bridge`: add-on
+  `giga-tools/blender/giga_viewport_send.py` + a File Layer). Their verdict decides whether to build the real layer type.
   New tool icons are **extreme low priority** (user, 2026-11-16): don't suggest batches 3–4.
   Batch 2 stays in giga-test as-is; merge it only if the user OKs the look.
 - Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
@@ -21,7 +22,7 @@ Last updated: 2026-11-16 (new icons → extreme low priority)
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2).
+  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2), `feature/blender-bridge` (step 0).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -116,7 +117,8 @@ Last updated: 2026-11-16 (new icons → extreme low priority)
     (already auto-reloads, `kis_safe_document_loader.cpp`, 500 ms debounce). Tells whether the workflow fits.
   - Not in scope unless asked: live updates, Cycles, render passes (line art, colour IDs, AO, depth, normals),
     camera control from GigaSketch.
-  - Branch when started: `feature/blender-bridge`.
+  - Branch: `feature/blender-bridge`. **Step 0 done 2026-11-16** (add-on with Send, camera or current view, size,
+    transparent bg, hide overlays; self-tested in Blender 5.2.2), waiting for the user's hand test.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
 - [x] Transform Last Stroke (`feature/transform-last-stroke`, merged 2026-11-16, hand-tested). Self-test `laststroke`.
