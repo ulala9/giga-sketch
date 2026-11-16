@@ -4,7 +4,7 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-15 (proportional editing for Points mode built)
+Last updated: 2026-11-15 (Points mode: smooth bent preview while dragging)
 
 ## Resume here
 - **Next up:** the user's hand test of Transform Last Stroke + its Points mode (below), then icon batches 2–4
@@ -22,8 +22,11 @@ Last updated: 2026-11-15 (proportional editing for Points mode built)
   - `feature/stroke-points-proportional` (built on `feature/stroke-points`; merging it merges all three) —
     Proportional editing in Points mode: top-bar Proportional toggle, Radius, Falloff (Smooth/Sphere/Root/Sharp/
     Linear/Constant); wheel while dragging = radius; the reach is tinted. Radius is measured along the line.
-    Also on this branch: the stroke repaints **live while dragging** (user: "snaps in place after" felt wrong).
-    If big strokes lag: next step = repaint only the moving part. Self-test `strokepoints` (19 checks).
+    Also on this branch: smooth dragging (user: "snaps in place after", then "choppy"): while a dot is held the
+    last repaint is bent on screen at full frame rate, one real repaint on release; strokes that can't be bent
+    (multi-brush, canvas mirror, wide scatter) repaint live. Influence circle + "120 px" label for Proportional.
+    `GIGA_POINTS_TRACE=1` prints timings. Option B (repaint only the moving part) kept in reserve.
+    Self-test `strokepoints` (20 checks).
 - Repo state: everything else merged and pushed (the ten look/hand-test branches on 2026-11-15).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
@@ -128,6 +131,8 @@ Last updated: 2026-11-15 (proportional editing for Points mode built)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-15: Points drag = bend the last repaint on screen while dragging, real repaint on release (user chose
+  option A over "repaint only the moving part"). Measured: user's stroke 3423 calls, ~100 ms per repaint.
 - 2026-11-15: Proportional editing falloff acts on the whole line inside the radius (not only on the dots), radius
   measured along the line (Blender "connected only"); no O key (O = increase opacity).
 - 2026-11-15: Transform Last Stroke "Points" mode = repaint the recorded dabs along a bent path (not pixel warp);

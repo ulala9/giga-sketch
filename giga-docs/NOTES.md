@@ -686,3 +686,15 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   started right after the test's wait). laststroke/strokepoints retry undo/redo until the index moves (max 5).
 - Live drag: the tool calls `pointsChanged()` on every drag move / wheel radius change; the one-in-flight +
   `m_renderDirty` coalescing turns that into back-to-back repaints at the brush's own speed (no queue growth).
+- **Bent preview while dragging** (replaces the live repaint for most strokes): `pointsDragStarted()` queues a no-undo
+  job that restores the lifted pixels (the shared `m_liveRect` QSharedPointer<QRect> is only touched by the image's
+  sequential exclusive jobs, so no GUI wait); `pointsWarping()` → the tool draws `pointsWarpDevice()` (last repaint,
+  converted once to a QImage at ~1.25× screen resolution) bent from `pointsWarpShape()` to the current shape:
+  cross-sections every ~8 screen px (+ caps of brush half-width past both ends), `QTransform::quadToQuad` per piece,
+  clip = source quad (aliased → shared edges, no seams), unchanged pieces in one clipped draw. Release →
+  `pointsDragFinished()` = one repaint; warping ends 80 ms after it lands. `checkWarpable()`: single copy and render
+  bounds inside the line's bounds + 1.6× half-width (else mirror/multi-brush pixels would vanish) → live repaint.
+  Half-width = paintOpSize × 0.625 + 3. Measured: preview ~0.1 ms/frame on the GL canvas.
+- Self-test trick: paint a tool's overlay into a QImage with `p.setTransform(conv->flakeToWidgetTransform())` and
+  `tool->paint(p, *canvas->viewConverter())` (grabbing the GL widget doesn't include tool overlays).
+
