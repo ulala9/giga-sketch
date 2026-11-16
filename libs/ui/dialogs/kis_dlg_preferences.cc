@@ -359,6 +359,17 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
     // Window Tab
     //
     chkUseCustomFont->setChecked(cfg.readEntry<bool>("use_custom_system_font", false));
+
+    // Giga Sketch: line-art tool icons (icons are cached, so this needs a restart).
+    m_chkGigaToolIcons = new QCheckBox(i18n("Giga Sketch tool icons (after restart)"), this);
+    m_chkGigaToolIcons->setToolTip(i18n("Use Giga Sketch's line-art icons for the tools. Off: Krita's icons."));
+    m_chkGigaToolIcons->setChecked(cfg.readEntry<bool>("gigaToolIcons", true));
+    if (QFormLayout *iconsForm = qobject_cast<QFormLayout*>(m_chkCanvasMessages->parentWidget()->layout())) {
+        int row = -1;
+        QFormLayout::ItemRole role;
+        iconsForm->getWidgetPosition(m_chkCanvasMessages, &row, &role);
+        iconsForm->insertRow(row, QString(), m_chkGigaToolIcons);
+    }
     cmbCustomFont->findChild <QComboBox*>("stylesComboBox")->setVisible(false);
 
     QString fontName = cfg.readEntry<QString>("custom_system_font", "");
@@ -914,6 +925,7 @@ void GeneralTab::setDefault()
     if (m_cmbGigaAccent) m_cmbGigaAccent->setCurrentIndex(0);
     txtBackupFileSuffix->setText("~");
     intNumBackupFiles->setValue(1);
+    if (m_chkGigaToolIcons) m_chkGigaToolIcons->setChecked(true);
 
     m_showOutlinePainting->setChecked(cfg.showOutlineWhilePainting(true));
     m_changeBrushOutline->setChecked(!cfg.forceAlwaysFullSizedOutline(true));
@@ -3054,6 +3066,7 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
         cfg.setIgnoreHighFunctionKeys(m_general->chkIgnoreHighFunctionKeys->isChecked());
 
         cfg.writeEntry<bool>("use_custom_system_font", m_general->chkUseCustomFont->isChecked());
+        cfg.writeEntry<bool>("gigaToolIcons", m_general->m_chkGigaToolIcons->isChecked());
         if (m_general->chkUseCustomFont->isChecked()) {
             cfg.writeEntry<QString>("custom_system_font", m_general->cmbCustomFont->currentFont().family());
             cfg.writeEntry<int>("custom_font_size", m_general->intFontSize->value());

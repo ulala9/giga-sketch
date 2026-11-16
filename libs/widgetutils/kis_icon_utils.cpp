@@ -20,6 +20,19 @@
 #include <KoIcon.h>
 #include "kis_debug.h"
 
+#include <KSharedConfig>
+#include <KConfigGroup>
+
+namespace {
+// Giga Sketch: use the line-art tool icons in :/giga-icons when they exist.
+// Read once (icons are cached by name), so switching needs a restart.
+bool gigaToolIconsEnabled()
+{
+    static const bool enabled = KSharedConfig::openConfig()->group(QString()).readEntry("gigaToolIcons", true);
+    return enabled;
+}
+}
+
 namespace KisIconUtils
 {
 
@@ -37,6 +50,17 @@ QIcon loadIcon(const QString &name)
     const char * const prefix = useDarkIcons() ? "dark_" : "light_";
 
     QString  realName = QLatin1String(prefix) + name;
+
+    // Giga Sketch: our own icon of the same name wins (see giga-tools/make_tool_icons.py).
+    if (gigaToolIconsEnabled()) {
+        const QString gigaName = QStringLiteral(":/giga-icons/") + realName + QStringLiteral(".svg");
+        if (QFile(gigaName).exists()) {
+            QIcon icon(gigaName);
+            s_icons.insert(icon.cacheKey(), name);
+            s_cache.insert(name, icon);
+            return icon;
+        }
+    }
 
     // Dark and light, no size specified
     const QStringList names = { ":/pics/" + realName + ".png",
