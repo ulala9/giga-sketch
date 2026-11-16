@@ -4,12 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Blender bridge auto-layer + refresh waiting for a hand test)
+Last updated: 2026-11-16 (Blender layers saved in the .kra, waiting for a hand test)
 
 ## Resume here
-- **Next up:** user hand-tests the Blender bridge (`feature/blender-bridge`): Send in Blender adds/updates a
-  "Blender: <camera>" layer by itself, switching to Giga Sketch refreshes it. Then merge; later maybe the real layer
-  type (capture saved in the .kra, Freeze to Paint Layer).
+- **Next up:** user hand-tests the Blender bridge (`feature/blender-bridge`, steps 1+2 not hand-tested yet):
+  Send adds/updates a "Blender: <camera>" layer, switching to Giga Sketch refreshes it, the picture is saved in the
+  .kra, Layer > Refresh Blender Layers. Then merge `--no-ff` into giga-main and push.
   New tool icons are **extreme low priority** (user, 2026-11-16): don't suggest batches 3–4.
   Batch 2 stays in giga-test as-is; merge it only if the user OKs the look.
 - Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
@@ -122,7 +122,10 @@ Last updated: 2026-11-16 (Blender bridge auto-layer + refresh waiting for a hand
     2026-11-16**: local socket bridge (`GigaBlenderBridge`), Send adds the layer above the active one (or a new
     document), later sends update it, switching to Giga Sketch asks Blender for a fresh picture (skipped if nothing
     changed; pref in General > File Handling), Blender matches the canvas size. Still a File Layer pointing at the
-    PNG. Self-tests: `blender` + Blender-side scripts (NOTES). Waiting for the user's hand test.
+    PNG. Self-tests: `blender` + Blender-side scripts (NOTES).
+    **Step 2 done 2026-11-16**: Blender layers = flagged File Layers whose picture is saved in the .kra
+    (`giga-blender="1"`), no missing-file dialog/error, Layer > Refresh Blender Layers; Freeze = existing Convert to
+    Paint Layer. Krita's kra loader/saver tests pass. Waiting for the user's hand test.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
 - [x] Transform Last Stroke (`feature/transform-last-stroke`, merged 2026-11-16, hand-tested). Self-test `laststroke`.
