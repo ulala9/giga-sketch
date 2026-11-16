@@ -108,6 +108,7 @@
 #include "KisApplication.h"
 #include "KisDocument.h"
 #include <GigaBranding.h>
+#include "GigaLastStrokeTransform.h"
 #include "KisImportExportManager.h"
 #include "KisView.h"
 #include "kis_grid_config.h"
@@ -194,12 +195,16 @@ public:
     }
 
     void undo() override {
+        // Giga Sketch: while editing the dots of Transform Last Stroke
+        // (Points mode), Ctrl+Z steps back through the dot moves instead.
+        if (GigaLastStrokeTransform::interceptUndo(m_doc, false)) return;
         m_postponedJobs.append({PostponedJob::Undo, 0});
         processPostponedJobs();
     }
 
 
     void redo() override {
+        if (GigaLastStrokeTransform::interceptUndo(m_doc, true)) return;
         m_postponedJobs.append({PostponedJob::Redo, 0});
         processPostponedJobs();
     }

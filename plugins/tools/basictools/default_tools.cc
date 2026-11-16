@@ -25,6 +25,7 @@
 #include "kis_tool_line.h"
 #include "kis_tool_ellipse.h"
 #include "kis_tool_measure.h"
+#include "giga_tool_stroke_points.h"
 #include "kis_tool_path.h"
 #include "kis_tool_move.h"
 #include "kis_tool_pencil.h"
@@ -44,6 +45,7 @@ DefaultTools::DefaultTools(QObject *parent, const QVariantList &)
     KoToolRegistry::instance()->add(new KisToolEllipseFactory());
     KoToolRegistry::instance()->add(new KisToolRectangleFactory());
     KoToolRegistry::instance()->add(new KisToolMeasureFactory());
+    KoToolRegistry::instance()->add(new GigaToolStrokePointsFactory()); // Giga Sketch: hidden, opened by Transform Last Stroke
     KoToolRegistry::instance()->add(new KisToolPathFactory());
     KoToolRegistry::instance()->add(new KisToolMoveFactory());
     KoToolRegistry::instance()->add(new KisToolMultiBrushFactory());

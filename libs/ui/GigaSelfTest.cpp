@@ -1726,6 +1726,225 @@ void testLastStroke(KisMainWindow *w)
            QStringLiteral("tool %1, %2/%3 entries").arg(KoToolManager::instance()->activeToolId()).arg(stack->index()).arg(stack->count()));
 }
 
+/// Transform Last Stroke, Points mode: drag a dot of the last stroke, the
+/// brush repaints it along the bent path; Ctrl+Z steps the dots back; apply,
+/// cancel and switching to Pixels and back (feature/stroke-points).
+void testStrokePoints(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
+    KisImageSP image = doc->image();
+    KisNodeSP layer = image->root()->lastChild();
+    if (!layer || !layer->paintDevice()) { report(false, "setup", QStringLiteral("no paint layer")); return; }
+    w->setActiveView(view);
+    view->viewManager()->setCurrentView(view);
+    pump(10);
+    view->viewManager()->nodeManager()->slotNonUiActivatedNode(layer);
+    pump(5);
+    if (!view->currentNode()) {
+        view->setCurrentNode(layer);
+        canvas->resourceManager()->setResource(KoCanvasResource::CurrentKritaNode, QVariant::fromValue(KisNodeWSP(layer)));
+        pump(5);
+    }
+    const KoColorSpace *cs = layer->paintDevice()->colorSpace();
+    auto pass = [&](int ms, bool idle) {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < ms) { pump(1); QThread::msleep(5); }
+        if (idle) {
+            t.restart();
+            while (!image->isIdle() && t.elapsed() < 5000) { pump(1); QThread::msleep(5); }
+        }
+        pump(5);
+    };
+    auto wait = [&](int ms) { pass(ms, true); };
+    const QString pointsId = QStringLiteral("GigaToolStrokePoints");
+    auto activeTool = []() { return KoToolManager::instance()->activeToolId(); };
+
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    pump(20);
+    KoToolBase *brush = KoToolManager::instance()->toolById(canvas, QStringLiteral("KritaShape/KisToolBrush"));
+    KoToolBase *points = KoToolManager::instance()->toolById(canvas, pointsId);
+    KoToolBase *transform = KoToolManager::instance()->toolById(canvas, QStringLiteral("KisToolTransform"));
+    report(brush && points && transform, "strokepoints-tools", QStringLiteral("brush %1, points %2, transform %3")
+           .arg(!!brush).arg(!!points).arg(!!transform));
+    if (!brush || !points || !transform) return;
+    brush->optionWidgets();
+    pump(5);
+
+    QWidget *cw = canvas->canvasWidget();
+    const KisCoordinatesConverter *conv = canvas->coordinatesConverter();
+    // Send press / moves / release to a tool, at widget points.
+    auto drive = [&](KoToolBase *tool, const QPoint &a, const QPoint &b, int steps) {
+        auto send = [&](int phase, const QPoint &p) {
+            QMouseEvent e(phase == 0 ? QEvent::MouseButtonPress : phase == 1 ? QEvent::MouseMove : QEvent::MouseButtonRelease,
+                          p, cw->mapToGlobal(p), Qt::LeftButton, phase == 2 ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            QSpontaneKeyEvent::setSpontaneous(&e);
+            KoPointerEvent ev(&e, conv->widgetToDocument(QPointF(p)));
+            KisTool *kt = static_cast<KisTool *>(tool);
+            if (phase == 0) kt->beginPrimaryAction(&ev);
+            else if (phase == 1) kt->continuePrimaryAction(&ev);
+            else kt->endPrimaryAction(&ev);
+        };
+        send(0, a);
+        for (int i = 1; i <= steps; ++i) {
+            send(1, a + (b - a) * i / steps);
+            pass(8, false);
+        }
+        send(2, b);
+    };
+    const QPoint c = cw->rect().center();
+    const int r = qMin(cw->width(), cw->height()) / 4;
+    auto line = [&](const QPoint &a, const QPoint &b) {
+        drive(brush, a, b, 40);
+        wait(600);
+    };
+    auto toWidget = [&](const QPointF &imagePt) { return conv->imageToWidget(imagePt).toPoint(); };
+    auto pixel = [&](const QPoint &imagePt) {
+        QColor q;
+        layer->paintDevice()->pixel(imagePt.x(), imagePt.y(), &q);
+        return q;
+    };
+    auto isRed = [](const QColor &q) { return q.alpha() > 200 && q.red() > 200 && q.blue() < 80; };
+    auto isBlue = [](const QColor &q) { return q.alpha() > 200 && q.blue() > 200 && q.red() < 80; };
+    auto isEmpty = [](const QColor &q) { return q.alpha() < 30 || (q.red() > 230 && q.green() > 230 && q.blue() > 230); };
+    auto name = [](const QColor &q) { return q.name(QColor::HexArgb); };
+    auto vertexCount = [&]() {
+        int n = 0;
+        QMetaObject::invokeMethod(points, "gigaVertexCount", Q_RETURN_ARG(int, n));
+        return n;
+    };
+    auto vertexPos = [&](int i) {
+        QPointF p;
+        QMetaObject::invokeMethod(points, "gigaVertexImagePos", Q_RETURN_ARG(QPointF, p), Q_ARG(int, i));
+        return p;
+    };
+
+    KisAction *action = view->viewManager()->actionManager()->actionByName(QStringLiteral("giga_transform_last_stroke"));
+    if (!action) { report(false, "strokepoints-action", QStringLiteral("missing")); return; }
+    KUndo2Stack *stack = doc->undoStack();
+
+    // Blue vertical, then red horizontal across it (the one we edit).
+    canvas->resourceManager()->setForegroundColor(KoColor(Qt::blue, cs));
+    line(c + QPoint(0, -r), c + QPoint(0, r));
+    canvas->resourceManager()->setForegroundColor(KoColor(Qt::red, cs));
+    line(c + QPoint(-r, 0), c + QPoint(r, 0));
+    const int countBefore = stack->count();
+    const QPoint cross = conv->widgetToImage(QPointF(c)).toPoint();
+    const QPoint redEnd = conv->widgetToImage(QPointF(c + QPoint(-r + r / 8, 0))).toPoint();
+
+    KisConfig(false).writeEntry<int>("gigaLastStrokeEditMode", 1);
+    KisConfig(false).writeEntry<int>("gigaStrokePointSpacing", 40);
+    action->trigger();
+    wait(400);
+    const int n = vertexCount();
+    report(activeTool() == pointsId && n >= 3, "strokepoints-opens-with-dots",
+           QStringLiteral("tool %1, %2 dots").arg(activeTool()).arg(n));
+    report(stack->index() == countBefore - 1 && isRed(pixel(cross)) && isRed(pixel(redEnd)), "strokepoints-lifted-but-shown",
+           QStringLiteral("index %1 of %2, cross %3, red end %4").arg(stack->index()).arg(stack->count())
+               .arg(name(pixel(cross)), name(pixel(redEnd))));
+    if (activeTool() != pointsId || n < 3) return;
+
+    // Drag the dot nearest the middle 60 image px down.
+    int mid = 0;
+    for (int i = 0; i < n; ++i) {
+        if (QLineF(vertexPos(i), QPointF(cross)).length() < QLineF(vertexPos(mid), QPointF(cross)).length()) mid = i;
+    }
+    const QPointF from = vertexPos(mid);
+    const QPoint moved = (from + QPointF(0, 60)).toPoint();
+    drive(points, toWidget(from), toWidget(from + QPointF(0, 60)), 12);
+    wait(800);
+    report(isRed(pixel(moved)) && isBlue(pixel(cross)) && isRed(pixel(redEnd)), "strokepoints-drag-repaints-bent",
+           QStringLiteral("moved spot %1, cross %2 (blue = uncovered), red end %3")
+               .arg(name(pixel(moved)), name(pixel(cross)), name(pixel(redEnd))));
+    report(stack->index() == countBefore - 1, "strokepoints-no-history-while-editing",
+           QStringLiteral("index %1 (want %2)").arg(stack->index()).arg(countBefore - 1));
+
+    // Ctrl+Z steps the dot back (not the document's history), Ctrl+Shift+Z again.
+    stack->undo();
+    wait(800);
+    report(activeTool() == pointsId && isRed(pixel(cross)) && isEmpty(pixel(moved)) && stack->index() == countBefore - 1,
+           "strokepoints-undo-steps-dots", QStringLiteral("tool %1, cross %2, moved spot %3, index %4")
+               .arg(activeTool(), name(pixel(cross)), name(pixel(moved))).arg(stack->index()));
+    stack->redo();
+    wait(800);
+    report(isRed(pixel(moved)) && isBlue(pixel(cross)), "strokepoints-redo-steps-dots",
+           QStringLiteral("moved spot %1, cross %2").arg(name(pixel(moved)), name(pixel(cross))));
+
+    // Apply (Enter): two history entries, back to the brush.
+    static_cast<KisTool *>(points)->requestStrokeEnd();
+    wait(800);
+    report(isRed(pixel(moved)) && isBlue(pixel(cross)) && stack->count() == countBefore + 1
+               && stack->undoText() == i18n("Edit Stroke Points") && activeTool() != pointsId,
+           "strokepoints-apply", QStringLiteral("moved %1, cross %2, %3 entries (was %4), top '%5', tool %6")
+               .arg(name(pixel(moved)), name(pixel(cross))).arg(stack->count()).arg(countBefore)
+               .arg(stack->undoText(), activeTool()));
+    stack->undo();
+    wait(400);
+    report(isRed(pixel(cross)) && isEmpty(pixel(moved)), "strokepoints-undo-shows-as-drawn",
+           QStringLiteral("cross %1, moved spot %2").arg(name(pixel(cross)), name(pixel(moved))));
+    stack->undo();
+    wait(400);
+    report(isBlue(pixel(cross)) && isEmpty(pixel(redEnd)), "strokepoints-undo-twice-removes",
+           QStringLiteral("cross %1, red end %2").arg(name(pixel(cross)), name(pixel(redEnd))));
+
+    // Esc: a new red line, bend it, cancel: as drawn, history unchanged.
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    wait(200);
+    line(c + QPoint(-r, 0), c + QPoint(r, 0));
+    const int countEsc = stack->count();
+    action->trigger();
+    wait(400);
+    const QPointF from2 = vertexPos(qMax(1, vertexCount() / 2));
+    drive(points, toWidget(from2), toWidget(from2 + QPointF(0, 60)), 12);
+    wait(800);
+    static_cast<KisTool *>(points)->requestStrokeCancellation();
+    wait(600);
+    report(isRed(pixel(from2.toPoint())) && isEmpty(pixel((from2 + QPointF(0, 60)).toPoint()))
+               && stack->count() == countEsc && stack->index() == countEsc && activeTool() != pointsId,
+           "strokepoints-cancel-restores", QStringLiteral("old spot %1, bent spot %2, %3/%4 entries (was %5), tool %6")
+               .arg(name(pixel(from2.toPoint())), name(pixel((from2 + QPointF(0, 60)).toPoint())))
+               .arg(stack->index()).arg(stack->count()).arg(countEsc).arg(activeTool()));
+
+    // Points -> Pixels with the shortcut: the bent stroke goes to the Transform tool.
+    action->trigger();
+    wait(400);
+    const QPointF from3 = vertexPos(qMax(1, vertexCount() / 2));
+    drive(points, toWidget(from3), toWidget(from3 + QPointF(0, 60)), 12);
+    wait(800);
+    action->trigger();
+    wait(600);
+    report(activeTool() == QLatin1String("KisToolTransform"), "strokepoints-switch-to-pixels",
+           QStringLiteral("tool %1").arg(activeTool()));
+    static_cast<KisTool *>(transform)->requestStrokeEnd();
+    wait(800);
+    report(isRed(pixel((from3 + QPointF(0, 60)).toPoint())) && stack->count() == countEsc + 1,
+           "strokepoints-pixels-applies-bent", QStringLiteral("bent spot %1, %2 entries (was %3), top '%4'")
+               .arg(name(pixel((from3 + QPointF(0, 60)).toPoint()))).arg(stack->count()).arg(countEsc).arg(stack->undoText()));
+
+    // Pixels -> Points: open in Pixels, press again: dots.
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    wait(200);
+    line(c + QPoint(-r, r / 2), c + QPoint(r, r / 2));
+    const int countSwitch = stack->count();
+    KisConfig(false).writeEntry<int>("gigaLastStrokeEditMode", 0);
+    action->trigger();
+    wait(400);
+    const bool openedPixels = activeTool() == QLatin1String("KisToolTransform");
+    action->trigger();
+    wait(800);
+    report(openedPixels && activeTool() == pointsId && vertexCount() >= 2, "strokepoints-switch-to-points",
+           QStringLiteral("opened in %1, now %2, %3 dots").arg(openedPixels ? QStringLiteral("Transform") : QStringLiteral("?"))
+               .arg(activeTool()).arg(vertexCount()));
+    static_cast<KisTool *>(points)->requestStrokeCancellation();
+    wait(600);
+    report(stack->count() == countSwitch && stack->index() == countSwitch, "strokepoints-switch-cancel-clean",
+           QStringLiteral("%1/%2 entries (was %3)").arg(stack->index()).arg(stack->count()).arg(countSwitch));
+    KisConfig(false).writeEntry<int>("gigaLastStrokeEditMode", 0);
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -1747,6 +1966,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("menuletter"), testMenuLetter},
         {QStringLiteral("cursorlook"), testCursorLook},
         {QStringLiteral("laststroke"), testLastStroke},
+        {QStringLiteral("strokepoints"), testStrokePoints},
     };
     bool found = false;
     for (const auto &test : tests) {
