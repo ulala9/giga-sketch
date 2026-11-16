@@ -75,6 +75,9 @@ public Q_SLOTS:
     void sendAllToCanvas();
     void paste();
     void focusImage(KisReferenceImage *image);
+    /// Delete the focused image, else the outlined one (Delete / Backspace /
+    /// the "clear" action's shortcut over the Board). Undoable.
+    void deleteCurrent();
     void focusStep(int direction); ///< -1 previous, +1 next (arrangement order)
     void resetRotation(); ///< back to upright, animated (F1 / the canvas reset key)
     /**
@@ -135,6 +138,10 @@ private:
     QPointF viewDelta(const QPointF &widgetDelta) const; ///< a widget-space move, in view space
     void setRotation(qreal degrees);
     bool isResetRotationKey(QKeyEvent *event) const;
+    /// True if @p event is one of the shortcuts of the window action @p name.
+    bool matchesActionShortcut(QKeyEvent *event, const QString &name) const;
+    bool isDeleteKey(QKeyEvent *event) const; ///< Delete, Backspace, or the "clear" shortcut
+    void deleteImage(KisReferenceImage *image);
 
     Camera cameraFitting(const QRectF &boardRect, qreal margin) const;
     void animateCamera(const Camera &target, int durationMs);
