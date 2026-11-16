@@ -757,3 +757,20 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   `/usr/lib64/qt6/bin`. Without it ninja fails with "translations/filters/it.qm … missing".
 - Its settings are G'MIC's own, shared with any other G'MIC (GIMP etc.): `~/.config/GREYC/gmic_qt.conf` and filter
   updates in `~/.config/gmic/`. Not Krita's config, so left alone. Some dialog titles still say "Krita" (`QMic.cpp`).
+
+## Blender Viewport Layer, step 0 (feature/blender-bridge, 2026-11-16)
+- Blender add-on `giga-tools/blender/giga_viewport_send.py` (legacy add-on with bl_info; Blender 5.2.2 installed at
+  /usr/bin/blender). Install: Preferences > Add-ons > Install from Disk. Panel: 3D viewport sidebar (N) > GigaSketch.
+- Send: `GPUOffScreen(w,h,'RGBA8')` + `draw_view3d(..., do_color_management=True, draw_background=not transparent)`
+  from the active camera (`calc_matrix_camera` with the output size), else the current view (`rv3d.window_matrix`,
+  region aspect). Overlays switched off during the draw and restored. `texture_color.read()` = uint8, bottom-up rows;
+  `np.frombuffer` works on gpu.types.Buffer. Transparent output is premultiplied → un-premultiplied before PNG.
+- Own tiny PNG writer (zlib level 3, sRGB chunk) instead of bpy images, so no hidden colour conversions.
+  Written to `<file>.tmp` + `os.replace` (atomic). Settings live on the Scene (saved per .blend). Default file
+  `~/Pictures/GigaSketch/blender-view.png`. Cycles "Rendered" is refused (draws nothing useful).
+- Measured (640x360): Solid ~7 ms, transparent ~14 ms, first Material Preview ~0.9 s (shader compile).
+- GigaSketch side: plain File Layer. `KisSafeDocumentLoader` re-attaches its watcher when the file is replaced
+  (rename), reloads after the 500 ms compressor.
+- Headless test: `blender --factory-startup --python test.py` with a `bpy.app.timers` callback that calls the
+  operator under `context.temp_override(window, area, region, space_data)` and then `wm.quit_blender()`
+  (opens a window briefly; `-b` has no viewport to draw).
