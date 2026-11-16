@@ -493,8 +493,13 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   `GigaReferenceBoardView`: camera widget = board × zoom + pan; auto-fit until the user moves the camera; focus fly-to
   300 ms (zoom geometric, centre linear); board rects animate 200 ms on change; draws with
   `KisReferenceImage::paintInRect` (same mipmaps as the canvas). Takes keyboard focus on hover (gives it back on leave,
-  never from text fields); ShortcutOverride for Esc/Home/←/→/Space/Ctrl+V. Touch: 1 finger = mouse, 2 = pinch/pan;
+  never from text fields); ShortcutOverride for Esc/Home/←/→/Space/Ctrl+V/delete keys. Touch: 1 finger = mouse, 2 = pinch/pan;
   touchpad: NativeGesture zoom, pixelDelta scroll pans.
+- Delete keys (`fix/refboard-delete-key`): Delete/Backspace (no modifiers) or any shortcut of the `clear` action
+  (`matchesActionShortcut`, read fresh like `reset_canvas_rotation`) → `deleteCurrent()` = focused, else `m_current`
+  (outlined), else nothing. Claimed in ShortcutOverride so Ctrl+Q over the Board never clears the paint layer.
+  Auto-repeat ignored. Deleting the focused image → `fitAll()`. Self-test checks `board-delete-key`/`-undo`/
+  `board-clear-shortcut-deletes` (live in `libs/ui/GigaSelfTest.cpp`, like all self-tests).
 - Hand-dropped image: drawn at `m_dropRect` until its move command lands and excluded from the change animation
   (else it glided from the old spot = "rubber-banding", user report). Pressing on the Board stops camera fly-tos.
 - Tool's Send to Board shows the Board dock if hidden.

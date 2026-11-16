@@ -4,13 +4,13 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Transform Last Stroke + Points + Proportional and Board image search merged)
+Last updated: 2026-11-16 (Board Delete/Ctrl+Q key merged)
 
 ## Resume here
 - **Next up:** icon batches 2–4 (user OK'd the batch 1 style): batch 2 select/move/crop/sample.
 - Waiting for a hand test (in `giga-test`): nothing.
 - Repo state: everything merged and pushed (2026-11-16: transform-last-stroke, stroke-points,
-  stroke-points-proportional, refboard-image-search, all hand-tested by the user).
+  stroke-points-proportional, refboard-image-search, refboard-delete-key, all hand-tested by the user).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -91,6 +91,8 @@ Last updated: 2026-11-16 (Transform Last Stroke + Points + Proportional and Boar
 - [x] Board rotate/zoom/flip with the canvas (`feature/refboard-rotate-zoom`, `feature/refboard-flip`, merged 2026-11-15)
 - [x] Board image search: small browser panel, Google Images / Bing / Pinterest (`feature/refboard-image-search`,
   merged 2026-11-16, hand-tested). Self-test `refsearch`.
+- [x] Board: Delete / Backspace / the Clear shortcut (Ctrl+Q for the user) delete the focused or outlined image
+  (`fix/refboard-delete-key`, merged 2026-11-16).
 - [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
 - [ ] **Blender Viewport Layer** (replaces the "3D Model Layer" blueprint; scoped 2026-11-16, not started).
   A basic capture of Blender's viewport onto a GigaSketch layer, instead of importing models.
