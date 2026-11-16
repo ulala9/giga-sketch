@@ -10,6 +10,8 @@
 #include <QPointer>
 #include <QRect>
 #include <QStack>
+#include <QSharedPointer>
+#include <QElapsedTimer>
 #include <QString>
 
 #include "kritaui_export.h"
@@ -95,6 +97,22 @@ public:
     /// stroke makes Krita ask the active tool to end its work (as Enter
     /// does); the points tool must ignore that request, not apply.
     bool startingRepaint() const { return m_startingRepaint; }
+    /// Drag of dots starts / ends. While dragging, if the stroke allows it,
+    /// nothing repaints: the layer shows no stroke and the tool draws the
+    /// last repaint bent to the new shape (smooth at any brush cost); one
+    /// real repaint follows on release.
+    void pointsDragStarted();
+    void pointsDragFinished();
+    /// True while the tool should draw the bent preview.
+    bool pointsWarping() const { return m_warping; }
+    /// The last repaint (stroke only), the shape it was painted with, and
+    /// its number (changes when a new one lands).
+    KisPaintDeviceSP pointsWarpDevice() const { return m_lastRender; }
+    const GigaStrokePath::Shape &pointsWarpShape() const { return m_renderedShape; }
+    int pointsWarpSerial() const { return m_renderedSerial; }
+    /// Half the width of the band around the line that holds the stroke's pixels (image px).
+    qreal pointsBrushHalfWidth() const;
+    qreal pointsLayerOpacity() const;
     /// True while a repaint is running or waiting.
     bool pointsRepainting() const { return m_renderBusy || m_renderDirty; }
     /// Apply (Enter / tool switch) or cancel (Esc). @p switchBack = return to
@@ -131,7 +149,9 @@ private:
     bool startPoints(KisViewManager *view, KisImageSP image, KisDocument *doc,
                      KisPaintLayer *layer, GigaLastStrokeRecordSP rec);
     void startPreviewRender();
-    void previewRendered(int serial, const QRect &rect, KisPaintDeviceSP strokeDevice);
+    void previewRendered(int serial, const QRect &rect, KisPaintDeviceSP strokeDevice,
+                         const GigaStrokePath::Shape &shape);
+    bool checkWarpable(const QRect &renderRect) const;
     bool waitPreview(int timeoutMs);
     void restoreLifted();
     void endPoints(bool switchBack);
@@ -159,15 +179,21 @@ private:
     GigaStrokePath m_path;
     KisPaintDeviceSP m_lifted;       ///< layer without the stroke (copy-on-write copy)
     KisPaintDeviceSP m_lastRender;   ///< newest repainted stroke on its own
-    QRect m_previewRect;             ///< where the layer differs from m_lifted
+    QSharedPointer<QRect> m_liveRect; ///< where the layer differs from m_lifted (image jobs only)
+    GigaStrokePath::Shape m_renderedShape; ///< shape of m_lastRender
+    bool m_dragging {false};
+    bool m_warping {false};
+    bool m_warpOk {false};           ///< the last repaint can be bent on screen
+    int m_warpEndSerial {0};
     QRect m_drawnRect;               ///< where the stroke as drawn differs from m_lifted
     bool m_startingRepaint {false};
+    QElapsedTimer m_traceClock;      ///< GIGA_POINTS_TRACE timing (temporary diagnostics)
     bool m_renderBusy {false};
     bool m_renderDirty {false};
     int m_editSerial {0};
     int m_renderedSerial {-1};
-    QStack<QVector<GigaStrokePath::Vertex>> m_undoShapes;
-    QStack<QVector<GigaStrokePath::Vertex>> m_redoShapes;
+    QStack<GigaStrokePath::Shape> m_undoShapes;
+    QStack<GigaStrokePath::Shape> m_redoShapes;
 };
 
 #endif // GIGA_LAST_STROKE_TRANSFORM_H

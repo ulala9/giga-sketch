@@ -1665,16 +1665,29 @@ void testLastStroke(KisMainWindow *w)
     report(isRed(pixel(cross)) && isRed(pixel(onRed)) && isEmpty(pixel(movedRed)), "laststroke-undo-shows-as-drawn",
            QStringLiteral("cross %1, red %2, moved spot %3, undo '%4'")
                .arg(name(pixel(cross)), name(pixel(onRed)), name(pixel(movedRed)), stack->undoText()));
-    stack->undo();
-    wait(300);
+    {
+        // Krita drops a Ctrl+Z while the image is busy (e.g. a thumbnail idle
+        // task that just started after the last wait); try again like a user would.
+        const int before = stack->index();
+        for (int tries = 0; tries < 5 && stack->index() == before; ++tries) {
+            stack->undo();
+            wait(300);
+        }
+    }
     report(isBlue(pixel(cross)) && isEmpty(pixel(onRed)), "laststroke-undo-twice-removes",
            QStringLiteral("cross %1, red spot %2").arg(name(pixel(cross)), name(pixel(onRed))));
     info(QStringLiteral("before redo: %1/%2 canRedo %3 idle %4").arg(stack->index()).arg(stack->count()).arg(stack->canRedo()).arg(image->isIdle()));
-    stack->redo();
-    wait(200);
+    // Retried like the undo above: Krita drops a redo while the image is busy.
+    auto redoOnce = [&](int ms) {
+        const int before = stack->index();
+        for (int tries = 0; tries < 5 && stack->index() == before; ++tries) {
+            stack->redo();
+            wait(ms);
+        }
+    };
+    redoOnce(200);
     info(QStringLiteral("after redo 1: %1/%2 cross %3 red %4").arg(stack->index()).arg(stack->count()).arg(name(pixel(cross)), name(pixel(onRed))));
-    stack->redo();
-    wait(300);
+    redoOnce(300);
     info(QStringLiteral("after redo 2: %1/%2").arg(stack->index()).arg(stack->count()));
     report(isBlue(pixel(cross)) && isRed(pixel(movedRed)), "laststroke-redo",
            QStringLiteral("cross %1, moved red %2").arg(name(pixel(cross)), name(pixel(movedRed))));
@@ -1885,8 +1898,13 @@ void testStrokePoints(KisMainWindow *w)
     wait(400);
     report(isRed(pixel(cross)) && isEmpty(pixel(moved)), "strokepoints-undo-shows-as-drawn",
            QStringLiteral("cross %1, moved spot %2").arg(name(pixel(cross)), name(pixel(moved))));
-    stack->undo();
-    wait(400);
+    {
+        const int before = stack->index();
+        for (int tries = 0; tries < 5 && stack->index() == before; ++tries) {
+            stack->undo(); // retried: Krita drops an undo while the image is busy
+            wait(400);
+        }
+    }
     report(isBlue(pixel(cross)) && isEmpty(pixel(redEnd)), "strokepoints-undo-twice-removes",
            QStringLiteral("cross %1, red end %2").arg(name(pixel(cross)), name(pixel(redEnd))));
 
@@ -1942,6 +1960,177 @@ void testStrokePoints(KisMainWindow *w)
     wait(600);
     report(stack->count() == countSwitch && stack->index() == countSwitch, "strokepoints-switch-cancel-clean",
            QStringLiteral("%1/%2 entries (was %3)").arg(stack->index()).arg(stack->count()).arg(countSwitch));
+
+    // Proportional editing: a new horizontal line higher up, drag its middle
+    // dot 60 px down with a radius of a quarter of the line (Smooth falloff).
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    wait(200);
+    line(c + QPoint(-r, -r / 2), c + QPoint(r, -r / 2));
+    KisConfig(false).writeEntry<int>("gigaLastStrokeEditMode", 1);
+    action->trigger();
+    wait(400);
+    const qreal scale = QLineF(conv->imageToWidget(QPointF(0, 0)), conv->imageToWidget(QPointF(100, 0))).length() / 100.0;
+    const int radiusScreen = qMax(20, r / 2);           // = r/2 screen px = a quarter of the line
+    const qreal radiusImage = radiusScreen / scale;
+    QMetaObject::invokeMethod(points, "gigaSetProportional", Q_ARG(bool, true), Q_ARG(int, radiusScreen), Q_ARG(int, 0));
+    const QPointF midTop = conv->widgetToImage(QPointF(c + QPoint(0, -r / 2)));
+    int pmid = 0;
+    for (int i = 0; i < vertexCount(); ++i) {
+        if (QLineF(vertexPos(i), midTop).length() < QLineF(vertexPos(pmid), midTop).length()) pmid = i;
+    }
+    const QPointF pfrom = vertexPos(pmid);
+    drive(points, toWidget(pfrom), toWidget(pfrom + QPointF(0, 60)), 12);
+    wait(800);
+    // Half the radius away along the line, Smooth gives weight 0.5 -> 30 px down.
+    const QPoint half = (pfrom + QPointF(radiusImage * 0.5, 30)).toPoint();
+    const QPoint halfOld = (pfrom + QPointF(radiusImage * 0.5, 0)).toPoint();
+    const QPoint beyond = (pfrom + QPointF(radiusImage * 1.3, 0)).toPoint();
+    report(isRed(pixel((pfrom + QPointF(0, 60)).toPoint())) && isRed(pixel(half)) && isEmpty(pixel(halfOld)) && isRed(pixel(beyond)),
+           "strokepoints-proportional-falloff",
+           QStringLiteral("centre %1, half-radius bent %2 (old place %3), beyond radius %4; radius %5 image px")
+               .arg(name(pixel((pfrom + QPointF(0, 60)).toPoint())), name(pixel(half)), name(pixel(halfOld)), name(pixel(beyond)))
+               .arg(radiusImage, 0, 'f', 1));
+
+    // Mouse wheel during a drag: radius grows 15%, no zoom.
+    const qreal zoomBefore = scale;
+    {
+        const QPointF at = vertexPos(pmid);
+        const QPoint a = toWidget(at);
+        const QPoint b = toWidget(at + QPointF(0, 20));
+        auto send = [&](int phase, const QPoint &p) {
+            QMouseEvent e(phase == 0 ? QEvent::MouseButtonPress : phase == 1 ? QEvent::MouseMove : QEvent::MouseButtonRelease,
+                          p, cw->mapToGlobal(p), Qt::LeftButton, phase == 2 ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            KoPointerEvent ev(&e, conv->widgetToDocument(QPointF(p)));
+            KisTool *kt = static_cast<KisTool *>(points);
+            if (phase == 0) kt->beginPrimaryAction(&ev);
+            else if (phase == 1) kt->continuePrimaryAction(&ev);
+            else kt->endPrimaryAction(&ev);
+        };
+        send(0, a);
+        send(1, (a + b) / 2);
+        QWheelEvent wheel(QPointF(b), QPointF(cw->mapToGlobal(b)), QPoint(), QPoint(0, 120), Qt::LeftButton,
+                          Qt::NoModifier, Qt::NoScrollPhase, false);
+        QApplication::sendEvent(cw, &wheel);
+        send(1, b);
+        send(2, b);
+    }
+    wait(800);
+    int radiusNow = 0;
+    QMetaObject::invokeMethod(points, "gigaRadius", Q_RETURN_ARG(int, radiusNow));
+    const qreal zoomAfter = QLineF(conv->imageToWidget(QPointF(0, 0)), conv->imageToWidget(QPointF(100, 0))).length() / 100.0;
+    report(radiusNow == qRound(radiusScreen * 1.15) && qAbs(zoomAfter - zoomBefore) < 1e-6, "strokepoints-wheel-radius",
+           QStringLiteral("radius %1 -> %2 (want %3), zoom %4 -> %5").arg(radiusScreen).arg(radiusNow)
+               .arg(qRound(radiusScreen * 1.15)).arg(zoomBefore).arg(zoomAfter));
+
+    // Ctrl+Z twice: both proportional moves gone, the line straight again.
+    stack->undo();
+    wait(600);
+    stack->undo();
+    wait(800);
+    report(isRed(pixel(halfOld)) && isEmpty(pixel(half)) && activeTool() == pointsId, "strokepoints-proportional-undo",
+           QStringLiteral("half-radius old place %1, bent place %2, tool %3").arg(name(pixel(halfOld)), name(pixel(half)), activeTool()));
+    QMetaObject::invokeMethod(points, "gigaSetProportional", Q_ARG(bool, false), Q_ARG(int, 120), Q_ARG(int, 0));
+
+    // Live: while the dot is still held, the stroke has already moved.
+    {
+        const QPointF at = vertexPos(pmid);
+        const QPoint a = toWidget(at);
+        const QPoint b = toWidget(at + QPointF(0, 40));
+        auto send = [&](int phase, const QPoint &p) {
+            QMouseEvent e(phase == 0 ? QEvent::MouseButtonPress : phase == 1 ? QEvent::MouseMove : QEvent::MouseButtonRelease,
+                          p, cw->mapToGlobal(p), Qt::LeftButton, phase == 2 ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            KoPointerEvent ev(&e, conv->widgetToDocument(QPointF(p)));
+            KisTool *kt = static_cast<KisTool *>(points);
+            if (phase == 0) kt->beginPrimaryAction(&ev);
+            else if (phase == 1) kt->continuePrimaryAction(&ev);
+            else kt->endPrimaryAction(&ev);
+        };
+        send(0, a);
+        for (int i = 1; i <= 10; ++i) {
+            send(1, a + (b - a) * i / 10);
+            pass(15, false);
+        }
+        pass(800, false); // button still down: no release yet
+        // Held: no repaint (layer without the stroke), the tool draws the
+        // last repaint bent to the new place on top.
+        bool warping = false;
+        QMetaObject::invokeMethod(points, "gigaWarping", Q_RETURN_ARG(bool, warping));
+        const QColor layerNew = pixel((at + QPointF(0, 40)).toPoint());
+        const QColor layerOld = pixel(at.toPoint());
+        QImage overlay(cw->size(), QImage::Format_ARGB32_Premultiplied);
+        overlay.fill(Qt::transparent);
+        {
+            QPainter p(&overlay);
+            p.setTransform(conv->flakeToWidgetTransform());
+            points->paint(p, *canvas->viewConverter());
+        }
+        // A little beside the held dot (the dot itself is drawn on top there).
+        const QPoint shownAt = toWidget(at + QPointF(0, 40)) + QPoint(10, 0);
+        const QPoint oldAt = toWidget(at) + QPoint(10, 0);
+        const QColor drawnNew = overlay.pixelColor(shownAt);
+        const QColor drawnOld = overlay.pixelColor(oldAt);
+        report(warping && isEmpty(layerNew) && isEmpty(layerOld) && isRed(drawnNew) && drawnOld.alpha() < 30,
+               "strokepoints-bent-preview-while-dragging",
+               QStringLiteral("warping %1; layer new %2 old %3; preview new %4 old %5")
+                   .arg(warping).arg(name(layerNew), name(layerOld), name(drawnNew), name(drawnOld)));
+        send(2, b);
+        wait(800);
+        QMetaObject::invokeMethod(points, "gigaWarping", Q_RETURN_ARG(bool, warping));
+        report(!warping && isRed(pixel((at + QPointF(0, 40)).toPoint())) && isEmpty(pixel(at.toPoint())),
+               "strokepoints-repaint-on-release",
+               QStringLiteral("warping %1, layer new %2, old %3").arg(warping)
+                   .arg(name(pixel((at + QPointF(0, 40)).toPoint())), name(pixel(at.toPoint()))));
+    }
+    // Small radius, long drag: the bent preview must stay near the line (it
+    // used to blow up into a huge fan: a perspective map of an over-stretched
+    // piece). Count preview pixels far away from line, dot and drag.
+    {
+        QMetaObject::invokeMethod(points, "gigaSetProportional", Q_ARG(bool, true), Q_ARG(int, 15), Q_ARG(int, 0));
+        const QPointF at = vertexPos(pmid);
+        const QPointF target = at + QPointF(-120, -260);
+        const QPoint a = toWidget(at);
+        const QPoint b = toWidget(target);
+        auto send = [&](int phase, const QPoint &p) {
+            QMouseEvent e(phase == 0 ? QEvent::MouseButtonPress : phase == 1 ? QEvent::MouseMove : QEvent::MouseButtonRelease,
+                          p, cw->mapToGlobal(p), Qt::LeftButton, phase == 2 ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            KoPointerEvent ev(&e, conv->widgetToDocument(QPointF(p)));
+            KisTool *kt = static_cast<KisTool *>(points);
+            if (phase == 0) kt->beginPrimaryAction(&ev);
+            else if (phase == 1) kt->continuePrimaryAction(&ev);
+            else kt->endPrimaryAction(&ev);
+        };
+        send(0, a);
+        for (int i = 1; i <= 10; ++i) {
+            send(1, a + (b - a) * i / 10);
+            pass(15, false);
+        }
+        pass(400, false);
+        QImage overlay(cw->size(), QImage::Format_ARGB32_Premultiplied);
+        overlay.fill(Qt::transparent);
+        {
+            QPainter p(&overlay);
+            p.setTransform(conv->flakeToWidgetTransform());
+            points->paint(p, *canvas->viewConverter());
+        }
+        // Allowed area: the line, the drag and the dot, plus a generous margin.
+        const QRectF lineArea = QRectF(toWidget(at + QPointF(-r * 2.0, 0)), toWidget(at + QPointF(r * 2.0, 0))).normalized()
+                | QRectF(QPointF(b), QSizeF(1, 1)) | QRectF(QPointF(a), QSizeF(1, 1));
+        const QRect allowed = lineArea.toAlignedRect().adjusted(-80, -80, 80, 80);
+        int stray = 0;
+        for (int y = 0; y < overlay.height(); y += 2) {
+            for (int x = 0; x < overlay.width(); x += 2) {
+                if (!allowed.contains(x, y) && qAlpha(overlay.pixel(x, y)) > 60) ++stray;
+            }
+        }
+        send(2, b);
+        wait(800);
+        report(stray == 0, "strokepoints-no-fan-on-small-radius",
+               QStringLiteral("%1 preview pixels far from the line (sampled every 2 px)").arg(stray));
+        stack->undo();
+        wait(600);
+    }
+    static_cast<KisTool *>(points)->requestStrokeCancellation();
+    wait(600);
     KisConfig(false).writeEntry<int>("gigaLastStrokeEditMode", 0);
 }
 
