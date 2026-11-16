@@ -34,17 +34,16 @@
 #include <KSharedConfig>
 #include <KoPointerEvent.h>
 #include <kis_tool.h>
+#include <kis_tool_paint.h>
 #include "kis_grid_config.h"
 #include "kis_grid_manager.h"
 #include "kis_canvas_decoration.h"
 #include "kis_zoom_manager.h"
 #include "kis_config_notifier.h"
-#include <kis_tool_paint.h>
 #include <GigaBranding.h>
-#include "GigaAccent.h"
-#include "kis_config_notifier.h"
-#include "GigaMotion.h"
 #include <kis_icon_utils.h>
+#include "GigaMotion.h"
+#include "GigaAccent.h"
 #include <kundo2stack.h>
 #include <KoCanvasResourceProvider.h>
 #include <KoColor.h>
@@ -1441,6 +1440,8 @@ void testMenuLetter(KisMainWindow *w)
                                                             : QKeySequence::listToString(oldKeys));
     shortcutsChanged();
     report(menu->text() == before, "menuletter-restored", QStringLiteral("menu \"%1\"").arg(menu->text()));
+}
+
 // Brush outline fade: hidden-while-painting outline fades to 0 during a stroke
 // and back to 1 when hovering again (feature/brush-cursor-look).
 void testCursorLook(KisMainWindow *w)
@@ -1531,8 +1532,8 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("autosave"), testAutosaveName},
         {QStringLiteral("accent"), testAccentColor},
         {QStringLiteral("refboard"), testReferenceBoard},
-        {QStringLiteral("canvaslook"), testCanvasLook},
         {QStringLiteral("icons"), testToolIcons},
+        {QStringLiteral("canvaslook"), testCanvasLook},
         {QStringLiteral("layerbuttons"), testLayerButtons},
         {QStringLiteral("lassofill"), testLassoFill},
         {QStringLiteral("menuletter"), testMenuLetter},
