@@ -766,7 +766,8 @@ void GigaToolStrokePoints::paintWarp(QPainter &gc, GigaLastStrokeTransform *s)
 
 void GigaToolStrokePoints::paintCircles(QPainter &gc, GigaLastStrokeTransform *s)
 {
-    if (!m_proportional) return;
+    // Only while a dot is held (pressed), like Blender's circle while grabbing.
+    if (!m_proportional || !m_dragging) return;
     const QVector<qreal> centers = proportionalCenters();
     if (centers.isEmpty()) return;
     gc.save();
