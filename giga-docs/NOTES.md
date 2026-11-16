@@ -684,4 +684,5 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   Keys gigaStrokePointsProportional / gigaStrokePointsRadius (screen px, default 120) / gigaStrokePointsFalloff.
 - Self-test gotcha: in `selftest.sh all`, Krita sometimes drops a Ctrl+Z/redo (image busy with an idle task that
   started right after the test's wait). laststroke/strokepoints retry undo/redo until the index moves (max 5).
-
+- Live drag: the tool calls `pointsChanged()` on every drag move / wheel radius change; the one-in-flight +
+  `m_renderDirty` coalescing turns that into back-to-back repaints at the brush's own speed (no queue growth).

@@ -22,7 +22,8 @@ Last updated: 2026-11-15 (proportional editing for Points mode built)
   - `feature/stroke-points-proportional` (built on `feature/stroke-points`; merging it merges all three) —
     Proportional editing in Points mode: top-bar Proportional toggle, Radius, Falloff (Smooth/Sphere/Root/Sharp/
     Linear/Constant); wheel while dragging = radius; the reach is tinted. Radius is measured along the line.
-    Self-test `strokepoints` (18 checks).
+    Also on this branch: the stroke repaints **live while dragging** (user: "snaps in place after" felt wrong).
+    If big strokes lag: next step = repaint only the moving part. Self-test `strokepoints` (19 checks).
 - Repo state: everything else merged and pushed (the ten look/hand-test branches on 2026-11-15).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
