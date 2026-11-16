@@ -229,6 +229,10 @@ void KoToolBox::setViewManager(KisViewManager *viewManager)
 
 void KoToolBox::addButton(KoToolAction *toolAction)
 {
+    // Giga Sketch: tools that are only opened by a command (e.g. Edit Stroke
+    // Points from Transform Last Stroke) get no toolbox button.
+    if (toolAction->section() == QLatin1String("giga-hidden")) return;
+
     KoToolBoxButton *button = new KoToolBoxButton(toolAction, this);
 
     d->buttons << button;

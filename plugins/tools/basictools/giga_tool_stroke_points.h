@@ -1,0 +1,121 @@
+/*
+ *  SPDX-FileCopyrightText: 2026 The Giga Sketch contributors
+ *
+ *  SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#ifndef GIGA_TOOL_STROKE_POINTS_H
+#define GIGA_TOOL_STROKE_POINTS_H
+
+#include <QPointer>
+#include <QSet>
+#include <QVector>
+
+#include <KoToolFactoryBase.h>
+#include <kis_tool.h>
+#include <klocalizedstring.h>
+#include <KoIcon.h>
+
+class QWidget;
+class QToolButton;
+class KisSliderSpinBox;
+class GigaLastStrokeTransform;
+
+/**
+ * Giga Sketch: "Edit Stroke Points", the Points mode of Edit > Transform
+ * Last Stroke. Never in the toolbox: GigaLastStrokeTransform opens it.
+ *
+ * Shows dots along the last stroke. Drag a dot and the line bends smoothly
+ * through it; when you let go, the stroke is repainted with its own brush
+ * along the new path (in the background, see GigaLastStrokeTransform).
+ *  - Shift+click: add/remove a dot from the selection (drag moves them all)
+ *  - double-click the line: add a dot there
+ *  - Enter or switching tools: apply; Esc: put the stroke back as drawn
+ *  - Ctrl+Z / Ctrl+Shift+Z: step through the dot moves
+ *
+ * The tool only edits the dots (GUI thread) and draws them, plus a thin line
+ * of the new path while dragging; all painting is done by the controller.
+ */
+class GigaToolStrokePoints : public KisTool
+{
+    Q_OBJECT
+public:
+    explicit GigaToolStrokePoints(KoCanvasBase *canvas);
+    ~GigaToolStrokePoints() override;
+
+    void activate(const QSet<KoShape*> &shapes) override;
+    void deactivate() override;
+
+    void beginPrimaryAction(KoPointerEvent *event) override;
+    void continuePrimaryAction(KoPointerEvent *event) override;
+    void endPrimaryAction(KoPointerEvent *event) override;
+    void beginPrimaryDoubleClickAction(KoPointerEvent *event) override;
+
+    void beginAlternateAction(KoPointerEvent *event, AlternateAction action) override;
+    void continueAlternateAction(KoPointerEvent *event, AlternateAction action) override;
+    void endAlternateAction(KoPointerEvent *event, AlternateAction action) override;
+
+    void mouseMoveEvent(KoPointerEvent *event) override;
+
+    void requestStrokeEnd() override;
+    void requestStrokeCancellation() override;
+
+    void paint(QPainter &gc, const KoViewConverter &converter) override;
+    QWidget *createOptionWidget() override;
+
+    // For the self-test: dot count, a dot's place in widget coordinates.
+    Q_INVOKABLE int gigaVertexCount() const;
+    Q_INVOKABLE QPointF gigaVertexImagePos(int index) const;
+
+private Q_SLOTS:
+    void slotSessionChanged();
+    void slotSessionEnded();
+    void slotSpacingChanged(int value);
+    void slotModePixels();
+
+private:
+    GigaLastStrokeTransform *session() const;
+    qreal viewScale() const;           ///< screen px per image px
+    int hitVertex(const QPointF &imagePos) const;
+    void press(KoPointerEvent *event, bool toggleSelection);
+    void drag(KoPointerEvent *event);
+    void release();
+    void updateOverlay();
+    void connectSession();
+
+    QPointer<GigaLastStrokeTransform> m_session;
+    QSet<int> m_selected;
+    int m_hover {-1};
+    bool m_dragging {false};
+    bool m_moved {false};
+    QPointF m_dragStart;
+    QVector<QPointF> m_startOffsets;   ///< offsets of all dots at drag start
+    QRectF m_lastOverlay;              ///< image rect drawn last time
+
+    QPointer<QWidget> m_options;
+    QPointer<KisSliderSpinBox> m_spacing;
+    QPointer<QToolButton> m_pixelsButton;
+    QPointer<QToolButton> m_pointsButton;
+};
+
+class GigaToolStrokePointsFactory : public KoToolFactoryBase
+{
+public:
+    GigaToolStrokePointsFactory()
+        : KoToolFactoryBase("GigaToolStrokePoints")
+    {
+        setSection(QStringLiteral("giga-hidden")); // no toolbox button
+        setToolTip(i18n("Edit Stroke Points"));
+        setIconName(koIconNameCStr("krita_tool_transform"));
+        setPriority(100);
+        setActivationShapeId(KRITA_TOOL_ACTIVATION_ID);
+    }
+    ~GigaToolStrokePointsFactory() override {}
+
+    KoToolBase *createTool(KoCanvasBase *canvas) override
+    {
+        return new GigaToolStrokePoints(canvas);
+    }
+};
+
+#endif // GIGA_TOOL_STROKE_POINTS_H
