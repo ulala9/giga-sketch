@@ -112,8 +112,17 @@ bool KisKraSaveVisitor::visit(KisExternalLayer * layer)
         }
     }
     else if (KisFileLayer *fileLayer = dynamic_cast<KisFileLayer*>(layer)) {
-        Q_UNUSED(fileLayer); // We don't save data for file layers, but we still want to save the masks.
+        // We don't save data for file layers, but we still want to save the masks.
         result = true;
+        if (fileLayer->gigaIsBlenderLayer()) {
+            // Giga Sketch: keep the Blender picture in the .kra, so the
+            // document still shows it when the PNG is gone.
+            result = savePaintDevice(fileLayer->original(), getLocation(layer))
+                    && saveIccProfile(layer, fileLayer->original()->colorSpace()->profile());
+            if (!result) {
+                m_errorMessages << i18n("Failed to save the pixel data for layer %1.", layer->name());
+            }
+        }
     }
     return result && visitAllInverse(layer);
 }

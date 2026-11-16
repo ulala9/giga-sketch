@@ -63,6 +63,16 @@ public:
     ScalingMethod scalingMethod() const;
     void setScalingMethod(ScalingMethod method);
 
+    /**
+     * Giga Sketch: a "Blender layer" (made by GigaBlenderBridge). Its picture
+     * is also saved inside the .kra, so it still shows when the PNG is gone,
+     * and a missing PNG is not reported as an error.
+     */
+    bool gigaIsBlenderLayer() const;
+    void gigaSetBlenderLayer(bool value);
+    /// The picture saved in the .kra was loaded (the PNG was missing at open).
+    void gigaSetHasSavedPicture(bool value);
+
     QString scalingFilter() const;
     void setScalingFilter(QString method);
 
@@ -102,6 +112,8 @@ private:
     QString m_filename;
     ScalingMethod m_scalingMethod {None};
     QString m_scalingFilter;
+    bool m_gigaBlenderLayer {false};
+    bool m_gigaHasSavedPicture {false};
 
     KisPaintDeviceSP m_paintDevice;
     KisSafeDocumentLoader m_loader;

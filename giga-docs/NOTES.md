@@ -783,6 +783,17 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   active layer (on top if none), active layer re-selected; no document → new one at the frame size + "Paint" layer.
   Refresh on `QGuiApplication::applicationStateChanged(Active)` (1 s debounce), only if a File Layer path lies in a
   folder a connected Blender announced. Pref `gigaBlenderRefreshOnFocus` (General > File Handling, last row).
+- Blender layers (step 2): `KisFileLayer::gigaIsBlenderLayer()` flag (set by the bridge, copied by the copy ctor).
+  .kra: savexml writes `giga-blender="1"` on the FILE_LAYER element; KisKraSaveVisitor saves `original()` with
+  savePaintDevice + saveIccProfile (same location as a paint layer's pixels). KisKraLoader skips the "locate the
+  file" dialog for flagged layers; KisKraLoadVisitor::visit(KisExternalLayer*) loads the saved pixels **only if the
+  PNG is missing** (if it exists the File Layer is already loading it async into the same device — no race).
+  `gigaSetHasSavedPicture` → FileNotFound state, but no error icon/tooltip for flagged layers.
+  When the PNG was missing at open, the File Layer isn't watching it: the bridge updates with `setFileName()`
+  (re-arms the loader + reload) instead of `resetCache()`. Freeze = Krita's Convert to Paint Layer (works as-is).
+  Layer > Refresh Blender Layers: action `giga_refresh_blender_layers` (gigasketch.action), put above the Convert
+  submenu in `gigaAddEditMenuItems()`; `GigaBlenderBridge::refreshFromMenu()` says what happened.
+  Stock Krita opens such a .kra as a plain File Layer (ignores the attribute and the extra pixel file).
 - Self-test `blender` (fake client over the socket). Headless: `vm->activeNode()` stays null unless the view is set
   on the view manager and `setCurrentNode` + CurrentKritaNode resource are set by hand (same as lassofill).
 - Blender-side tests: `blender --factory-startup --python test.py` with a `bpy.app.timers` callback calling the

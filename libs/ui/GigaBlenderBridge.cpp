@@ -219,6 +219,8 @@ bool GigaBlenderBridge::activeDocumentHasBlenderLayer() const
     bool found = false;
     KisLayerUtils::recursiveApplyNodes(view->image()->root(), [&](KisNodeSP node) {
         if (KisFileLayer *fl = qobject_cast<KisFileLayer*>(node.data())) {
+            if (fl->gigaIsBlenderLayer()) found = true;
+            // Older ones (made before the flag existed): by Blender's folder.
             const QString p = cleanAbsolute(fl->path());
             for (const QString &f : std::as_const(folders)) {
                 if (p.startsWith(f)) found = true;
@@ -234,6 +236,22 @@ int GigaBlenderBridge::requestRefresh()
     const QJsonObject msg = canvasMessage(QStringLiteral("refresh"));
     for (QLocalSocket *s : std::as_const(m_clients)) send(s, msg);
     return m_clients.size();
+}
+
+void GigaBlenderBridge::refreshFromMenu()
+{
+    KisMainWindow *w = targetWindow();
+    KisViewManager *vm = w ? w->viewManager() : nullptr;
+    QString message;
+    if (m_clients.isEmpty()) {
+        message = i18n("Blender isn't connected: start Blender with the \u201cSend to GigaSketch\u201d add-on");
+    } else if (!activeDocumentHasBlenderLayer()) {
+        message = i18n("No Blender layers here: use \u201cSend to GigaSketch\u201d in Blender first");
+    } else {
+        requestRefresh();
+        message = i18n("Asked Blender for a new picture");
+    }
+    if (vm) vm->showFloatingMessage(message, QIcon(), 2500);
 }
 
 void GigaBlenderBridge::slotApplicationStateChanged(Qt::ApplicationState state)
@@ -270,7 +288,12 @@ QJsonObject GigaBlenderBridge::handleMessage(const QJsonObject &msg)
     if (view && view->image()) {
         const QList<KisFileLayer*> layers = fileLayersShowing(view->image(), path);
         if (!layers.isEmpty()) {
-            for (KisFileLayer *fl : layers) fl->resetCache();
+            for (KisFileLayer *fl : layers) {
+                fl->gigaSetBlenderLayer(true);
+                // setFileName (not just a reload): if the PNG was missing when
+                // the document was opened, the layer isn't watching it yet.
+                fl->setFileName(QString(), cleanAbsolute(path));
+            }
             if (explicitSend) {
                 view->viewManager()->showFloatingMessage(
                     i18n("Blender: updated “%1”", layers.first()->name()), QIcon(), 1500);
@@ -315,6 +338,7 @@ QJsonObject GigaBlenderBridge::handleMessage(const QJsonObject &msg)
     KisFileLayer *fileLayer = new KisFileLayer(image, QString(), cleanAbsolute(path),
                                                KisFileLayer::ToImageSize, QStringLiteral("Bicubic"),
                                                name, OPACITY_OPAQUE_U8);
+    fileLayer->gigaSetBlenderLayer(true);
     KisNodeCommandsAdapter adapter(vm);
     adapter.addNode(fileLayer, parent, above);
 

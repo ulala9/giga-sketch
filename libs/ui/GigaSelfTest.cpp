@@ -46,6 +46,7 @@
 #include "GigaAccent.h"
 #include "GigaBlenderBridge.h"
 #include "kis_file_layer.h"
+#include <kis_layer_properties_icons.h>
 #include "kis_layer_utils.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -320,7 +321,9 @@ void testBlenderBridge(KisMainWindow *w)
         QJsonObject o{{"type", "frame"}, {"version", 1}, {"path", path}, {"width", image->width()},
                       {"height", image->height()}, {"name", "Blender: Camera"}, {"reason", reason}};
         sendMsg(o);
-        return readMsg();
+        QJsonObject m = readMsg();
+        while (!m.isEmpty() && m.value("type").toString() != "ack") m = readMsg(); // skip "canvas" news
+        return m;
     };
     auto countLayers = [&](const QString &path) {
         int n = 0;
@@ -392,6 +395,71 @@ void testBlenderBridge(KisMainWindow *w)
     ack = frame(QDir(folder).filePath("missing.png"), "send");
     report(ack.value("result").toString() == "ignored", "blender-missing-file-ignored",
            QString::fromUtf8(QJsonDocument(ack).toJson(QJsonDocument::Compact)));
+
+    // Step 2: the picture is saved inside the .kra. Save, delete the PNG,
+    // reopen: the layer still shows red, no "file not found" error, and
+    // Convert to Paint Layer (= freeze) keeps the picture.
+    KisFileLayer *blenderLayer = qobject_cast<KisFileLayer*>(added.data());
+    report(blenderLayer && blenderLayer->gigaIsBlenderLayer(), "blender-layer-flagged", QString());
+    const QString kra = QDir::home().filePath(QStringLiteral("blender-test.kra"));
+    bool saved = doc->exportDocumentSync(kra, "application/x-krita");
+    QFile::remove(png);
+    KisDocument *reopened = KisPart::instance()->createDocument();
+    const bool opened = saved && reopened->openPath(kra, KisDocument::DontAddToRecent);
+    KisFileLayer *loaded = nullptr;
+    if (opened) {
+        KisLayerUtils::recursiveApplyNodes(reopened->image()->root(), [&](KisNodeSP node) {
+            if (KisFileLayer *fl = qobject_cast<KisFileLayer*>(node.data())) loaded = fl;
+        });
+    }
+    QColor saved_c;
+    bool noError = false;
+    if (loaded) {
+        loaded->original()->pixel(image->width() / 2, image->height() / 2, &saved_c);
+        noError = true;
+        for (const KisBaseNode::Property &p : loaded->sectionModelProperties()) {
+            if (p.id == KisLayerPropertiesIcons::layerError.id()) noError = false;
+        }
+    }
+    report(saved && opened && loaded && loaded->gigaIsBlenderLayer(), "blender-kra-reopened",
+           QStringLiteral("saved %1, opened %2, layer %3").arg(saved).arg(opened).arg(loaded ? loaded->name() : QStringLiteral("none")));
+    report(saved_c.red() > 200 && saved_c.green() < 50, "blender-kra-picture-without-png", saved_c.name());
+    report(noError, "blender-kra-no-missing-file-error", QString());
+    if (loaded) {
+        // Blender sends again (green this time) while that document is shown:
+        // the layer picks up the new PNG although it wasn't watching it.
+        w->showDocument(reopened);
+        if (KisView *view = w->activeView()) { view->viewManager()->setCurrentView(view); }
+        pump(10);
+        pic.fill(QColor(0, 255, 0));
+        pic.save(png);
+        ack = frame(png, "send");
+        t.restart();
+        QColor g;
+        while (t.elapsed() < 5000) {
+            pump(2);
+            loaded->original()->pixel(image->width() / 2, image->height() / 2, &g);
+            if (g.green() > 200 && g.red() < 50) break;
+        }
+        report(ack.value("result").toString() == "updated" && g.green() > 200 && g.red() < 50,
+               "blender-reopened-layer-updates", QStringLiteral("%1 %2").arg(ack.value("result").toString(), g.name()));
+        pic.fill(QColor(255, 0, 0)); // back to red for the freeze check
+        pic.save(png);
+        frame(png, "send");
+        t.restart();
+        while (t.elapsed() < 5000) {
+            pump(2);
+            loaded->original()->pixel(image->width() / 2, image->height() / 2, &g);
+            if (g.red() > 200) break;
+        }
+        KisNodeSP paint = KisLayerUtils::convertToPaintLayer(reopened->image(), loaded).get();
+        reopened->image()->waitForDone();
+        QColor pc;
+        if (paint && paint->paintDevice()) paint->paintDevice()->pixel(image->width() / 2, image->height() / 2, &pc);
+        report(paint && paint->inherits("KisPaintLayer") && pc.red() > 200 && pc.green() < 50,
+               "blender-freeze-to-paint-layer", paint ? QStringLiteral("%1 %2").arg(paint->name(), pc.name()) : QStringLiteral("none"));
+    }
+    // reopened is shown in the window now; the test run ends with the app.
 
     client.disconnectFromServer();
     t.restart();

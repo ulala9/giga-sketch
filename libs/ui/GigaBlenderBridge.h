@@ -33,7 +33,9 @@ class KisMainWindow;
  *
  * A "frame" updates every File Layer of the active document that shows that
  * PNG. If none does and the reason is "send", a File Layer is added above the
- * active layer (a new document at the frame's size if none is open).
+ * active layer (a new document at the frame's size if none is open). Layers
+ * we make are flagged as Blender layers (KisFileLayer::gigaIsBlenderLayer):
+ * their picture is saved in the .kra too.
  *
  * Everything runs in the GUI thread and never waits: the socket is
  * asynchronous and the File Layer loads its picture in the background.
@@ -55,6 +57,9 @@ public:
     /// Ask every connected Blender for a fresh capture (only if the active
     /// document has a Blender layer). Returns how many were asked.
     int requestRefresh();
+
+    /// Layer > Refresh Blender Layers: requestRefresh() with a message saying what happened.
+    void refreshFromMenu();
 
     static bool refreshOnFocusEnabled();
 

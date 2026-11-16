@@ -1134,7 +1134,10 @@ KisNodeSP KisKraLoader::loadFileLayer(const QDomElement& element, KisImageSP ima
 #else
     QString fullPath = filename;
 #endif
-    if (!QFileInfo(fullPath).exists()) {
+    // Giga Sketch: a Blender layer has its picture saved in the .kra; a
+    // missing PNG is normal (another computer, cleaned folder), don't ask.
+    const bool gigaBlender = element.attribute("giga-blender") == QLatin1String("1");
+    if (!gigaBlender && !QFileInfo(fullPath).exists()) {
         KisCursorOverrideHijacker cursorHijacker;
 
         QString msg = i18nc(
@@ -1162,8 +1165,9 @@ KisNodeSP KisKraLoader::loadFileLayer(const QDomElement& element, KisImageSP ima
         }
     }
 
-    KisLayer *layer = new KisFileLayer(image, basePath, filename, (KisFileLayer::ScalingMethod)scalingMethod, scalingFilter, name, opacity, fallbackColorSpace);
+    KisFileLayer *layer = new KisFileLayer(image, basePath, filename, (KisFileLayer::ScalingMethod)scalingMethod, scalingFilter, name, opacity, fallbackColorSpace);
     Q_CHECK_PTR(layer);
+    layer->gigaSetBlenderLayer(gigaBlender);
 
     return layer;
 }
