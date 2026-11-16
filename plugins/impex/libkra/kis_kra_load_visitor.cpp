@@ -167,13 +167,11 @@ bool KisKraLoadVisitor::visit(KisExternalLayer * layer)
         }
     } else if (KisFileLayer *fileLayer = dynamic_cast<KisFileLayer*>(layer)) {
         result = true;
-        // Giga Sketch: a Blender layer's picture is saved in the .kra. Only
-        // use it when the PNG is gone: if the PNG exists the layer is already
-        // loading it (in the background), and we must not write into the
-        // same device at the same time.
+        // Giga Sketch: a Blender layer's picture is saved in the .kra and
+        // always comes from there (KisKraLoader built it without loading the
+        // PNG, so nothing else writes into this device).
         const QString location = getLocation(layer);
-        if (fileLayer->gigaIsBlenderLayer() && !QFileInfo(fileLayer->path()).exists()
-                && m_store->hasFile(location)) {
+        if (fileLayer->gigaIsBlenderLayer() && m_store->hasFile(location)) {
             KisPaintDeviceSP device = fileLayer->original();
             if (loadPaintDevice(device, location)) {
                 if (m_store->hasFile(getLocation(layer, DOT_ICC))) {

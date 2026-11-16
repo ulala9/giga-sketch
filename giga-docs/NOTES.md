@@ -794,6 +794,24 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   Layer > Refresh Blender Layers: action `giga_refresh_blender_layers` (gigasketch.action), put above the Convert
   submenu in `gigaAddEditMenuItems()`; `GigaBlenderBridge::refreshFromMenu()` says what happened.
   Stock Krita opens such a .kra as a plain File Layer (ignores the attribute and the extra pixel file).
+- Speed (2026-11-16, user: 1.5-2 s per tab-back at 7020x3120). Measured before: Blender draw 0.1-0.2 s, PNG zlib
+  0.07-0.24 s, Giga PNG load ~0.12 s **on the GUI thread** (KisSafeDocumentLoader::delayedLoadStart → openPath is
+  synchronous), and every Send loaded **twice** (bridge reload + file watcher). Now:
+  - Blender writes raw RGBA8 (top row first, straight alpha) to `/dev/shm/gigasketch-blender-<uid>-<pid>-<n>.rgba`
+    (0600, new name each time; stale ones >10 s removed by Blender), frame message gets `"raw"`. PNG written after on
+    one background thread (latest job per path wins). No connection → PNG written directly, as before.
+  - Bridge: `QtConcurrent::run(decodeRaw)` reads + deletes the file, `convertFromQImage(RGBA8888)` into an rgb8
+    device; GUI thread only calls `KisFileLayer::gigaSetPicture` (= slotLoadingFinished, scales if size differs).
+    Per-path generation counter drops stale results. Raw failure → PNG fallback (`setFileName`).
+  - Blender layers never arm KisSafeDocumentLoader: bridge builds them with an empty path + `gigaSetBlenderSource`,
+    KisKraLoader does the same and the load visitor always loads the saved pixels; copy ctor skips setPath.
+    (Layers made by older builds in an open session still watch the PNG until the document is reopened.)
+  - Blender: messages `rendering` (before drawing), `unchanged` (refresh skipped), `failed`; poll 0.1 s;
+    "Resolution: Full / Half (faster)" option. One fewer 88 MB copy (frombuffer without .copy()).
+  - Result at 7020x3120: Send → ack 0.43-0.56 s (Blender op ~0.3 s), Giga raw decode+apply off the GUI thread.
+  - Progress bar `GigaBlenderProgress` (+ `GigaBlenderProgressWidget`, objectName "GigaBlenderProgress"): child of
+    the canvas widget, top centre, mouse-transparent. "checking for changes…" (after 300 ms, so "unchanged" never
+    flashes), "rendering…" (busy slider), "updating layer…", "“name” updated" then fades (GigaMotion setting).
 - Self-test `blender` (fake client over the socket). Headless: `vm->activeNode()` stays null unless the view is set
   on the view manager and `setCurrentNode` + CurrentKritaNode resource are set by hand (same as lassofill).
 - Blender-side tests: `blender --factory-startup --python test.py` with a `bpy.app.timers` callback calling the

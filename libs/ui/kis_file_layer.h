@@ -70,8 +70,16 @@ public:
      */
     bool gigaIsBlenderLayer() const;
     void gigaSetBlenderLayer(bool value);
-    /// The picture saved in the .kra was loaded (the PNG was missing at open).
+    /// The picture saved in the .kra was loaded.
     void gigaSetHasSavedPicture(bool value);
+    /**
+     * Set the PNG path without loading or watching it. Blender layers get
+     * their picture from the bridge (gigaSetPicture) or the .kra, never by
+     * reading the PNG, so a Send isn't loaded twice and never blocks.
+     */
+    void gigaSetBlenderSource(const QString &basePath, const QString &filename);
+    /// Show @p device as the layer's picture (scaled to the image if needed). GUI thread.
+    void gigaSetPicture(KisPaintDeviceSP device);
 
     QString scalingFilter() const;
     void setScalingFilter(QString method);

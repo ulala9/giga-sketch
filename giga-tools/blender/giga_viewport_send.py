@@ -19,19 +19,22 @@ How it works, in short:
   1. GPUOffScreen + draw_view3d draws the viewport again, offscreen, at the
      size we want, with Blender's colour management on (so AgX/Filmic is
      applied and the picture looks like the viewport, not washed out).
-  2. The pixels are read back from the GPU and written as an 8-bit PNG by a
-     tiny writer below (no colour conversions we don't control), to
-     "<file>.tmp" and then renamed over the real file (never half-written).
+  2. The pixels are read back from the GPU. When Giga Sketch is connected they
+     go to a shared-memory file (/dev/shm, i.e. RAM) that Giga Sketch reads
+     and deletes: no PNG to encode or decode, so it's fast. The PNG (8-bit,
+     tiny writer below, "<file>.tmp" renamed over the real file) is written
+     afterwards on a background thread; it is the File Layer's file and what
+     you get when Giga Sketch isn't running.
   3. A local socket ($XDG_RUNTIME_DIR/gigasketch-blender.sock) carries small
-     JSON messages, one per line: we say "frame ready", Giga Sketch says its
-     canvas size and "refresh please". A timer checks it 4 times a second, so
-     Blender never waits for Giga Sketch.
+     JSON messages, one per line: we say "rendering", "unchanged" or "frame
+     ready", Giga Sketch says its canvas size and "refresh please". A timer
+     checks it 10 times a second, so Blender never waits for Giga Sketch.
 """
 
 bl_info = {
     "name": "Send to GigaSketch",
     "author": "The Giga Sketch contributors",
-    "version": (0, 2, 0),
+    "version": (0, 3, 0),
     "blender": (4, 2, 0),
     "location": "3D Viewport > right-click menu, View menu, Sidebar (N) > GigaSketch",
     "description": "Send the viewport, seen from the camera, to a GigaSketch layer",
@@ -43,6 +46,8 @@ import os
 import re
 import socket
 import struct
+import tempfile
+import threading
 import time
 import zlib
 
@@ -53,7 +58,7 @@ import numpy as np
 PROTOCOL_VERSION = 1
 DEFAULT_FOLDER = os.path.join("~", "Pictures", "GigaSketch", "blender")
 MAX_SIZE = 8192
-POLL_SECONDS = 0.25
+POLL_SECONDS = 0.1
 RECONNECT_SECONDS = 2.0
 
 
@@ -71,6 +76,12 @@ class GigaSendSettings(bpy.types.PropertyGroup):
                ('SCENE', "Render Resolution", "Use the scene's Output resolution (and %)"),
                ('CUSTOM', "Custom", "Use the width and height below")],
         default='CANVAS')
+    scale: bpy.props.EnumProperty(
+        name="Resolution",
+        items=[('100', "Full", "Full size"),
+               ('50', "Half (faster)", "Half the width and height: about 4x fewer pixels, quicker updates. "
+                                       "GigaSketch scales it up to the canvas")],
+        default='100')
     width: bpy.props.IntProperty(name="Width", default=1920, min=16, max=MAX_SIZE)
     height: bpy.props.IntProperty(name="Height", default=1080, min=16, max=MAX_SIZE)
     transparent: bpy.props.BoolProperty(
@@ -224,13 +235,74 @@ def fit(width, height):
 
 
 def output_size(scene, settings):
+    f = 0.5 if settings.scale == '50' else 1.0
     if settings.size_mode == 'CANVAS' and Link.canvas:
-        return fit(*Link.canvas)
-    if settings.size_mode == 'CUSTOM':
-        return settings.width, settings.height
-    r = scene.render
-    pct = r.resolution_percentage / 100.0
-    return fit(max(16, int(r.resolution_x * pct)), max(16, int(r.resolution_y * pct)))
+        w, h = Link.canvas
+    elif settings.size_mode == 'CUSTOM':
+        w, h = settings.width, settings.height
+    else:
+        r = scene.render
+        pct = r.resolution_percentage / 100.0
+        w, h = r.resolution_x * pct, r.resolution_y * pct
+    return fit(max(16, int(w * f)), max(16, int(h * f)))
+
+
+# ------------------------------------------------- fast path: shared memory ---
+SHM_DIR = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
+_raw_counter = [0]
+_raw_written = []  # (time, path): files Giga Sketch should have read and deleted
+
+
+def write_raw(rgba):
+    """Pixels for Giga Sketch, in RAM. A new file every time (Giga Sketch deletes it)."""
+    now = time.monotonic()
+    for t, p in list(_raw_written):  # never read (Giga Sketch gone?): clean up
+        if now - t > 10.0:
+            _raw_written.remove((t, p))
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+    _raw_counter[0] += 1
+    path = os.path.join(SHM_DIR, "gigasketch-blender-%d-%d-%d.rgba" % (os.getuid(), os.getpid(), _raw_counter[0]))
+    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # only you can read it
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(memoryview(np.ascontiguousarray(rgba)).cast("B"))
+    os.replace(path + ".tmp", path)
+    _raw_written.append((now, path))
+    return path
+
+
+# PNGs are written on one background thread; only the newest one per file counts.
+_png_lock = threading.Lock()
+_png_jobs = {}
+_png_event = threading.Event()
+
+
+def _png_worker():
+    while True:
+        _png_event.wait()
+        with _png_lock:
+            jobs = dict(_png_jobs)
+            _png_jobs.clear()
+            _png_event.clear()
+        for path, (rgba, w, h) in jobs.items():
+            try:
+                write_png(path, rgba, w, h)  # zlib lets other Python code run meanwhile
+            except OSError as e:
+                print("Send to GigaSketch: could not write", path, e)
+
+
+_png_thread = [None]
+
+
+def write_png_later(path, rgba, width, height):
+    if _png_thread[0] is None or not _png_thread[0].is_alive():
+        _png_thread[0] = threading.Thread(target=_png_worker, name="GigaSketch PNG", daemon=True)
+        _png_thread[0].start()
+    with _png_lock:
+        _png_jobs[path] = (rgba, width, height)
+        _png_event.set()
 
 
 def write_png(path, rgba, width, height):
@@ -255,9 +327,9 @@ def write_png(path, rgba, width, height):
 def buffer_to_array(buf, count):
     """gpu.types.Buffer -> flat numpy uint8 array (fast path, then fallback)."""
     try:
-        arr = np.frombuffer(buf, dtype=np.uint8, count=count)
+        arr = np.frombuffer(buf, dtype=np.uint8, count=count)  # no copy: arr keeps buf alive
         if arr.size == count:
-            return arr.copy()
+            return arr
     except (TypeError, ValueError):
         pass
     buf.dimensions = count
@@ -321,7 +393,12 @@ def capture(context, space, region, reason):
         return (Link.changes, width, height, tuple(map(tuple, view_matrix)), tuple(map(tuple, projection_matrix)),
                 space.shading.type, settings.transparent, settings.hide_overlays)
     if reason == "refresh" and Link.last_sent.get(path) == signature() and os.path.exists(path):
+        link_send({"type": "unchanged"})
         return True, "unchanged"
+    view_name = camera.name if camera is not None else "View"
+    if link_connected():
+        announce_folder(scene)
+        link_send({"type": "rendering", "name": "Blender: " + view_name, "reason": reason})
 
     overlays_were = space.overlay.show_overlays
     if settings.hide_overlays:
@@ -330,6 +407,7 @@ def capture(context, space, region, reason):
         offscreen = gpu.types.GPUOffScreen(width, height, format='RGBA8')
     except Exception as e:  # e.g. size too big for the GPU
         space.overlay.show_overlays = overlays_were
+        link_send({"type": "failed", "error": "picture too big for the GPU"})
         return False, "Could not make a %dx%d offscreen picture: %s" % (width, height, e)
     try:
         offscreen.draw_view3d(scene, context.view_layer, space, region,
@@ -355,18 +433,34 @@ def capture(context, space, region, reason):
 
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        write_png(path, rgba, width, height)
     except OSError as e:
+        link_send({"type": "failed", "error": "could not write the picture"})
         return False, "Could not write %s: %s" % (path, e)
+
+    told = False
+    if link_connected():
+        raw = None
+        try:
+            raw = write_raw(rgba)
+        except OSError as e:
+            print("Send to GigaSketch: shared memory failed, using the PNG:", e)
+        if raw is None:
+            write_png(path, rgba, width, height)  # GigaSketch reads the PNG then
+        else:
+            write_png_later(path, rgba, width, height)
+        msg = {"type": "frame", "path": path, "width": width, "height": height,
+               "name": "Blender: " + view_name, "reason": reason}
+        if raw:
+            msg["raw"] = raw
+        told = link_send(msg)
+    else:
+        try:
+            write_png(path, rgba, width, height)
+        except OSError as e:
+            return False, "Could not write %s: %s" % (path, e)
     # Taken after drawing: drawing may itself count as a depsgraph update.
     Link.last_sent[path] = signature()
 
-    view_name = camera.name if camera is not None else "View"
-    told = False
-    if link_connected():
-        announce_folder(scene)
-        told = link_send({"type": "frame", "path": path, "width": width, "height": height,
-                          "name": "Blender: " + view_name, "reason": reason})
     ms = (time.perf_counter() - t0) * 1000.0
     settings.last_info = "%dx%d, %s, %.0f ms" % (width, height, view_name, ms)
     if told:
@@ -490,6 +584,7 @@ class VIEW3D_PT_giga_send(bpy.types.Panel):
 
         col = layout.column()
         col.prop(s, "size_mode")
+        col.prop(s, "scale")
         if s.size_mode == 'CUSTOM':
             sub = col.column(align=True)
             sub.prop(s, "width")

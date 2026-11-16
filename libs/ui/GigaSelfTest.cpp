@@ -383,6 +383,53 @@ void testBlenderBridge(KisMainWindow *w)
     report(ack.value("result").toString() == "updated" && countLayers(png) == 1,
            "blender-send-again-updates", QString::fromUtf8(QJsonDocument(ack).toJson(QJsonDocument::Compact)));
 
+    // Fast path: raw pixels in a shared-memory file, decoded on a worker
+    // thread; the file is deleted after reading. Blue this time.
+    {
+        const QString raw = QDir::home().filePath(QStringLiteral("gigasketch-blender-test-1.rgba"));
+        QFile rf(raw);
+        rf.open(QIODevice::WriteOnly);
+        QByteArray row(image->width() * 4, 0);
+        for (int x = 0; x < image->width(); ++x) { row[4 * x + 2] = char(255); row[4 * x + 3] = char(255); }
+        for (int y = 0; y < image->height(); ++y) rf.write(row);
+        rf.close();
+        QElapsedTimer rt; rt.start();
+        sendMsg(QJsonObject{{"type", "rendering"}, {"version", 1}});
+        pump(5);
+        QWidget *bar = bridge->progress()->widget();
+        report(bar && bar->isVisible() && bridge->progress()->text().contains("rendering"),
+               "blender-progress-rendering", bridge->progress()->text());
+        QJsonObject o{{"type", "frame"}, {"version", 1}, {"path", png}, {"width", image->width()},
+                      {"height", image->height()}, {"name", "Blender: Camera"}, {"reason", "send"}, {"raw", raw}};
+        sendMsg(o);
+        QJsonObject rawAck = readMsg();
+        while (!rawAck.isEmpty() && rawAck.value("type").toString() != "ack") rawAck = readMsg();
+        const qint64 ms = rt.elapsed();
+        QColor b;
+        added->original()->pixel(image->width() / 2, image->height() / 2, &b);
+        report(rawAck.value("result").toString() == "updated" && b.blue() > 200 && b.red() < 50 && !QFile::exists(raw),
+               "blender-raw-frame", QStringLiteral("%1 %2 in %3 ms, raw file %4").arg(rawAck.value("result").toString(), b.name())
+               .arg(ms).arg(QFile::exists(raw) ? "left" : "deleted"));
+        report(bridge->progress()->text().contains("updated"), "blender-progress-updated", bridge->progress()->text());
+        // "Nothing changed" never shows a bar.
+        QElapsedTimer ft; ft.start();
+        while (ft.elapsed() < 2500) pump(1);
+        sendMsg(QJsonObject{{"type", "unchanged"}, {"version", 1}});
+        pump(5);
+        report(!bar || !bar->isVisible(), "blender-progress-hidden", QString());
+        // The PNG is the old way: put red back for the checks below.
+        sendMsg(QJsonObject{{"type", "frame"}, {"version", 1}, {"path", png}, {"width", image->width()},
+                            {"height", image->height()}, {"name", "Blender: Camera"}, {"reason", "send"}});
+        QJsonObject back = readMsg();
+        while (!back.isEmpty() && back.value("type").toString() != "ack") back = readMsg();
+        t.restart();
+        while (t.elapsed() < 5000) {
+            pump(2);
+            added->original()->pixel(image->width() / 2, image->height() / 2, &b);
+            if (b.red() > 200) break;
+        }
+    }
+
     ack = frame(png2, "refresh");
     report(ack.value("result").toString() == "ignored" && countLayers(png2) == 0,
            "blender-refresh-never-adds", QString::fromUtf8(QJsonDocument(ack).toJson(QJsonDocument::Compact)));

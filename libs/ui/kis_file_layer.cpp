@@ -89,7 +89,9 @@ KisFileLayer::KisFileLayer(const KisFileLayer &rhs)
 
     connect(&m_loader, SIGNAL(loadingFinished(KisPaintDeviceSP,qreal,qreal,QSize)), SLOT(slotLoadingFinished(KisPaintDeviceSP,qreal,qreal,QSize)));
     connect(this, SIGNAL(sigRequestOpenFile()), SLOT(openFile()));
-    m_loader.setPath(path());
+    if (!m_gigaBlenderLayer) { // Giga Sketch: Blender layers don't watch their PNG
+        m_loader.setPath(path());
+    }
 }
 
 QIcon KisFileLayer::icon() const
@@ -174,6 +176,21 @@ bool KisFileLayer::gigaIsBlenderLayer() const
 void KisFileLayer::gigaSetBlenderLayer(bool value)
 {
     m_gigaBlenderLayer = value;
+}
+
+void KisFileLayer::gigaSetBlenderSource(const QString &basePath, const QString &filename)
+{
+    m_basePath = basePath;
+    m_filename = filename;
+}
+
+void KisFileLayer::gigaSetPicture(KisPaintDeviceSP device)
+{
+    KisImageSP image = this->image();
+    const QRect bounds = device->exactBounds();
+    // Same path as a finished PNG load (scales with ToImageSize when needed).
+    slotLoadingFinished(device, image ? image->xRes() : 1.0, image ? image->yRes() : 1.0,
+                        QSize(bounds.right() + 1, bounds.bottom() + 1));
 }
 
 void KisFileLayer::gigaSetHasSavedPicture(bool value)

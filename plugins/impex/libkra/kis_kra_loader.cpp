@@ -1165,9 +1165,18 @@ KisNodeSP KisKraLoader::loadFileLayer(const QDomElement& element, KisImageSP ima
         }
     }
 
-    KisFileLayer *layer = new KisFileLayer(image, basePath, filename, (KisFileLayer::ScalingMethod)scalingMethod, scalingFilter, name, opacity, fallbackColorSpace);
+    KisFileLayer *layer = nullptr;
+    if (gigaBlender) {
+        // Giga Sketch: the picture comes from the .kra (KisKraLoadVisitor),
+        // not from the PNG: build it with no path (nothing is loaded or
+        // watched), then set the path.
+        layer = new KisFileLayer(image, QString(), QString(), (KisFileLayer::ScalingMethod)scalingMethod, scalingFilter, name, opacity, fallbackColorSpace);
+        layer->gigaSetBlenderSource(basePath, filename);
+        layer->gigaSetBlenderLayer(true);
+    } else {
+        layer = new KisFileLayer(image, basePath, filename, (KisFileLayer::ScalingMethod)scalingMethod, scalingFilter, name, opacity, fallbackColorSpace);
+    }
     Q_CHECK_PTR(layer);
-    layer->gigaSetBlenderLayer(gigaBlender);
 
     return layer;
 }
