@@ -647,3 +647,30 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   endless loop).
 - Self-test `canvaslook` paints the grid decoration into a QImage (grabbing the OpenGL widget doesn't include
   decorations). `GIGA_CANVASLOOK_DUMP=/path/prefix` saves the renders as PNGs.
+
+## Transform Last Stroke, Points mode (feature/stroke-points, 2026-11-15; built on feature/transform-last-stroke)
+- Same command; `gigaLastStrokeEditMode` (0 Pixels default, 1 Points) picks the mode; pressing the shortcut while
+  open switches (Points → Pixels hands the *bent* stroke to the Transform tool, same session; Pixels → Points cancels
+  the transform via `requestStrokeCancellation()` then reopens with dots, `m_reopenInPoints`).
+- `libs/ui/tool/GigaStrokePath.{h,cpp}`: recording → pieces ≤ 2 px (Line/Curve split with `KisPaintInformation::mix`;
+  splitting a line paints the same dabs, spacing carries over), arc length `s` per piece end, dots (`Vertex{s, offset}`)
+  placed ~1.33×spacing on straights, sooner when the direction turns (30° = one gap). Bend = monotone cubic
+  (Fritsch–Butland) per x/y through the dots' offsets → no overshoot. Multi-hand copies: jobs matched by index per
+  strokeInfoId, affine fit (least squares, residual ≤ 2 px, refuses straight multi-hand lines); canvas mirror needs
+  nothing (the painter mirrors dabs itself).
+- Controller (`GigaLastStrokeTransform`): `startPoints()` lifts the stroke (undo), keeps `m_lifted` + `m_withStroke`
+  (COW copies) and immediately writes the stroke back **without undo** (`runNoUndo()` = a `KisRunnableBasedStrokeStrategy`
+  with one EXCLUSIVE lambda job). Each edit: `FreehandStrokeStrategy` repaint on a hidden layer (as renderStrokeOnly,
+  not waited for) then a runNoUndo job: copy lifted over the last preview rect, bitBlt the new stroke, setDirty, post
+  `previewRendered()` to the GUI thread. One in flight (`m_renderBusy`), later edits set `m_renderDirty` → one more.
+  Apply: wait for the newest repaint, copy result, restore lifted (no undo), push <stroke as drawn> + "Edit Stroke
+  Points" (GigaCopyPixelsCommand). Cancel / unchanged: push the stroke back, `rememberReplacement()`.
+- Tool `plugins/tools/basictools/giga_tool_stroke_points.{h,cpp}` (id `GigaToolStrokePoints`, section `giga-hidden`
+  → `KoToolBox::addButton` skips it). Shift+click arrives as alternate action ChangeSize(/Snap). Deactivate = apply.
+- Ctrl+Z while editing: `KisDocument` UndoStack `undo()/redo()` first ask `GigaLastStrokeTransform::interceptUndo()`;
+  it steps a dot-shape stack; with nothing left, Ctrl+Z cancels (stroke as drawn).
+- Gotcha: **`KisImage::startStroke()` of a strategy that requestsOtherStrokesToEnd (FreehandStrokeStrategy does) calls
+  the active tool's `requestStrokeEnd()` synchronously** — the points tool took it as "Apply" mid-repaint (segfault).
+  `startingRepaint()` guard around startStroke. `setRequestsOtherStrokesToEnd` is protected, so no way to turn it off
+  from outside.
+- Self-test `strokepoints` (15 checks). `selftest.sh all` takes ~2 min now (timeout raised to 180 s).
