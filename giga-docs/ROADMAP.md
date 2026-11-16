@@ -8,7 +8,7 @@ Last updated: 2026-11-16 (G'MIC filters installed)
 
 ## Resume here
 - **Next up:** icon batches 2–4 (user OK'd the batch 1 style): batch 2 select/move/crop/sample.
-- Waiting for a hand test (in `giga-test`): nothing.
+- Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
 - Repo state: everything merged and pushed (2026-11-16: transform-last-stroke, stroke-points,
   stroke-points-proportional, refboard-image-search, refboard-delete-key, all hand-tested by the user).
   Text tools are "okish"; don't push more text work.
