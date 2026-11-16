@@ -70,6 +70,7 @@
 #include "GigaSelfTest.h"
 #include "GigaSaveDated.h"
 #include "GigaLastStrokeTransform.h"
+#include "GigaBlenderBridge.h"
 #include "GigaZoomOption.h"
 #include <kis_action_registry.h>
 #include <QToolBar>
@@ -743,6 +744,8 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     // windows, which Wayland won't let us place).
     d->gigaFloating = new GigaFloatingPanelManager(this);
     Q_FOREACH (QDockWidget *dock, dockWidgets()) d->gigaFloating->watchDock(dock);
+    // Giga Sketch: listen for the "Send to GigaSketch" Blender add-on.
+    GigaBlenderBridge::ensureStarted(this);
     GigaSelfTest::maybeRun(this); // dev only: does nothing unless GIGA_SELFTEST is set
     static bool gigaFloatHandlerSet = false;
     if (!gigaFloatHandlerSet) {
@@ -965,11 +968,21 @@ void KisMainWindow::gigaAddEditMenuItems()
     // the .xmlgui files) so it shows in every interface mode's menus.
     QMenu *editMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("edit"), this));
     QAction *lastStroke = actionCollection()->action(QStringLiteral("giga_transform_last_stroke"));
-    if (!editMenu || !lastStroke || editMenu->actions().contains(lastStroke)) return;
-    const QList<QAction *> items = editMenu->actions();
-    const int at = items.indexOf(actionCollection()->action(QStringLiteral("edit_redo")));
-    QAction *before = (at >= 0 && at + 1 < items.size()) ? items.at(at + 1) : nullptr;
-    editMenu->insertAction(before, lastStroke);
+    if (editMenu && lastStroke && !editMenu->actions().contains(lastStroke)) {
+        const QList<QAction *> items = editMenu->actions();
+        const int at = items.indexOf(actionCollection()->action(QStringLiteral("edit_redo")));
+        QAction *before = (at >= 0 && at + 1 < items.size()) ? items.at(at + 1) : nullptr;
+        editMenu->insertAction(before, lastStroke);
+    }
+
+    // Layer > Refresh Blender Layers, just above the Convert submenu.
+    QMenu *layerMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("Layer"), this));
+    QAction *refreshBlender = actionCollection()->action(QStringLiteral("giga_refresh_blender_layers"));
+    if (layerMenu && refreshBlender && !layerMenu->actions().contains(refreshBlender)) {
+        QMenu *convert = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("LayerConvert"), this));
+        QAction *before = (convert && layerMenu->actions().contains(convert->menuAction())) ? convert->menuAction() : nullptr;
+        layerMenu->insertAction(before, refreshBlender);
+    }
 }
 
 void KisMainWindow::gigaAddViewMenuItems()
@@ -3933,6 +3946,13 @@ void KisMainWindow::createActions()
     if (KisAction *lastStroke = actionManager->createAction("giga_transform_last_stroke")) {
         GigaLastStrokeTransform *controller = new GigaLastStrokeTransform(this);
         connect(lastStroke, &QAction::triggered, this, [this, controller]() { controller->trigger(viewManager()); });
+    }
+
+    // Giga Sketch: Layer > Refresh Blender Layers (gigasketch.action, no default shortcut).
+    if (KisAction *refreshBlender = actionManager->createAction("giga_refresh_blender_layers")) {
+        connect(refreshBlender, &QAction::triggered, this, []() {
+            if (GigaBlenderBridge *bridge = GigaBlenderBridge::instance()) bridge->refreshFromMenu();
+        });
     }
 
     d->exportFileAdvance  = actionManager->createAction("file_export_advanced");

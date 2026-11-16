@@ -48,6 +48,8 @@
 #include <kis_meta_data_store.h>
 #include <kis_node_visitor.h>
 #include <kis_paint_layer.h>
+#include <kis_file_layer.h>
+#include <QFileInfo>
 #include <kis_pixel_selection.h>
 #include <kis_selection.h>
 #include <kis_selection_mask.h>
@@ -161,6 +163,23 @@ bool KisKraLoadVisitor::visit(KisExternalLayer * layer)
                         reference->setEmbed(false);
                     }
                 }
+            }
+        }
+    } else if (KisFileLayer *fileLayer = dynamic_cast<KisFileLayer*>(layer)) {
+        result = true;
+        // Giga Sketch: a Blender layer's picture is saved in the .kra and
+        // always comes from there (KisKraLoader built it without loading the
+        // PNG, so nothing else writes into this device).
+        const QString location = getLocation(layer);
+        if (fileLayer->gigaIsBlenderLayer() && m_store->hasFile(location)) {
+            KisPaintDeviceSP device = fileLayer->original();
+            if (loadPaintDevice(device, location)) {
+                if (m_store->hasFile(getLocation(layer, DOT_ICC))) {
+                    loadProfile(device, getLocation(layer, DOT_ICC));
+                }
+                fileLayer->gigaSetHasSavedPicture(true);
+            } else {
+                m_warningMessages << i18n("Could not load the saved Blender picture of layer %1.", layer->name());
             }
         }
     } else if (KisShapeLayer *shapeLayer = dynamic_cast<KisShapeLayer*>(layer)) {

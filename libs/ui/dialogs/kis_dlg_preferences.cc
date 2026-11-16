@@ -569,6 +569,16 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
     m_chkCompressKra->setChecked(cfg.compressKra());
     chkZip64->setChecked(cfg.useZip64());
     m_chkTrimKra->setChecked(cfg.trimKra());
+
+    // Giga Sketch: Blender bridge (GigaBlenderBridge). Last row of the
+    // file-handling box.
+    m_chkGigaBlenderRefresh = new QCheckBox(i18n("Refresh Blender layers when switching to Giga Sketch"), this);
+    m_chkGigaBlenderRefresh->setToolTip(i18n("When you switch to Giga Sketch, ask Blender (with the \"Send to GigaSketch\" "
+                                             "add-on running) for a new picture of its view, if the document has a Blender layer."));
+    m_chkGigaBlenderRefresh->setChecked(cfg.readEntry<bool>("gigaBlenderRefreshOnFocus", true));
+    if (QGridLayout *fileGrid = qobject_cast<QGridLayout*>(chkZip64->parentWidget()->layout())) {
+        fileGrid->addWidget(m_chkGigaBlenderRefresh, fileGrid->rowCount(), 0, 1, -1);
+    }
     m_chkTrimFramesImport->setChecked(cfg.trimFramesImport());
 
     m_backupFileCheckBox->setChecked(cfg.backupFile());
@@ -3067,6 +3077,9 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
 
         cfg.writeEntry<bool>("use_custom_system_font", m_general->chkUseCustomFont->isChecked());
         cfg.writeEntry<bool>("gigaToolIcons", m_general->m_chkGigaToolIcons->isChecked());
+        if (m_general->m_chkGigaBlenderRefresh) {
+            cfg.writeEntry<bool>("gigaBlenderRefreshOnFocus", m_general->m_chkGigaBlenderRefresh->isChecked());
+        }
         if (m_general->chkUseCustomFont->isChecked()) {
             cfg.writeEntry<QString>("custom_system_font", m_general->cmbCustomFont->currentFont().family());
             cfg.writeEntry<int>("custom_font_size", m_general->intFontSize->value());

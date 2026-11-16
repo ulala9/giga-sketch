@@ -32,4 +32,19 @@
       <statusTip></statusTip>
     </Action>
   </Actions>
+  <Actions category="Layer">
+    <text>Layer</text>
+    <Action name="giga_refresh_blender_layers">
+      <icon>view-refresh</icon>
+      <text>Refresh Blender Layers</text>
+      <whatsThis>Ask Blender (with the "Send to GigaSketch" add-on) for a new picture of its view for this document's Blender layers.</whatsThis>
+      <toolTip>Ask Blender for a new picture of its view</toolTip>
+      <iconText>Refresh Blender Layers</iconText>
+      <activationFlags>1</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+  </Actions>
 </ActionCollection>

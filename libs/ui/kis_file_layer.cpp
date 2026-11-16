@@ -77,6 +77,8 @@ KisFileLayer::KisFileLayer(const KisFileLayer &rhs)
     m_filename = rhs.m_filename;
     m_scalingMethod = rhs.m_scalingMethod;
     m_scalingFilter = rhs.m_scalingFilter;
+    m_gigaBlenderLayer = rhs.m_gigaBlenderLayer;
+    m_gigaHasSavedPicture = rhs.m_gigaHasSavedPicture;
 
     m_generatedForImageSize = rhs.m_generatedForImageSize;
     m_generatedForXRes = rhs.m_generatedForXRes;
@@ -87,7 +89,9 @@ KisFileLayer::KisFileLayer(const KisFileLayer &rhs)
 
     connect(&m_loader, SIGNAL(loadingFinished(KisPaintDeviceSP,qreal,qreal,QSize)), SLOT(slotLoadingFinished(KisPaintDeviceSP,qreal,qreal,QSize)));
     connect(this, SIGNAL(sigRequestOpenFile()), SLOT(openFile()));
-    m_loader.setPath(path());
+    if (!m_gigaBlenderLayer) { // Giga Sketch: Blender layers don't watch their PNG
+        m_loader.setPath(path());
+    }
 }
 
 QIcon KisFileLayer::icon() const
@@ -134,7 +138,9 @@ KisBaseNode::PropertyList KisFileLayer::sectionModelProperties() const
         return !m_filename.isEmpty() ? m_filename : i18nc("placeholder test for a warning when not file is set in the file layer", "<No file name is set>");
     };
 
-    if (m_state == FileNotFound) {
+    if (m_state == FileNotFound && m_gigaBlenderLayer) {
+        // Giga Sketch: the picture saved in the .kra is shown; nothing is wrong.
+    } else if (m_state == FileNotFound) {
         l << KisLayerPropertiesIcons::getErrorProperty(i18nc("a tooltip shown when a file layer cannot find its linked file",
                                                              "Linked file not found: %1", fileNameOrPlaceholder()));
     } else if (m_state == FileLoadingFailed) {
@@ -159,6 +165,39 @@ void KisFileLayer::setFileName(const QString &basePath, const QString &filename)
     if (fi.exists()) {
         m_loader.setPath(path());
         m_loader.reloadImage();
+    }
+}
+
+bool KisFileLayer::gigaIsBlenderLayer() const
+{
+    return m_gigaBlenderLayer;
+}
+
+void KisFileLayer::gigaSetBlenderLayer(bool value)
+{
+    m_gigaBlenderLayer = value;
+}
+
+void KisFileLayer::gigaSetBlenderSource(const QString &basePath, const QString &filename)
+{
+    m_basePath = basePath;
+    m_filename = filename;
+}
+
+void KisFileLayer::gigaSetPicture(KisPaintDeviceSP device)
+{
+    KisImageSP image = this->image();
+    const QRect bounds = device->exactBounds();
+    // Same path as a finished PNG load (scales with ToImageSize when needed).
+    slotLoadingFinished(device, image ? image->xRes() : 1.0, image ? image->yRes() : 1.0,
+                        QSize(bounds.right() + 1, bounds.bottom() + 1));
+}
+
+void KisFileLayer::gigaSetHasSavedPicture(bool value)
+{
+    m_gigaHasSavedPicture = value;
+    if (value && !QFileInfo(path()).exists()) {
+        changeState(FileNotFound);
     }
 }
 

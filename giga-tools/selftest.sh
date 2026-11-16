@@ -10,6 +10,7 @@ SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
 mkdir -p "$SCRATCH/home" "$SCRATCH/cfg"
 HOME="$SCRATCH/home" XDG_CONFIG_HOME="$SCRATCH/cfg" GIGA_SELFTEST="$NAME" \
+    GIGA_BLENDER_SOCKET="$SCRATCH/blender.sock" \
     timeout 180 "$ROOT/install/bin/krita" > "$SCRATCH/log" 2>&1
 CODE=$?
 grep '^GIGA_SELFTEST' "$SCRATCH/log" || { echo "no self-test output (exit $CODE); last log lines:"; tail -20 "$SCRATCH/log"; }

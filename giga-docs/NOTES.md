@@ -757,3 +757,63 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   `/usr/lib64/qt6/bin`. Without it ninja fails with "translations/filters/it.qm … missing".
 - Its settings are G'MIC's own, shared with any other G'MIC (GIMP etc.): `~/.config/GREYC/gmic_qt.conf` and filter
   updates in `~/.config/gmic/`. Not Krita's config, so left alone. Some dialog titles still say "Krita" (`QMic.cpp`).
+
+## Blender bridge (feature/blender-bridge, 2026-11-16)
+- Blender add-on `giga-tools/blender/giga_viewport_send.py` (legacy add-on with bl_info; Blender 5.2.2 at
+  /usr/bin/blender; user's installed copy: ~/.config/blender/5.2/scripts/addons/). "Send to GigaSketch" is in the
+  viewport right-click menus (object/edit mesh/pose), View menu, and sidebar (N) > GigaSketch (options).
+- Capture: `GPUOffScreen(w,h,'RGBA8')` + `draw_view3d(..., do_color_management=True, draw_background=not transparent)`
+  from the active camera (`calc_matrix_camera` with the output size), else the current view (`rv3d.window_matrix`,
+  region aspect). Overlays off during the draw, restored after. `texture_color.read()` = uint8, bottom-up rows;
+  `np.frombuffer` works on gpu.types.Buffer. Transparent output is premultiplied → un-premultiplied.
+  Own tiny PNG writer (no bpy image colour conversions), `<file>.tmp` + `os.replace`. One PNG per .blend+camera:
+  `~/Pictures/GigaSketch/blender/<blend>-<camera>.png`. Max 8192 on the long side. Cycles Rendered is refused.
+  Measured: Solid ~7-12 ms at 800x600, first Material Preview ~0.9 s (shader compile).
+- Link: Unix socket `$XDG_RUNTIME_DIR/gigasketch-blender.sock` (override: env `GIGA_BLENDER_SOCKET`, used by
+  selftest.sh; AF_UNIX paths max ~107 chars, so the scratchpad is too deep for test sockets). JSON lines, version 1.
+  Blender→Giga: hello{folder}, frame{path,width,height,name,reason:"send"|"refresh"}.
+  Giga→Blender: canvas{width,height} (on hello / active view change), refresh{width,height}, ack{result,layer}.
+  Blender side polls with a persistent `bpy.app.timers` timer every 0.25 s (reconnect every 2 s), non-blocking.
+  Refresh renders the largest 3D viewport under `temp_override`; skipped when nothing changed (signature =
+  depsgraph_update_post counter + matrices + shading + size; taken *after* drawing, drawing may bump the counter).
+- Giga side `libs/ui/GigaBlenderBridge.{h,cpp}`: started from the KisMainWindow ctor (`ensureStarted`), one
+  QLocalServer per process (UserAccessOption; if another Giga Sketch answers on the path it stays out).
+  frame → File Layers of the active document whose path == frame path get `resetCache()` (= instant reload); else
+  on "send" a `KisFileLayer(ToImageSize, absolute path)` is added via KisNodeCommandsAdapter::addNode above the
+  active layer (on top if none), active layer re-selected; no document → new one at the frame size + "Paint" layer.
+  Refresh on `QGuiApplication::applicationStateChanged(Active)` (1 s debounce), only if a File Layer path lies in a
+  folder a connected Blender announced. Pref `gigaBlenderRefreshOnFocus` (General > File Handling, last row).
+- Blender layers (step 2): `KisFileLayer::gigaIsBlenderLayer()` flag (set by the bridge, copied by the copy ctor).
+  .kra: savexml writes `giga-blender="1"` on the FILE_LAYER element; KisKraSaveVisitor saves `original()` with
+  savePaintDevice + saveIccProfile (same location as a paint layer's pixels). KisKraLoader skips the "locate the
+  file" dialog for flagged layers; KisKraLoadVisitor::visit(KisExternalLayer*) loads the saved pixels **only if the
+  PNG is missing** (if it exists the File Layer is already loading it async into the same device — no race).
+  `gigaSetHasSavedPicture` → FileNotFound state, but no error icon/tooltip for flagged layers.
+  When the PNG was missing at open, the File Layer isn't watching it: the bridge updates with `setFileName()`
+  (re-arms the loader + reload) instead of `resetCache()`. Freeze = Krita's Convert to Paint Layer (works as-is).
+  Layer > Refresh Blender Layers: action `giga_refresh_blender_layers` (gigasketch.action), put above the Convert
+  submenu in `gigaAddEditMenuItems()`; `GigaBlenderBridge::refreshFromMenu()` says what happened.
+  Stock Krita opens such a .kra as a plain File Layer (ignores the attribute and the extra pixel file).
+- Speed (2026-11-16, user: 1.5-2 s per tab-back at 7020x3120). Measured before: Blender draw 0.1-0.2 s, PNG zlib
+  0.07-0.24 s, Giga PNG load ~0.12 s **on the GUI thread** (KisSafeDocumentLoader::delayedLoadStart → openPath is
+  synchronous), and every Send loaded **twice** (bridge reload + file watcher). Now:
+  - Blender writes raw RGBA8 (top row first, straight alpha) to `/dev/shm/gigasketch-blender-<uid>-<pid>-<n>.rgba`
+    (0600, new name each time; stale ones >10 s removed by Blender), frame message gets `"raw"`. PNG written after on
+    one background thread (latest job per path wins). No connection → PNG written directly, as before.
+  - Bridge: `QtConcurrent::run(decodeRaw)` reads + deletes the file, `convertFromQImage(RGBA8888)` into an rgb8
+    device; GUI thread only calls `KisFileLayer::gigaSetPicture` (= slotLoadingFinished, scales if size differs).
+    Per-path generation counter drops stale results. Raw failure → PNG fallback (`setFileName`).
+  - Blender layers never arm KisSafeDocumentLoader: bridge builds them with an empty path + `gigaSetBlenderSource`,
+    KisKraLoader does the same and the load visitor always loads the saved pixels; copy ctor skips setPath.
+    (Layers made by older builds in an open session still watch the PNG until the document is reopened.)
+  - Blender: messages `rendering` (before drawing), `unchanged` (refresh skipped), `failed`; poll 0.1 s;
+    "Resolution: Full / Half (faster)" option. One fewer 88 MB copy (frombuffer without .copy()).
+  - Result at 7020x3120: Send → ack 0.43-0.56 s (Blender op ~0.3 s), Giga raw decode+apply off the GUI thread.
+  - Progress bar `GigaBlenderProgress` (+ `GigaBlenderProgressWidget`, objectName "GigaBlenderProgress"): child of
+    the canvas widget, top centre, mouse-transparent. "checking for changes…" (after 300 ms, so "unchanged" never
+    flashes), "rendering…" (busy slider), "updating layer…", "“name” updated" then fades (GigaMotion setting).
+- Self-test `blender` (fake client over the socket). Headless: `vm->activeNode()` stays null unless the view is set
+  on the view manager and `setCurrentNode` + CurrentKritaNode resource are set by hand (same as lassofill).
+- Blender-side tests: `blender --factory-startup --python test.py` with a `bpy.app.timers` callback calling the
+  operator under `context.temp_override(window, area, region, space_data)`, then `wm.quit_blender()` (opens a
+  window; `-b` has no viewport). A fake Giga server in Python on a short socket path covers refresh/ack.
