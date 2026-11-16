@@ -17,6 +17,9 @@
 #include <kis_canvas2.h>
 #include <kis_icon_utils.h>
 #include <KisCursorOverrideLock.h>
+#include <kis_action.h>
+#include <kis_action_manager.h>
+#include <kis_cursor.h>
 
 #include <klocalizedstring.h>
 
@@ -40,6 +43,7 @@
 #include <QtMath>
 
 #include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -48,6 +52,15 @@ constexpr qreal MAX_ZOOM = 64.0;
 constexpr qreal FIT_MARGIN = 16.0;   // widget pixels around the overview
 constexpr qreal FOCUS_MARGIN = 8.0;  // around a focused image
 constexpr qreal DRAG_THRESHOLD = 4.0;
+constexpr qreal ROTATE_STEP = 15.0;        // stepped rotate, same as the canvas
+constexpr qreal ZOOM_DRAG_SMOOTH = 100.0;  // zoom drag: pixels per doubling (canvas value)
+constexpr qreal ZOOM_DRAG_STEP = 50.0;     // stepped zoom drag: pixels per step (canvas value)
+
+bool isModifierKey(int key)
+{
+    return key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta
+        || key == Qt::Key_AltGr;
+}
 
 QRectF lerpRect(const QRectF &a, const QRectF &b, qreal t)
 {
@@ -97,6 +110,16 @@ GigaReferenceBoardView::GigaReferenceBoardView(QWidget *parent)
         cam.pan = c - center * cam.zoom;
         m_camera = cam;
         update();
+    });
+
+    // F1 (reset rotation): turn back to upright around the widget centre.
+    m_rotationAnimation = new QVariantAnimation(this);
+    m_rotationAnimation->setDuration(200);
+    m_rotationAnimation->setStartValue(0.0);
+    m_rotationAnimation->setEndValue(1.0);
+    m_rotationAnimation->setEasingCurve(QEasingCurve::OutCubic);
+    connect(m_rotationAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant &v) {
+        setRotation(m_rotationFrom * (1.0 - v.toReal()));
     });
 
     m_rectAnimation = new QVariantAnimation(this);
@@ -200,7 +223,8 @@ QPointF GigaReferenceBoardView::imageWidgetCenter(int index) const
 {
     const QVector<KisReferenceImage *> images = liveImages();
     if (index < 0 || index >= images.size()) return QPointF(-1, -1);
-    return cameraTransform().map(displayRect(images[index]).center()); // where it is drawn right now
+    // Where it is drawn right now.
+    return rotationTransform().map(cameraTransform().map(displayRect(images[index]).center()));
 }
 
 void GigaReferenceBoardView::refresh()
@@ -269,7 +293,67 @@ QTransform GigaReferenceBoardView::cameraTransform() const
 
 QPointF GigaReferenceBoardView::toBoard(const QPointF &widgetPos) const
 {
-    return (widgetPos - m_camera.pan) / m_camera.zoom;
+    return (toView(widgetPos) - m_camera.pan) / m_camera.zoom;
+}
+
+QTransform GigaReferenceBoardView::rotationTransform() const
+{
+    // Qt applies the last call first: move the centre to 0, rotate, move back.
+    const QPointF c(width() / 2.0, height() / 2.0);
+    QTransform t;
+    t.translate(c.x(), c.y());
+    t.rotate(m_rotation);
+    t.translate(-c.x(), -c.y());
+    return t;
+}
+
+QPointF GigaReferenceBoardView::toView(const QPointF &widgetPos) const
+{
+    if (qFuzzyIsNull(m_rotation)) return widgetPos;
+    return rotationTransform().inverted().map(widgetPos);
+}
+
+QPointF GigaReferenceBoardView::viewDelta(const QPointF &widgetDelta) const
+{
+    if (qFuzzyIsNull(m_rotation)) return widgetDelta;
+    return QTransform().rotate(-m_rotation).map(widgetDelta);
+}
+
+void GigaReferenceBoardView::setRotation(qreal degrees)
+{
+    m_rotation = std::remainder(degrees, 360.0); // -180..180, so a reset takes the short way
+    if (qAbs(m_rotation) < 1e-9) m_rotation = 0.0;
+    update();
+}
+
+void GigaReferenceBoardView::resetRotation()
+{
+    m_rotationAnimation->stop();
+    if (m_rotation == 0.0) return;
+    m_rotationFrom = m_rotation;
+    if (!isVisible()) {
+        setRotation(0.0);
+        return;
+    }
+    m_rotationAnimation->start();
+}
+
+bool GigaReferenceBoardView::isResetRotationKey(QKeyEvent *event) const
+{
+    if (isModifierKey(event->key())) return false;
+    // The canvas "Reset Canvas Rotation" shortcut (Keyboard Shortcuts, F1 here)...
+    if (m_canvas && m_canvas->viewManager()) {
+        if (KisAction *action = m_canvas->viewManager()->actionManager()->actionByName(QStringLiteral("reset_canvas_rotation"))) {
+            const QKeySequence pressed(QKeyCombination(event->modifiers() & ~Qt::KeypadModifier, Qt::Key(event->key())));
+            for (const QKeySequence &shortcut : action->shortcuts()) {
+                if (shortcut == pressed) return true;
+            }
+        }
+    }
+    // ...and the reset keys of Canvas Input Settings > Rotate Canvas.
+    return GigaCanvasInputKeys::matchKey(GigaCanvasInputKeys::currentBindings(),
+                                         GigaCanvasInputKeys::heldKeys(event->modifiers(), {event->key()}))
+        >= 0;
 }
 
 QRectF GigaReferenceBoardView::displayRect(KisReferenceImage *image) const
@@ -299,7 +383,12 @@ GigaReferenceBoardView::Camera GigaReferenceBoardView::cameraFitting(const QRect
         cam = m_camera;
         return cam;
     }
-    cam.zoom = qBound(MIN_ZOOM, qMin((width() - 2 * margin) / rect.width(), (height() - 2 * margin) / rect.height()), MAX_ZOOM);
+    // A turned view needs room for the rect's rotated outline.
+    const qreal a = qDegreesToRadians(m_rotation);
+    const qreal c = qAbs(std::cos(a)), s = qAbs(std::sin(a));
+    const qreal w = rect.width() * c + rect.height() * s;
+    const qreal h = rect.width() * s + rect.height() * c;
+    cam.zoom = qBound(MIN_ZOOM, qMin((width() - 2 * margin) / w, (height() - 2 * margin) / h), MAX_ZOOM);
     cam.pan = QPointF(width() / 2.0, height() / 2.0) - rect.center() * cam.zoom;
     return cam;
 }
@@ -334,7 +423,7 @@ void GigaReferenceBoardView::zoomAt(const QPointF &widgetPos, qreal factor)
     stopCameraAnimation();
     const QPointF boardPoint = toBoard(widgetPos);
     m_camera.zoom = qBound(MIN_ZOOM, m_camera.zoom * factor, MAX_ZOOM);
-    m_camera.pan = widgetPos - boardPoint * m_camera.zoom;
+    m_camera.pan = toView(widgetPos) - boardPoint * m_camera.zoom;
     m_autoFit = false;
     update();
 }
@@ -420,6 +509,11 @@ void GigaReferenceBoardView::paintEvent(QPaintEvent *)
         return;
     }
 
+    // Everything below is drawn in view space; the painter turns it.
+    const QTransform rotation = rotationTransform();
+    p.setTransform(rotation);
+    const QRectF visible = rotation.inverted().mapRect(QRectF(rect())).adjusted(-20, -20, 20, 20);
+    if (m_rotation != 0.0) p.setRenderHint(QPainter::SmoothPixmapTransform, true);
     const QTransform camera = cameraTransform();
     const qreal radius = m_settings.roundedCorners ? qBound(2.0, 6.0 * qSqrt(m_camera.zoom), 10.0) : 0.0;
     p.setRenderHint(QPainter::Antialiasing, true);
@@ -431,7 +525,7 @@ void GigaReferenceBoardView::paintEvent(QPaintEvent *)
     for (KisReferenceImage *image : order) {
         const QRectF boardRect = displayRect(image);
         const QRectF widgetRect = camera.mapRect(boardRect);
-        if (!widgetRect.intersects(QRectF(rect()).adjusted(-20, -20, 20, 20))) continue;
+        if (!widgetRect.intersects(visible)) continue;
 
         const bool dimmed = m_settings.dimOthers && m_focused && image != m_focused;
         if (m_settings.shadows && !dimmed) {
@@ -488,6 +582,42 @@ void GigaReferenceBoardView::pressAt(const QPointF &pos, Qt::MouseButton button,
 {
     m_pressPos = pos;
     m_lastPos = pos;
+
+    // Canvas zoom / rotate drags (Ctrl+Space, Shift+Space... as set in
+    // Settings > Canvas Input Settings). Read fresh each press: cheap, and
+    // always follows the settings.
+    const QVector<GigaCanvasInputKeys::Binding> bindings = GigaCanvasInputKeys::currentBindings();
+    const int nav = GigaCanvasInputKeys::matchDrag(bindings, GigaCanvasInputKeys::heldKeys(modifiers, m_heldKeys), button);
+    if (nav >= 0) {
+        using Kind = GigaCanvasInputKeys::Kind;
+        m_navBinding = bindings[nav];
+        stopCameraAnimation();
+        m_rotationAnimation->stop();
+        m_startZoom = m_camera.zoom;
+        m_startRotation = m_rotation;
+        m_rotateSnapping = false;
+        m_zoomAnchor = m_navBinding.towardPointer ? pos : QPointF(width() / 2.0, height() / 2.0);
+        switch (m_navBinding.kind) {
+        case Kind::Zoom:
+            m_drag = Drag::Zoom;
+            setCursor(KisCursor::zoomSmoothCursor());
+            break;
+        case Kind::ZoomDiscrete:
+            m_drag = Drag::Zoom;
+            setCursor(KisCursor::zoomDiscreteCursor());
+            break;
+        case Kind::Rotate:
+            m_drag = Drag::Rotate;
+            setCursor(KisCursor::rotateCanvasSmoothCursor());
+            break;
+        default:
+            m_drag = Drag::Rotate;
+            setCursor(KisCursor::rotateCanvasDiscreteCursor());
+            break;
+        }
+        return;
+    }
+
     if (button == Qt::MiddleButton || (button == Qt::LeftButton && m_spaceHeld)) {
         m_drag = Drag::Pan;
         stopCameraAnimation();
@@ -520,12 +650,12 @@ void GigaReferenceBoardView::moveAt(const QPointF &pos)
             if (m_pressImage) {
                 m_drag = Drag::MoveImage;
                 m_current = m_pressImage;
-                m_dragOffset = (pos - m_pressPos) / m_camera.zoom;
+                m_dragOffset = viewDelta(pos - m_pressPos) / m_camera.zoom;
                 setCursor(Qt::ClosedHandCursor);
             } else {
                 m_drag = Drag::Pan; // dragging empty space pans
                 stopCameraAnimation();
-                m_camera.pan += pos - m_pressPos;
+                m_camera.pan += viewDelta(pos - m_pressPos);
                 m_autoFit = false;
                 setCursor(Qt::ClosedHandCursor);
             }
@@ -533,14 +663,41 @@ void GigaReferenceBoardView::moveAt(const QPointF &pos)
         }
         break;
     case Drag::Pan:
-        m_camera.pan += delta;
+        m_camera.pan += viewDelta(delta);
         m_autoFit = false;
         update();
         break;
     case Drag::MoveImage:
-        m_dragOffset = (pos - m_pressPos) / m_camera.zoom;
+        m_dragOffset = viewDelta(pos - m_pressPos) / m_camera.zoom;
         update();
         break;
+    case Drag::Zoom: {
+        // Same feel as the canvas: up = in, 100 px doubles (stepped: one
+        // step per 50 px), measured from where the drag started.
+        const qreal steps = GigaCanvasInputKeys::zoomDragSteps(m_pressPos, pos);
+        qreal target;
+        if (m_navBinding.kind == GigaCanvasInputKeys::Kind::ZoomDiscrete) {
+            target = m_startZoom * qPow(M_SQRT2, std::trunc(steps / ZOOM_DRAG_STEP));
+        } else {
+            target = m_startZoom * qPow(2.0, steps / ZOOM_DRAG_SMOOTH);
+        }
+        zoomAt(m_zoomAnchor, target / m_camera.zoom);
+        break;
+    }
+    case Drag::Rotate: {
+        // Angle swept around the widget centre since the press (canvas maths).
+        const QPointF c(width() / 2.0, height() / 2.0);
+        const QPointF a = m_pressPos - c, b = pos - c;
+        const qreal swept = qRadiansToDegrees(std::atan2(b.y(), b.x()) - std::atan2(a.y(), a.x()));
+        qreal target = m_startRotation + swept;
+        if (m_navBinding.kind == GigaCanvasInputKeys::Kind::RotateDiscrete) {
+            // Don't jump on press: only snap once turned half a step.
+            if (!m_rotateSnapping && qAbs(std::remainder(swept, 360.0)) > 0.5 * ROTATE_STEP) m_rotateSnapping = true;
+            target = m_rotateSnapping ? std::round(target / ROTATE_STEP) * ROTATE_STEP : m_startRotation;
+        }
+        setRotation(target);
+        break;
+    }
     default:
         updateCursor(pos);
         break;
@@ -555,7 +712,7 @@ void GigaReferenceBoardView::releaseAt(const QPointF &pos)
     m_pressImage = nullptr;
 
     if (drag == Drag::MoveImage && image && liveImages().contains(image)) {
-        const QPointF offset = (pos - m_pressPos) / m_camera.zoom;
+        const QPointF offset = viewDelta(pos - m_pressPos) / m_camera.zoom;
         // Keep it drawn exactly where it was dropped, before and after the
         // move command lands: no animation from the old spot (that looked
         // like rubber-banding).
@@ -616,7 +773,10 @@ void GigaReferenceBoardView::mouseMoveEvent(QMouseEvent *event)
 void GigaReferenceBoardView::mouseReleaseEvent(QMouseEvent *event)
 {
     if (m_drag == Drag::None) return;
-    if (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton) releaseAt(event->position());
+    if (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton
+        || ((m_drag == Drag::Zoom || m_drag == Drag::Rotate) && (m_navBinding.buttons & event->button()))) {
+        releaseAt(event->position());
+    }
 }
 
 void GigaReferenceBoardView::wheelEvent(QWheelEvent *event)
@@ -626,7 +786,7 @@ void GigaReferenceBoardView::wheelEvent(QWheelEvent *event)
     if (touchpad && !(event->modifiers() & Qt::ControlModifier) && !event->pixelDelta().isNull()) {
         // Two-finger scroll on a touchpad pans.
         stopCameraAnimation();
-        m_camera.pan += QPointF(event->pixelDelta());
+        m_camera.pan += viewDelta(QPointF(event->pixelDelta()));
         m_autoFit = false;
         update();
     } else {
@@ -646,9 +806,19 @@ bool GigaReferenceBoardView::event(QEvent *event)
         QKeyEvent *key = static_cast<QKeyEvent *>(event);
         const int k = key->key();
         if (k == Qt::Key_Escape || k == Qt::Key_Home || k == Qt::Key_Left || k == Qt::Key_Right || k == Qt::Key_Space
-            || key->matches(QKeySequence::Paste)) {
+            || key->matches(QKeySequence::Paste) || isResetRotationKey(key)) {
             event->accept();
             return true;
+        }
+        // Non-modifier keys used by the canvas zoom/rotate drags (if
+        // someone binds e.g. R + drag), so they don't fire tool shortcuts.
+        if (!isModifierKey(k)) {
+            for (const GigaCanvasInputKeys::Binding &b : GigaCanvasInputKeys::currentBindings()) {
+                if (b.kind != GigaCanvasInputKeys::Kind::RotateReset && b.keys.contains(Qt::Key(k))) {
+                    event->accept();
+                    return true;
+                }
+            }
         }
         break;
     }
@@ -682,7 +852,7 @@ bool GigaReferenceBoardView::event(QEvent *event)
                 m_pressImage = nullptr;
                 stopCameraAnimation();
             } else if (m_touchDistance > 1.0) {
-                m_camera.pan += center - m_touchCenter;
+                m_camera.pan += viewDelta(center - m_touchCenter);
                 zoomAt(center, distance / m_touchDistance);
             }
             m_touchCenter = center;
@@ -715,8 +885,22 @@ bool GigaReferenceBoardView::event(QEvent *event)
 
 void GigaReferenceBoardView::keyPressEvent(QKeyEvent *event)
 {
+    // Remember held keys only if a zoom/rotate drag uses them (Space...),
+    // so a key let go somewhere else can't block the bindings.
+    if (!event->isAutoRepeat() && !isModifierKey(event->key())) {
+        for (const GigaCanvasInputKeys::Binding &b : GigaCanvasInputKeys::currentBindings()) {
+            if (b.kind != GigaCanvasInputKeys::Kind::RotateReset && b.keys.contains(Qt::Key(event->key()))) {
+                m_heldKeys.insert(event->key());
+                break;
+            }
+        }
+    }
     if (event->matches(QKeySequence::Paste)) {
         paste();
+        return;
+    }
+    if (!event->isAutoRepeat() && isResetRotationKey(event)) {
+        resetRotation();
         return;
     }
     switch (event->key()) {
@@ -744,12 +928,21 @@ void GigaReferenceBoardView::keyPressEvent(QKeyEvent *event)
 
 void GigaReferenceBoardView::keyReleaseEvent(QKeyEvent *event)
 {
+    if (!event->isAutoRepeat()) m_heldKeys.remove(event->key());
     if (event->key() == Qt::Key_Space && !event->isAutoRepeat()) {
         m_spaceHeld = false;
         updateCursor(mapFromGlobal(QCursor::pos()));
         return;
     }
     QWidget::keyReleaseEvent(event);
+}
+
+void GigaReferenceBoardView::focusOutEvent(QFocusEvent *event)
+{
+    // Key releases won't reach us any more.
+    m_heldKeys.clear();
+    m_spaceHeld = false;
+    QWidget::focusOutEvent(event);
 }
 
 void GigaReferenceBoardView::enterEvent(QEnterEvent *event)
@@ -768,6 +961,7 @@ void GigaReferenceBoardView::enterEvent(QEnterEvent *event)
 void GigaReferenceBoardView::leaveEvent(QEvent *event)
 {
     m_spaceHeld = false;
+    m_heldKeys.clear();
     if (hasFocus() && m_focusBeforeHover && m_drag == Drag::None) {
         m_focusBeforeHover->setFocus(Qt::OtherFocusReason);
     }

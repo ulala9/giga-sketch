@@ -13,6 +13,7 @@
 #include "KisPart.h"
 #include "kis_config.h"
 #include "GigaReferenceBoard.h"
+#include "GigaZoomOption.h"
 #include "KisReferenceImage.h"
 #include "KisReferenceImagesLayer.h"
 #include "KisView.h"
@@ -861,6 +862,92 @@ void testReferenceBoard(KisMainWindow *w)
         report(worst < 1.5, "board-drop-no-rubberband", QStringLiteral("farthest from drop point: %1 px").arg(worst, 0, 'f', 1));
         doc->undoStack()->undo(); // put it back for the checks below
         pump(5);
+    }
+
+    // Canvas-style navigation on the Board (bindings from Canvas Input
+    // Settings): Shift+Space drag rotates, the reset key turns it back,
+    // Ctrl+Space drag zooms toward the press point.
+    {
+        auto wait = [](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) pump(1); };
+        wait(300);
+        auto navDrag = [boardView](const QPointF &from, const QPointF &to, Qt::KeyboardModifiers mods) {
+            QKeyEvent spaceDown(QEvent::KeyPress, Qt::Key_Space, mods);
+            QCoreApplication::sendEvent(boardView, &spaceDown);
+            const QPoint a = from.toPoint();
+            QMouseEvent press(QEvent::MouseButtonPress, a, boardView->mapToGlobal(a), Qt::LeftButton, Qt::LeftButton, mods);
+            QCoreApplication::sendEvent(boardView, &press);
+            for (int i = 1; i <= 8; ++i) {
+                const QPoint p = (from + (to - from) * i / 8.0).toPoint();
+                QMouseEvent move(QEvent::MouseMove, p, boardView->mapToGlobal(p), Qt::NoButton, Qt::LeftButton, mods);
+                QCoreApplication::sendEvent(boardView, &move);
+            }
+            const QPoint b = to.toPoint();
+            QMouseEvent release(QEvent::MouseButtonRelease, b, boardView->mapToGlobal(b), Qt::LeftButton, Qt::NoButton, mods);
+            QCoreApplication::sendEvent(boardView, &release);
+            QKeyEvent spaceUp(QEvent::KeyRelease, Qt::Key_Space, mods);
+            QCoreApplication::sendEvent(boardView, &spaceUp);
+            pump(3);
+        };
+        const QPointF mid(boardView->width() / 2.0, boardView->height() / 2.0);
+        const qreal r = qMin(mid.x(), mid.y()) * 0.6;
+
+        // A quarter turn: from right of centre to below it = +90°.
+        navDrag(mid + QPointF(r, 0), mid + QPointF(0, r), Qt::ShiftModifier);
+        const qreal turned = boardView->property("rotation").toReal();
+        report(qAbs(turned - 90.0) < 1.0, "board-shift-space-rotate", QStringLiteral("%1°").arg(turned, 0, 'f', 1));
+
+        // Clicking a turned image still hits it.
+        QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, center), Q_ARG(int, 1));
+        {
+            const QPoint p = center.toPoint();
+            QMouseEvent press(QEvent::MouseButtonPress, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(boardView, &press);
+            QMouseEvent release(QEvent::MouseButtonRelease, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(boardView, &release);
+            pump(3);
+        }
+        report(boardView->property("focusedIndex").toInt() == 1, "board-rotated-click-focus",
+               QString::number(boardView->property("focusedIndex").toInt()));
+        report(qAbs(boardView->property("rotation").toReal() - 90.0) < 1.0, "board-focus-keeps-rotation", QString());
+        {
+            QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QCoreApplication::sendEvent(boardView, &esc);
+        }
+        wait(400);
+
+        // The canvas "Reset Canvas Rotation" key (F1 here) resets the Board.
+        KisAction *reset = w->viewManager()->actionManager()->actionByName(QStringLiteral("reset_canvas_rotation"));
+        // (A fresh test config may have none: then the profile's reset key, 5.)
+        const QKeySequence resetKey = reset && !reset->shortcut().isEmpty() ? reset->shortcut() : QKeySequence(Qt::Key_5);
+        if (!resetKey.isEmpty()) {
+            const QKeyCombination combo = resetKey[0];
+            QKeyEvent key(QEvent::KeyPress, combo.key(), combo.keyboardModifiers());
+            QCoreApplication::sendEvent(boardView, &key);
+            QKeyEvent up(QEvent::KeyRelease, combo.key(), combo.keyboardModifiers());
+            QCoreApplication::sendEvent(boardView, &up);
+            wait(350);
+        }
+        const qreal afterReset = boardView->property("rotation").toReal();
+        report(!resetKey.isEmpty() && qAbs(afterReset) < 0.01, "board-reset-rotation-key",
+               QStringLiteral("%1 -> %2°").arg(resetKey.toString()).arg(afterReset, 0, 'f', 2));
+
+        // Ctrl+Space drag up 100 px = twice the zoom, toward the press point.
+        wait(100);
+        QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, center), Q_ARG(int, 1));
+        const qreal zoomBefore = boardView->property("zoom").toReal();
+        navDrag(center, center - QPointF(0, 100), Qt::ControlModifier);
+        const qreal ratio = boardView->property("zoom").toReal() / zoomBefore;
+        QPointF centerAfter;
+        QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, centerAfter), Q_ARG(int, 1));
+        const qreal moved = QLineF(center, centerAfter).length();
+        const bool toward = GigaZoomOption::isTowardPointer();
+        report(qAbs(ratio - 2.0) < 0.05 && (!toward || moved < 1.5), "board-ctrl-space-zoom",
+               QStringLiteral("x%1, press point moved %2 px (toward pointer: %3)").arg(ratio, 0, 'f', 2).arg(moved, 0, 'f', 1).arg(toward));
+        {
+            QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+            QCoreApplication::sendEvent(boardView, &esc);
+        }
+        wait(400);
     }
 
     // Send back to the canvas: exact same transform as before.
