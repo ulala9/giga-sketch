@@ -743,3 +743,17 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   (user saw a huge black "fan"). Two affine triangles per quad can only stretch. Self-test
   `strokepoints-no-fan-on-small-radius`.
 
+
+## G'MIC filters (2026-11-16)
+- Two halves. The **host** is in our tree (`plugins/extensions/qmic`): `kritaqmic.so` adds Filters > Start G'MIC-Qt;
+  `libkritaqmicinterface.so` hands layers to the filter window and takes results back (one undo step).
+  The **filter window** (G'MIC-Qt) is a separate project: Krita builds it from its own fork (`vanyossi/gmic`, version in
+  `3rdparty_plugins/ext_gmic/CMakeLists.txt`) as `lib64/kritaplugins/krita_gmic_qt.so`.
+- The host finds it by plugin metadata: ServiceType `Krita/GMic` and `X-Krita-Version` 28 must match `kritaqmic.json`.
+  If upstream bumps X-Krita-Version, rebuild G'MIC too.
+- Build/install: `giga-tools/build-gmic.sh` (download + sha check, Qt6, `GMIC_QT_HOST=krita-plugin`, bundled G'MIC lib,
+  installs into `install/`). No Giga Sketch source changes needed. Fedora's `gmic`/`gmic-gimp` packages don't help (GIMP host).
+- Gotcha: gmic-qt's translation Makefiles call `lrelease`; Fedora only has `lrelease-qt6` on PATH → script prepends
+  `/usr/lib64/qt6/bin`. Without it ninja fails with "translations/filters/it.qm … missing".
+- Its settings are G'MIC's own, shared with any other G'MIC (GIMP etc.): `~/.config/GREYC/gmic_qt.conf` and filter
+  updates in `~/.config/gmic/`. Not Krita's config, so left alone. Some dialog titles still say "Krita" (`QMic.cpp`).

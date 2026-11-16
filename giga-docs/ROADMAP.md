@@ -4,7 +4,7 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Board Delete/Ctrl+Q key merged)
+Last updated: 2026-11-16 (G'MIC filters installed)
 
 ## Resume here
 - **Next up:** icon batches 2–4 (user OK'd the batch 1 style): batch 2 select/move/crop/sample.
@@ -91,6 +91,8 @@ Last updated: 2026-11-16 (Board Delete/Ctrl+Q key merged)
 - [x] Board rotate/zoom/flip with the canvas (`feature/refboard-rotate-zoom`, `feature/refboard-flip`, merged 2026-11-15)
 - [x] Board image search: small browser panel, Google Images / Bing / Pinterest (`feature/refboard-image-search`,
   merged 2026-11-16, hand-tested). Self-test `refsearch`.
+- [x] G'MIC filters: Krita's G'MIC-Qt fork built as a plugin by `giga-tools/build-gmic.sh` (no source changes;
+  2026-11-16). Waiting for the user to try a filter.
 - [x] Board: Delete / Backspace / the Clear shortcut (Ctrl+Q for the user) delete the focused or outlined image
   (`fix/refboard-delete-key`, merged 2026-11-16).
 - [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
