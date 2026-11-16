@@ -1,0 +1,5 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/gigaimagesearch">
+    <file>GigaImageSearchScript.js</file>
+</qresource>
+</RCC>

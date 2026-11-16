@@ -53,6 +53,10 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QDir>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QLabel>
+#include <QBuffer>
 #include <QDockWidget>
 #include <QElapsedTimer>
 #include <QKeyEvent>
@@ -1084,6 +1088,176 @@ void testReferenceBoard(KisMainWindow *w)
     delete reopened;
 }
 
+/// Reference Board image search (feature/refboard-image-search): web image
+/// downloads (with fallback addresses, one undo step per batch, drops of web
+/// links) and, when built with Qt WebEngine, the search browser: full-size
+/// rules, right-click add, Pick mode. Local files only, no internet needed.
+void testReferenceBoardSearch(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    if (!doc || !view || !view->canvasBase()) { report(false, "refsearch-setup", QStringLiteral("no document")); return; }
+    QDockWidget *dock = w->dockWidget(QStringLiteral("GigaReferenceBoard"));
+    if (!dock) { report(false, "refsearch-setup", QStringLiteral("no Board panel")); return; }
+    dock->show();
+    dock->raise();
+    pump(10);
+    QWidget *boardView = dock->findChild<QWidget *>(QStringLiteral("GigaReferenceBoardView"));
+    if (!boardView) { report(false, "refsearch-setup", QStringLiteral("no Board view")); return; }
+    auto wait = [](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) pump(1); };
+    auto count = [boardView]() { return boardView->property("imageCount").toInt(); };
+    auto waitForCount = [&](int wanted, int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (count() != wanted && t.elapsed() < ms) pump(1);
+        return count() == wanted;
+    };
+    auto newestWidth = [doc]() {
+        KisSharedPtr<KisReferenceImagesLayer> layer = doc->referenceImagesLayer();
+        if (!layer || layer->referenceImages().isEmpty()) return 0;
+        int best = 0, z = -1;
+        for (KisReferenceImage *r : layer->referenceImages()) {
+            if (r->zIndex() > z) { z = r->zIndex(); best = r->imagePixelSize().width(); }
+        }
+        return best;
+    };
+
+    // Test pictures on disk.
+    const QDir home = QDir::home();
+    auto savePng = [&home](const QString &name, int w, int h, const QColor &c) {
+        QImage img(w, h, QImage::Format_ARGB32);
+        img.fill(c);
+        img.save(home.filePath(name), "PNG");
+        return QUrl::fromLocalFile(home.filePath(name)).toString();
+    };
+    const QString small = savePng(QStringLiteral("small.png"), 100, 80, Qt::red);
+    const QString big = savePng(QStringLiteral("big.png"), 800, 640, Qt::red);
+    const QString other = savePng(QStringLiteral("other.png"), 120, 90, Qt::green);
+    const QString big2 = savePng(QStringLiteral("big2.png"), 600, 300, Qt::blue);
+    const QString missing = QUrl::fromLocalFile(home.filePath(QStringLiteral("missing.png"))).toString();
+
+    // 1. Download with a fallback: the first address fails, the second works.
+    int before = count();
+    QList<QStringList> one = {{missing, big}};
+    QMetaObject::invokeMethod(boardView, "addWebImages", Qt::DirectConnection, Q_ARG(QList<QStringList>, one), Q_ARG(QUrl, QUrl()));
+    bool ok = waitForCount(before + 1, 5000);
+    report(ok && newestWidth() == 800, "refsearch-download-fallback",
+           QStringLiteral("count %1 -> %2, width %3").arg(before).arg(count()).arg(newestWidth()));
+
+    // 2. Two at once = one undo step.
+    before = count();
+    QList<QStringList> two = {{small}, {other}};
+    QMetaObject::invokeMethod(boardView, "addWebImages", Qt::DirectConnection, Q_ARG(QList<QStringList>, two), Q_ARG(QUrl, QUrl()));
+    ok = waitForCount(before + 2, 5000);
+    doc->undoStack()->undo();
+    pump(5);
+    report(ok && count() == before, "refsearch-batch-one-undo", QStringLiteral("after undo %1 (was %2)").arg(count()).arg(before));
+
+    // 3. Nothing works: nothing added, a note says so.
+    before = count();
+    QList<QStringList> bad = {{missing}};
+    QMetaObject::invokeMethod(boardView, "addWebImages", Qt::DirectConnection, Q_ARG(QList<QStringList>, bad), Q_ARG(QUrl, QUrl()));
+    wait(500);
+    QLabel *status = dock->findChild<QLabel *>(QStringLiteral("GigaReferenceBoardStatus"));
+    report(count() == before && status && status->text().contains(QStringLiteral("couldn't")), "refsearch-failed-note",
+           status ? status->text() : QStringLiteral("no status label"));
+
+    // 4. A dropped web image (data: address, like Google thumbnails).
+    {
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        QImage img(64, 32, QImage::Format_ARGB32);
+        img.fill(Qt::yellow);
+        img.save(&buffer, "PNG");
+        QMimeData mime;
+        mime.setUrls({QUrl(QStringLiteral("data:image/png;base64,") + QString::fromLatin1(png.toBase64()))});
+        before = count();
+        const QPointF at(boardView->width() / 2.0, boardView->height() / 2.0);
+        // Qt only delivers a drop to the widget a drag entered first.
+        QDragEnterEvent enter(at.toPoint(), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(boardView, &enter);
+        QDropEvent drop(at, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(boardView, &drop);
+        ok = waitForCount(before + 1, 5000);
+        report(ok && newestWidth() == 64, "refsearch-drop-web-image", QStringLiteral("count %1 -> %2, width %3, status %4").arg(before).arg(count()).arg(newestWidth()).arg(status ? status->text() : QString()));
+    }
+
+    // 5. The search browser (only when built with Qt WebEngine).
+    QToolButton *searchButton = dock->findChild<QToolButton *>(QStringLiteral("GigaImageSearchButton"));
+    if (!searchButton) {
+        info(QStringLiteral("built without Qt WebEngine: no Search button, browser checks skipped"));
+        return;
+    }
+    QElapsedTimer startup;
+    startup.start();
+    searchButton->click();
+    pump(5);
+    QWidget *search = dock->findChild<QWidget *>(QStringLiteral("GigaImageSearchView"));
+    report(search && search->isVisible(), "refsearch-opens", QStringLiteral("browser made in %1 ms").arg(startup.elapsed()));
+    if (!search) return;
+
+    // A local page: a srcset picture, a plain one, and a Bing-style tile.
+    QFile page(home.filePath(QStringLiteral("results.html")));
+    page.open(QIODevice::WriteOnly);
+    page.write(QStringLiteral(
+        "<html><body>"
+        "<img id=a src='%1' srcset='%1 100w, %2 800w' width=100>"
+        "<img id=b src='%3' width=100>"
+        "<a class=iusc m='{\"murl\":\"%4\",\"turl\":\"%3\"}'><img id=c src='%3' width=100></a>"
+        "</body></html>").arg(small, big, other, big2).toUtf8());
+    page.close();
+    QMetaObject::invokeMethod(search, "loadUrl", Qt::DirectConnection, Q_ARG(QUrl, QUrl::fromLocalFile(page.fileName())));
+    QElapsedTimer loading;
+    loading.start();
+    while (!search->property("pageLoaded").toBool() && loading.elapsed() < 15000) pump(1);
+    report(search->property("pageLoaded").toBool(), "refsearch-page-loads", QStringLiteral("%1 ms").arg(loading.elapsed()));
+    wait(300);
+
+    QString answer;
+    QMetaObject::invokeMethod(search, "runScriptForTest", Qt::DirectConnection, Q_RETURN_ARG(QString, answer),
+                              Q_ARG(QString, QStringLiteral("window.__giga.candidatesForUrl('https://i.pinimg.com/236x/aa/bb/cc/x.jpg')")));
+    report(answer.startsWith(QStringLiteral("https://i.pinimg.com/originals/aa/bb/cc/x.jpg")), "refsearch-pinterest-full-size",
+           answer.section(QLatin1Char('\n'), 0, 0));
+
+    // Right-click > Add to Board on the srcset picture: the 800 px one arrives.
+    before = count();
+    QMetaObject::invokeMethod(search, "addImageByIndex", Qt::DirectConnection, Q_ARG(int, 0));
+    ok = waitForCount(before + 1, 5000);
+    report(ok && newestWidth() == 800, "refsearch-add-full-size", QStringLiteral("width %1").arg(newestWidth()));
+
+    // Pick mode: mark two (the Bing tile gives its original), add them in one go.
+    search->setProperty("pickMode", true);
+    QMetaObject::invokeMethod(search, "togglePickByIndex", Qt::DirectConnection, Q_ARG(int, 1));
+    QMetaObject::invokeMethod(search, "togglePickByIndex", Qt::DirectConnection, Q_ARG(int, 2));
+    QElapsedTimer picking;
+    picking.start();
+    while (search->property("pickCount").toInt() != 2 && picking.elapsed() < 3000) pump(1);
+    report(search->property("pickCount").toInt() == 2, "refsearch-pick-count", QString::number(search->property("pickCount").toInt()));
+    before = count();
+    QMetaObject::invokeMethod(search, "addSelected", Qt::DirectConnection);
+    ok = waitForCount(before + 2, 5000);
+    int widest = 0;
+    if (KisSharedPtr<KisReferenceImagesLayer> layer = doc->referenceImagesLayer()) {
+        for (KisReferenceImage *r : layer->referenceImages()) widest = qMax(widest, r->imagePixelSize().width() == 600 ? 600 : 0);
+    }
+    report(ok && widest == 600, "refsearch-pick-add", QStringLiteral("count %1 -> %2, Bing original found: %3").arg(before).arg(count()).arg(widest == 600));
+    wait(300);
+    report(search->property("pickCount").toInt() == 0, "refsearch-pick-cleared", QString::number(search->property("pickCount").toInt()));
+    doc->undoStack()->undo();
+    pump(5);
+    report(count() == before, "refsearch-pick-one-undo", QString::number(count()));
+
+    // Closing the split hides the browser, reopening shows the same one.
+    searchButton->click();
+    pump(5);
+    const bool hidden = !search->isVisible();
+    searchButton->click();
+    pump(5);
+    QWidget *again = dock->findChild<QWidget *>(QStringLiteral("GigaImageSearchView"));
+    report(hidden && again == search && search->isVisible(), "refsearch-toggle-keeps-browser", QString());
+}
+
 QString s_dumpSuffix;
 
 /// Canvas look: dark surround, and the grid drawn over it only when
@@ -1394,130 +1568,6 @@ void testLassoFill(KisMainWindow *w)
     erase->trigger();
     custom->setChecked(false);
     pump(10);
-}
-
-/// A shortcut the user gave to Alt+<letter> wins over a menu's Alt+letter
-/// (e.g. Feather Selection on Alt+A vs "&Arrange & Documents").
-void testMenuLetter(KisMainWindow *w)
-{
-    openTestDocument(w);
-    KisView *view = w->activeView();
-    KisAction *feather = view ? view->viewManager()->actionManager()->actionByName(QStringLiteral("featherselection")) : nullptr;
-    // The top-level menu is "&Arrange && Documents" or "&Window", depending
-    // on the layout earlier tests left behind. Use whichever is there.
-    QAction *menu = nullptr;
-    for (QAction *m : w->menuBar()->actions()) {
-        if (m->text() == QStringLiteral("&Arrange && Documents") || m->text() == QStringLiteral("&Window")) menu = m;
-    }
-    if (!feather || !menu) {
-        QStringList titles;
-        for (QAction *m : w->menuBar()->actions()) titles << m->text();
-        report(false, "menuletter-setup", QStringLiteral("feather %1, menu %2; menus: %3")
-                                              .arg(!!feather).arg(!!menu).arg(titles.join(QStringLiteral(" | "))));
-        return;
-    }
-    const QString before = menu->text();
-    const QString letter = before.mid(1, 1); // the character after the leading '&'
-    const QString altKey = QStringLiteral("Alt+") + letter;
-    // Same path as Settings > Keyboard Shortcuts > OK: write the custom
-    // shortcut file, then let the registry reload it and update every action.
-    // (Setting the action directly would be undone by KisPart::updateShortcuts.)
-    // selftest.sh runs in a throw-away config, so this never touches yours.
-    const QList<QKeySequence> oldKeys = feather->shortcuts();
-    KConfigGroup custom(KSharedConfig::openConfig(GigaBranding::shortcutsConfigFile()), QStringLiteral("Shortcuts"));
-    auto shortcutsChanged = [&]() {
-        custom.sync();
-        KisActionRegistry::instance()->settingsPageSaved();
-        pump(5);
-    };
-    custom.writeEntry("featherselection", altKey);
-    shortcutsChanged();
-    const QString during = menu->text();
-    report(!during.contains(QStringLiteral("&") + letter) && during == QString(before).remove(0, 1)
-               && feather->shortcut() == QKeySequence(altKey),
-           "menuletter-user-shortcut-wins", QStringLiteral("%1: menu \"%2\" -> \"%3\"").arg(altKey, before, during));
-    // Write the old key back (deleting the only entry would leave an empty
-    // group, which the registry skips reloading).
-    custom.writeEntry("featherselection", oldKeys.isEmpty() ? QStringLiteral("none")
-                                                            : QKeySequence::listToString(oldKeys));
-    shortcutsChanged();
-    report(menu->text() == before, "menuletter-restored", QStringLiteral("menu \"%1\"").arg(menu->text()));
-}
-
-// Brush outline fade: hidden-while-painting outline fades to 0 during a stroke
-// and back to 1 when hovering again (feature/brush-cursor-look).
-void testCursorLook(KisMainWindow *w)
-{
-    {
-        KisConfig cfg(false);
-        cfg.setShowOutlineWhilePainting(false);   // the fade only runs when painting hides the outline
-        cfg.setGigaTwoToneCursor(true);
-        cfg.setGigaFadeOutlineWhilePainting(true);
-    }
-    KisDocument *doc = openTestDocument(w);
-    KisView *view = w->activeView();
-    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
-    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
-    w->setActiveView(view);
-    view->viewManager()->setCurrentView(view);
-    pump(10);
-    KisNodeSP layer = doc->image()->root()->lastChild();
-    if (layer) {
-        view->viewManager()->nodeManager()->slotNonUiActivatedNode(layer);
-        if (!view->currentNode()) {
-            view->setCurrentNode(layer);
-            canvas->resourceManager()->setResource(KoCanvasResource::CurrentKritaNode, QVariant::fromValue(KisNodeWSP(layer)));
-        }
-    }
-    const QString brushId = QStringLiteral("KritaShape/KisToolBrush");
-    KoToolManager::instance()->switchToolRequested(brushId);
-    pump(20);
-    KisToolPaint *tool = dynamic_cast<KisToolPaint *>(KoToolManager::instance()->toolById(canvas, brushId));
-    if (!tool) { report(false, "cursorlook-tool", QStringLiteral("no brush tool")); return; }
-    tool->optionWidgets();
-    pump(5);
-
-    QWidget *cw = canvas->canvasWidget();
-    const QPoint c = cw->rect().center();
-    auto event = [&](QEvent::Type type, const QPoint &p, Qt::MouseButtons buttons) {
-        QMouseEvent e(type, p, cw->mapToGlobal(p), Qt::LeftButton, buttons, Qt::NoModifier);
-        return KoPointerEvent(&e, canvas->coordinatesConverter()->widgetToDocument(QPointF(p)));
-    };
-    auto wait = [&](int ms) {
-        QElapsedTimer t;
-        t.start();
-        while (t.elapsed() < ms) pump(1);
-    };
-    {
-        KoPointerEvent hover = event(QEvent::MouseMove, c, Qt::NoButton);
-        tool->mouseMoveEvent(&hover);
-    }
-    wait(250);
-    const qreal before = tool->gigaOutlineOpacity();
-    {
-        KoPointerEvent press = event(QEvent::MouseButtonPress, c, Qt::LeftButton);
-        tool->beginPrimaryAction(&press);
-    }
-    for (int i = 1; i <= 10; i++) {
-        KoPointerEvent move = event(QEvent::MouseMove, c + QPoint(i * 4, i), Qt::LeftButton);
-        tool->continuePrimaryAction(&move);
-        wait(30);
-    }
-    const qreal during = tool->gigaOutlineOpacity();
-    {
-        KoPointerEvent release = event(QEvent::MouseButtonRelease, c + QPoint(40, 10), Qt::NoButton);
-        tool->endPrimaryAction(&release);
-    }
-    doc->image()->waitForDone();
-    {
-        KoPointerEvent hover = event(QEvent::MouseMove, c + QPoint(42, 10), Qt::NoButton);
-        tool->mouseMoveEvent(&hover);
-    }
-    wait(300);
-    const qreal after = tool->gigaOutlineOpacity();
-    report(before > 0.99, "cursorlook-shown-on-hover", QString::number(before));
-    report(during < 0.01, "cursorlook-faded-while-painting", QString::number(during));
-    report(after > 0.99, "cursorlook-back-after-stroke", QString::number(after));
 }
 
 /// Edit > Transform Last Stroke: paint a blue line and a red line across it,
@@ -2134,6 +2184,130 @@ void testStrokePoints(KisMainWindow *w)
     KisConfig(false).writeEntry<int>("gigaLastStrokeEditMode", 0);
 }
 
+/// A shortcut the user gave to Alt+<letter> wins over a menu's Alt+letter
+/// (e.g. Feather Selection on Alt+A vs "&Arrange & Documents").
+void testMenuLetter(KisMainWindow *w)
+{
+    openTestDocument(w);
+    KisView *view = w->activeView();
+    KisAction *feather = view ? view->viewManager()->actionManager()->actionByName(QStringLiteral("featherselection")) : nullptr;
+    // The top-level menu is "&Arrange && Documents" or "&Window", depending
+    // on the layout earlier tests left behind. Use whichever is there.
+    QAction *menu = nullptr;
+    for (QAction *m : w->menuBar()->actions()) {
+        if (m->text() == QStringLiteral("&Arrange && Documents") || m->text() == QStringLiteral("&Window")) menu = m;
+    }
+    if (!feather || !menu) {
+        QStringList titles;
+        for (QAction *m : w->menuBar()->actions()) titles << m->text();
+        report(false, "menuletter-setup", QStringLiteral("feather %1, menu %2; menus: %3")
+                                              .arg(!!feather).arg(!!menu).arg(titles.join(QStringLiteral(" | "))));
+        return;
+    }
+    const QString before = menu->text();
+    const QString letter = before.mid(1, 1); // the character after the leading '&'
+    const QString altKey = QStringLiteral("Alt+") + letter;
+    // Same path as Settings > Keyboard Shortcuts > OK: write the custom
+    // shortcut file, then let the registry reload it and update every action.
+    // (Setting the action directly would be undone by KisPart::updateShortcuts.)
+    // selftest.sh runs in a throw-away config, so this never touches yours.
+    const QList<QKeySequence> oldKeys = feather->shortcuts();
+    KConfigGroup custom(KSharedConfig::openConfig(GigaBranding::shortcutsConfigFile()), QStringLiteral("Shortcuts"));
+    auto shortcutsChanged = [&]() {
+        custom.sync();
+        KisActionRegistry::instance()->settingsPageSaved();
+        pump(5);
+    };
+    custom.writeEntry("featherselection", altKey);
+    shortcutsChanged();
+    const QString during = menu->text();
+    report(!during.contains(QStringLiteral("&") + letter) && during == QString(before).remove(0, 1)
+               && feather->shortcut() == QKeySequence(altKey),
+           "menuletter-user-shortcut-wins", QStringLiteral("%1: menu \"%2\" -> \"%3\"").arg(altKey, before, during));
+    // Write the old key back (deleting the only entry would leave an empty
+    // group, which the registry skips reloading).
+    custom.writeEntry("featherselection", oldKeys.isEmpty() ? QStringLiteral("none")
+                                                            : QKeySequence::listToString(oldKeys));
+    shortcutsChanged();
+    report(menu->text() == before, "menuletter-restored", QStringLiteral("menu \"%1\"").arg(menu->text()));
+}
+
+// Brush outline fade: hidden-while-painting outline fades to 0 during a stroke
+// and back to 1 when hovering again (feature/brush-cursor-look).
+void testCursorLook(KisMainWindow *w)
+{
+    {
+        KisConfig cfg(false);
+        cfg.setShowOutlineWhilePainting(false);   // the fade only runs when painting hides the outline
+        cfg.setGigaTwoToneCursor(true);
+        cfg.setGigaFadeOutlineWhilePainting(true);
+    }
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
+    w->setActiveView(view);
+    view->viewManager()->setCurrentView(view);
+    pump(10);
+    KisNodeSP layer = doc->image()->root()->lastChild();
+    if (layer) {
+        view->viewManager()->nodeManager()->slotNonUiActivatedNode(layer);
+        if (!view->currentNode()) {
+            view->setCurrentNode(layer);
+            canvas->resourceManager()->setResource(KoCanvasResource::CurrentKritaNode, QVariant::fromValue(KisNodeWSP(layer)));
+        }
+    }
+    const QString brushId = QStringLiteral("KritaShape/KisToolBrush");
+    KoToolManager::instance()->switchToolRequested(brushId);
+    pump(20);
+    KisToolPaint *tool = dynamic_cast<KisToolPaint *>(KoToolManager::instance()->toolById(canvas, brushId));
+    if (!tool) { report(false, "cursorlook-tool", QStringLiteral("no brush tool")); return; }
+    tool->optionWidgets();
+    pump(5);
+
+    QWidget *cw = canvas->canvasWidget();
+    const QPoint c = cw->rect().center();
+    auto event = [&](QEvent::Type type, const QPoint &p, Qt::MouseButtons buttons) {
+        QMouseEvent e(type, p, cw->mapToGlobal(p), Qt::LeftButton, buttons, Qt::NoModifier);
+        return KoPointerEvent(&e, canvas->coordinatesConverter()->widgetToDocument(QPointF(p)));
+    };
+    auto wait = [&](int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < ms) pump(1);
+    };
+    {
+        KoPointerEvent hover = event(QEvent::MouseMove, c, Qt::NoButton);
+        tool->mouseMoveEvent(&hover);
+    }
+    wait(250);
+    const qreal before = tool->gigaOutlineOpacity();
+    {
+        KoPointerEvent press = event(QEvent::MouseButtonPress, c, Qt::LeftButton);
+        tool->beginPrimaryAction(&press);
+    }
+    for (int i = 1; i <= 10; i++) {
+        KoPointerEvent move = event(QEvent::MouseMove, c + QPoint(i * 4, i), Qt::LeftButton);
+        tool->continuePrimaryAction(&move);
+        wait(30);
+    }
+    const qreal during = tool->gigaOutlineOpacity();
+    {
+        KoPointerEvent release = event(QEvent::MouseButtonRelease, c + QPoint(40, 10), Qt::NoButton);
+        tool->endPrimaryAction(&release);
+    }
+    doc->image()->waitForDone();
+    {
+        KoPointerEvent hover = event(QEvent::MouseMove, c + QPoint(42, 10), Qt::NoButton);
+        tool->mouseMoveEvent(&hover);
+    }
+    wait(300);
+    const qreal after = tool->gigaOutlineOpacity();
+    report(before > 0.99, "cursorlook-shown-on-hover", QString::number(before));
+    report(during < 0.01, "cursorlook-faded-while-painting", QString::number(during));
+    report(after > 0.99, "cursorlook-back-after-stroke", QString::number(after));
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -2148,6 +2322,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("autosave"), testAutosaveName},
         {QStringLiteral("accent"), testAccentColor},
         {QStringLiteral("refboard"), testReferenceBoard},
+        {QStringLiteral("refsearch"), testReferenceBoardSearch},
         {QStringLiteral("icons"), testToolIcons},
         {QStringLiteral("canvaslook"), testCanvasLook},
         {QStringLiteral("layerbuttons"), testLayerButtons},

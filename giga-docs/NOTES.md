@@ -522,6 +522,42 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Known: the old `panelsnap` self-test segfaults in a small test window (948×512) even without this feature — its
   History frame gets docked by the drag and the test dereferences the deleted frame (test bug, not app).
 
+## Reference Board image search (feature/refboard-image-search, 2026-11-16)
+- Board header **Search** button (only when built with Qt WebEngine: `find_package(Qt6WebEngineWidgets)` in the
+  plugin's CMakeLists, define `GIGA_HAVE_WEBENGINE`; Fedora needs `qt6-qtwebengine-devel`). Splits the panel in a
+  `QSplitter`: browser + Board, side by side if the dock is wider than tall ×1.1, else browser on top. Share saved
+  per orientation (KConfig group `GigaImageSearch`, `splitH`/`splitV`; also `site`). Dock keeps the browser as
+  `QPointer<QWidget>` so builds without WebEngine compile.
+- Browser made on the first click (starts Chromium, ~0.6 s in the test); closing the split only hides it. Look ▸
+  Close Browser deletes it, Clear Browsing Data… wipes cookies/cache. Linking WebEngine costs ~0.08 s at app start
+  (warm cache, ctypes load time of libQt6WebEngineWidgets vs libQt6Widgets); split into a lazily loaded module if
+  that ever matters. Krita already sets `AA_ShareOpenGLContexts` (krita/main.cc), which WebEngine needs.
+- `GigaImageSearchView` (plugin): site combo (Google `udm=2`, Bing, Pinterest search URLs), query box, back/forward/
+  reload, Pick toggle, "Add selected (N)". Own persistent `QWebEngineProfile` "gigasketch-image-search" in
+  AppDataLocation/image-search (Giga's folder), user agent with "QtWebEngine/x.y" removed (sites serve basic pages
+  to unknown browsers). `createWindow` returns the same page. Under `GIGA_SELFTEST` no home page is loaded.
+- `GigaImageSearchScript.js` (qrc `:/gigaimagesearch/`), injected at DocumentReady in the **ApplicationWorld**
+  (isolated from page scripts, same DOM). `gigaCandidates(img)` = addresses best first: Bing tile `m` JSON `murl`,
+  link params `imgurl`/`mediaurl`/image-looking `url`, biggest `srcset`, Pinterest `/236x/` → `/originals/` (+ .png)
+  → `/736x/`, `data-src`…, finally the shown `currentSrc`. Pick mode swallows pointer/mouse/click in capture phase,
+  outlines picked images in the accent colour. dragstart puts the best address in text/uri-list with the rest in
+  `#giga-alt=<json>` (fragment never reaches servers). Messages to C++ via `console.log("giga:pick-count:N")` →
+  `javaScriptConsoleMessage` (no QWebChannel). Pick state is re-sent after every loadFinished (new page = new script).
+- Right-click: own `contextMenuEvent` → `createStandardContextMenu()` + "Add to Board" first; widget pos / zoomFactor
+  = CSS px for `elementsFromPoint`; the request's `mediaUrl()` is appended as last resort.
+- Downloads in `GigaReferenceBoardView` (works without WebEngine too, also for drops/pastes of web links from Firefox):
+  `addWebImages(QList<QStringList>, referrer)`; a batch = all images of one request, added with ONE
+  `addReferenceImages` command when the last one finishes; dropped if the document changed meanwhile.
+  QNetworkAccessManager (lazy, NoLessSafeRedirectPolicy, 20 s transfer timeout, 150 MB cap, generic Chrome UA,
+  Referer = page), `data:` decoded directly, `file:` via QNAM. Decoding in `QtConcurrent::run` (never the
+  interface/paint thread). Failure → next address → drag's own picture (fallback) → counted as failed.
+  Header label `GigaReferenceBoardStatus`: "Adding N images…", then "X added, Y couldn't be downloaded" for 5 s.
+- Self-test `refsearch` (13 checks, local files only): fallback, batch = one undo, failure note, data: drop,
+  browser opens, local results page loads, Pinterest rule, srcset full size, Pick count/add/clear/one undo, toggle
+  keeps the browser. Gotcha: a synthetic QDropEvent is only delivered after a QDragEnterEvent to the same widget.
+- Gotcha: adding a new Q_OBJECT .cpp (with `#include "X.moc"`) to an existing target behind an `if()` didn't
+  re-run automoc → "X.moc: No such file". Deleting `build/plugins/dockers/gigareferenceboard/*_autogen` fixed it.
+
 ## Lasso Fill tool + lasso erase (feature/lasso-fill-erase)
 - `GigaToolLassoFill` = `KisToolEncloseAndFill(canvas, lassoFill=true)` (factory `GigaToolLassoFillFactory.h` in
   `plugins/tools/tool_enclose_and_fill/`). Own tool id → own config group, so its settings don't touch Enclose and

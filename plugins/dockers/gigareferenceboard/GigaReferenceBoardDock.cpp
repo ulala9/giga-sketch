@@ -5,17 +5,25 @@
  */
 #include "GigaReferenceBoardDock.h"
 #include "GigaReferenceBoardView.h"
+#ifdef GIGA_HAVE_WEBENGINE
+#include "GigaImageSearchView.h"
+#endif
 
 #include <GigaReferenceBoard.h>
 #include <kis_canvas2.h>
 #include <kis_icon_utils.h>
 
+#include <kconfiggroup.h>
 #include <klocalizedstring.h>
+#include <ksharedconfig.h>
 
 #include <QActionGroup>
 #include <QColorDialog>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QMenu>
+#include <QResizeEvent>
+#include <QSplitter>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -64,6 +72,11 @@ void changeSettings(F change)
     change(s);
     s.save(); // also tells the view and the tool options
 }
+
+KConfigGroup searchConfig()
+{
+    return KSharedConfig::openConfig()->group(QStringLiteral("GigaImageSearch"));
+}
 } // namespace
 
 GigaReferenceBoardDock::GigaReferenceBoardDock()
@@ -107,15 +120,41 @@ GigaReferenceBoardDock::GigaReferenceBoardDock()
     look->setMenu(m_lookMenu);
     connect(m_lookMenu, &QMenu::aboutToShow, this, &GigaReferenceBoardDock::buildLookMenu);
 
+    m_status = new QLabel(header);
+    m_status->setObjectName(QStringLiteral("GigaReferenceBoardStatus"));
+    m_status->setEnabled(false); // drawn dimmed: a quiet note, not a control
+    connect(m_view, &GigaReferenceBoardView::fetchStatusChanged, m_status, &QLabel::setText);
+
     row->addWidget(arrange);
     row->addWidget(fit);
+#ifdef GIGA_HAVE_WEBENGINE
+    m_searchButton = makeButton(header, QStringLiteral("edit-find"), i18nc("@action:button search the web for images", "Search"),
+                                i18n("Search Google Images, Bing or Pinterest next to the Board, and drag or pick images onto it"));
+    m_searchButton->setObjectName(QStringLiteral("GigaImageSearchButton"));
+    m_searchButton->setCheckable(true);
+    m_searchButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    connect(m_searchButton, &QToolButton::toggled, this, &GigaReferenceBoardDock::setSearchOpen);
+    row->addWidget(m_searchButton);
+#endif
+    row->addWidget(m_status);
     row->addStretch(1);
     row->addWidget(add);
     row->addWidget(back);
     row->addWidget(look);
 
+    m_split = new QSplitter(page);
+    m_split->setChildrenCollapsible(false);
+    m_split->addWidget(m_view);
+    connect(m_split, &QSplitter::splitterMoved, this, [this]() {
+        if (!m_search || !m_search->isVisible()) return;
+        KConfigGroup cfg = searchConfig();
+        const QString key = m_split->orientation() == Qt::Horizontal ? QStringLiteral("splitH") : QStringLiteral("splitV");
+        const QList<int> sizes = m_split->sizes();
+        if (sizes.size() == 2 && sizes[0] + sizes[1] > 0) cfg.writeEntry(key, qreal(sizes[0]) / (sizes[0] + sizes[1]));
+    });
+
     layout->addWidget(header);
-    layout->addWidget(m_view, 1);
+    layout->addWidget(m_split, 1);
     setWidget(page);
 
     setEnabled(false);
@@ -138,6 +177,57 @@ void GigaReferenceBoardDock::unsetCanvas()
     m_canvas = nullptr;
     setEnabled(false);
     m_view->setCanvas(nullptr);
+}
+
+void GigaReferenceBoardDock::resizeEvent(QResizeEvent *event)
+{
+    QDockWidget::resizeEvent(event);
+    updateSplitOrientation();
+}
+
+void GigaReferenceBoardDock::updateSplitOrientation()
+{
+    if (!m_search || !m_search->isVisible()) return;
+    // Side by side in a wide panel, browser on top in a tall one.
+    const Qt::Orientation wanted = width() > height() * 1.1 ? Qt::Horizontal : Qt::Vertical;
+    const bool changed = m_split->orientation() != wanted;
+    m_split->setOrientation(wanted);
+    if (!changed && m_split->property("gigaSized").toBool()) return;
+    const qreal share = qBound(0.2, searchConfig().readEntry(wanted == Qt::Horizontal ? "splitH" : "splitV", 0.5), 0.8);
+    const int total = wanted == Qt::Horizontal ? m_split->width() : m_split->height();
+    if (total <= 0) return;
+    m_split->setSizes({int(total * share), total - int(total * share)});
+    m_split->setProperty("gigaSized", true);
+}
+
+void GigaReferenceBoardDock::setSearchOpen(bool open)
+{
+#ifdef GIGA_HAVE_WEBENGINE
+    if (open && !m_search) {
+        // Made on first use: this starts the browser (its own process).
+        GigaImageSearchView *search = new GigaImageSearchView(m_split);
+        m_split->insertWidget(0, search);
+        connect(search, &GigaImageSearchView::addRequested, m_view, &GigaReferenceBoardView::addWebImages);
+        m_search = search;
+    }
+    if (m_search) m_search->setVisible(open);
+    if (open) {
+        m_split->setProperty("gigaSized", false);
+        updateSplitOrientation();
+    }
+    if (m_searchButton && m_searchButton->isChecked() != open) {
+        const QSignalBlocker block(m_searchButton);
+        m_searchButton->setChecked(open);
+    }
+#else
+    Q_UNUSED(open);
+#endif
+}
+
+void GigaReferenceBoardDock::closeBrowser()
+{
+    setSearchOpen(false);
+    delete m_search; // frees the browser's memory; the next Search starts it again
 }
 
 void GigaReferenceBoardDock::buildArrangeMenu()
@@ -209,6 +299,14 @@ void GigaReferenceBoardDock::buildLookMenu()
     m_lookMenu->actions().last()->setToolTip(
         i18n("Saves each reference at about the size it is shown at (×1.5), like Resample to Current Size. "
              "The open document keeps full detail until you reopen the file."));
+#ifdef GIGA_HAVE_WEBENGINE
+    m_lookMenu->addSection(i18n("Image Search"));
+    QAction *closeBrowser = m_lookMenu->addAction(i18n("Close Browser"), this, &GigaReferenceBoardDock::closeBrowser);
+    closeBrowser->setEnabled(m_search != nullptr);
+    closeBrowser->setToolTip(i18n("Closing the search split keeps the browser ready; this frees its memory."));
+    m_lookMenu->addAction(i18n("Clear Browsing Data..."), this, [this]() { GigaImageSearchView::clearBrowsingData(this); });
+    m_lookMenu->actions().last()->setToolTip(i18n("Delete the search browser's logins, cookies and cache."));
+#endif
     m_lookMenu->setToolTipsVisible(true);
 
     m_lookMenu->addSection(i18n("Controls"));
