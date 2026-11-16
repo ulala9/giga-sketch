@@ -40,6 +40,8 @@
 #include "kis_canvas_updates_compressor.h"
 #include "kis_config_notifier.h"
 #include "kis_group_layer.h"
+#include "GigaCanvasShadow.h"
+#include <QPainterPath>
 
 #include "KisLongPressEventFilter.h"
 #include <KoCanvasController.h>
@@ -103,6 +105,29 @@ void KisQPainterCanvas::paintEvent(QPaintEvent * ev)
 
     gc.setCompositionMode(QPainter::CompositionMode_Source);
     gc.fillRect(QRect(QPoint(0, 0), size()), borderColor());
+
+    // Giga Sketch: soft shadow around the image (same rings as the OpenGL canvas).
+    if (KisConfig(true).readEntry<bool>(GigaCanvasShadow::configKey(), true)) {
+        const QPolygonF corners = GigaCanvasShadow::imageCorners(QRectF(converter->imageRectInImagePixels()),
+                                                                 converter->imageToWidgetTransform());
+        QPainterPath inner;
+        inner.addPolygon(corners);
+        inner.closeSubpath();
+        gc.save();
+        gc.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        gc.setRenderHint(QPainter::Antialiasing, true);
+        gc.setPen(Qt::NoPen);
+        gc.setBrush(QColor(0, 0, 0, qRound(255 * GigaCanvasShadow::ringAlpha)));
+        for (int i = 0; i < GigaCanvasShadow::ringCount; i++) {
+            const QPolygonF outer = GigaCanvasShadow::ringOuter(corners, i);
+            if (outer.size() != 4) break;
+            QPainterPath ring;
+            ring.addPolygon(outer);
+            ring.closeSubpath();
+            gc.drawPath(ring.subtracted(inner));
+        }
+        gc.restore();
+    }
 
     QTransform checkersTransform;
     QPointF brushOrigin;

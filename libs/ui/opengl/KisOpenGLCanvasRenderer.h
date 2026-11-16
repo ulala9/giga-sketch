@@ -110,6 +110,8 @@ private:
     void drawImage(const QRect &updateRect);
     void drawImageTiles(int firstCol, int lastCol, int firstRow, int lastRow, qreal scaleX, qreal scaleY, const QPoint &wrapAroundOffset);
     void drawCheckers(const QRect &updateRect);
+    /// Giga Sketch: soft shadow around the image (see GigaCanvasShadow.h)
+    void gigaDrawCanvasShadow();
     void drawGrid(const QRect &updateRect);
 
     QRectF widgetToSurface(const QRectF &rc);
