@@ -1503,6 +1503,34 @@ void testStrokePoints(KisMainWindow *w)
     report(isRed(pixel(halfOld)) && isEmpty(pixel(half)) && activeTool() == pointsId, "strokepoints-proportional-undo",
            QStringLiteral("half-radius old place %1, bent place %2, tool %3").arg(name(pixel(halfOld)), name(pixel(half)), activeTool()));
     QMetaObject::invokeMethod(points, "gigaSetProportional", Q_ARG(bool, false), Q_ARG(int, 120), Q_ARG(int, 0));
+
+    // Live: while the dot is still held, the stroke has already moved.
+    {
+        const QPointF at = vertexPos(pmid);
+        const QPoint a = toWidget(at);
+        const QPoint b = toWidget(at + QPointF(0, 40));
+        auto send = [&](int phase, const QPoint &p) {
+            QMouseEvent e(phase == 0 ? QEvent::MouseButtonPress : phase == 1 ? QEvent::MouseMove : QEvent::MouseButtonRelease,
+                          p, cw->mapToGlobal(p), Qt::LeftButton, phase == 2 ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            KoPointerEvent ev(&e, conv->widgetToDocument(QPointF(p)));
+            KisTool *kt = static_cast<KisTool *>(points);
+            if (phase == 0) kt->beginPrimaryAction(&ev);
+            else if (phase == 1) kt->continuePrimaryAction(&ev);
+            else kt->endPrimaryAction(&ev);
+        };
+        send(0, a);
+        for (int i = 1; i <= 10; ++i) {
+            send(1, a + (b - a) * i / 10);
+            pass(15, false);
+        }
+        pass(800, false); // button still down: no release yet
+        const QColor held = pixel((at + QPointF(0, 40)).toPoint());
+        const QColor oldPlace = pixel(at.toPoint());
+        send(2, b);
+        wait(600);
+        report(isRed(held) && isEmpty(oldPlace), "strokepoints-live-while-dragging",
+               QStringLiteral("while held: new place %1, old place %2").arg(name(held), name(oldPlace)));
+    }
     static_cast<KisTool *>(points)->requestStrokeCancellation();
     wait(600);
     KisConfig(false).writeEntry<int>("gigaLastStrokeEditMode", 0);

@@ -191,6 +191,10 @@ void GigaToolStrokePoints::drag(KoPointerEvent *event)
             if (i >= 0 && i < m_startOffsets.size()) s->path().setOffset(i, m_startOffsets[i] + delta);
         }
     }
+    // Repaint live while dragging. The controller runs one repaint at a
+    // time and folds the moves made meanwhile into the next one, so this
+    // never queues up work or waits on the painting threads.
+    s->pointsChanged();
     updateOverlay();
 }
 
@@ -202,7 +206,7 @@ void GigaToolStrokePoints::release()
     m_moved = false;
     m_propDrag = false;
     setWheelCatcher(false);
-    if (s && moved) s->pointsChanged(); // repaint the stroke along the new path
+    if (s && moved) s->pointsChanged(); // final shape (the live repaints may lag one step)
     updateOverlay();
 }
 
@@ -320,16 +324,18 @@ void GigaToolStrokePoints::paint(QPainter &gc, const KoViewConverter &converter)
     gc.save();
     gc.setRenderHint(QPainter::Antialiasing, true);
 
-    // While dragging (and until the repaint lands): a thin line of the new path.
+    // While dragging (and until the repaint lands): a faint guide of the new
+    // path. The stroke itself repaints live; this only shows where it is
+    // heading when a big stroke's repaint is a step behind.
     if ((m_dragging && m_moved) || s->pointsRepainting()) {
         QPolygonF line;
         const QVector<QPointF> points = path.bentPolyline();
         line.reserve(points.size());
         for (const QPointF &p : points) line << pixelToView(p);
         gc.setBrush(Qt::NoBrush);
-        gc.setPen(QPen(QColor(0, 0, 0, 120), 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        gc.setPen(QPen(QColor(0, 0, 0, 45), 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         gc.drawPolyline(line);
-        gc.setPen(QPen(QColor(255, 255, 255, 230), 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        gc.setPen(QPen(QColor(255, 255, 255, 90), 1.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         gc.drawPolyline(line);
     }
 
@@ -593,6 +599,7 @@ void GigaToolStrokePoints::slotRadiusChanged(int value)
     if (s && m_propDrag && m_moved) {
         // Live while dragging: the move being made gets the new radius.
         if (GigaStrokePath::Move *move = s->path().lastMove()) move->radius = m_radius / viewScale();
+        s->pointsChanged(); // live, like dragging
     }
     updateOverlay();
 }
