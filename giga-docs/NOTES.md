@@ -690,11 +690,15 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   job that restores the lifted pixels (the shared `m_liveRect` QSharedPointer<QRect> is only touched by the image's
   sequential exclusive jobs, so no GUI wait); `pointsWarping()` → the tool draws `pointsWarpDevice()` (last repaint,
   converted once to a QImage at ~1.25× screen resolution) bent from `pointsWarpShape()` to the current shape:
-  cross-sections every ~8 screen px (+ caps of brush half-width past both ends), `QTransform::quadToQuad` per piece,
+  cross-sections every ~8 screen px (+ caps of brush half-width past both ends), two triangles per piece with affine maps (`triangleMap`),
   clip = source quad (aliased → shared edges, no seams), unchanged pieces in one clipped draw. Release →
   `pointsDragFinished()` = one repaint; warping ends 80 ms after it lands. `checkWarpable()`: single copy and render
   bounds inside the line's bounds + 1.6× half-width (else mirror/multi-brush pixels would vanish) → live repaint.
   Half-width = paintOpSize × 0.625 + 3. Measured: preview ~0.1 ms/frame on the GL canvas.
 - Self-test trick: paint a tool's overlay into a QImage with `p.setTransform(conv->flakeToWidgetTransform())` and
   `tool->paint(p, *canvas->viewConverter())` (grabbing the GL widget doesn't include tool overlays).
+- Gotcha: **don't use `QTransform::quadToQuad` (perspective) for mesh warps.** An over-stretched quad (small
+  proportional radius + long drag) puts its vanishing line through the piece and the image smears to infinity
+  (user saw a huge black "fan"). Two affine triangles per quad can only stretch. Self-test
+  `strokepoints-no-fan-on-small-radius`.
 
