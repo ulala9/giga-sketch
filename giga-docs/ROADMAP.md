@@ -4,10 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (icon batch 2 waiting for a look)
+Last updated: 2026-11-16 (new icons → extreme low priority)
 
 ## Resume here
-- **Next up:** icon batch 2 is in giga-test, waiting for the user's look; then batch 3 (vector/text/shapes), 4 (hand/zoom + panel strip).
+- **Next up:** not chosen yet. Candidates: Blender Viewport Layer step 0, a Phase 5 blueprint, Phase 6 extras.
+  New tool icons are **extreme low priority** (user, 2026-11-16): don't suggest batches 3–4.
+  Batch 2 stays in giga-test as-is; merge it only if the user OKs the look.
 - Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
 - Repo state: everything merged and pushed (2026-11-16: transform-last-stroke, stroke-points,
   stroke-points-proportional, refboard-image-search, refboard-delete-key, all hand-tested by the user).
@@ -82,7 +84,7 @@ Last updated: 2026-11-16 (icon batch 2 waiting for a look)
   - [x] Softer slider look, Preferences > General "Softer sliders" (`feature/slider-look`)
   - [x] Soft shadow around the canvas, Preferences > Display (`feature/canvas-shadow`)
   - [x] Interface motion: panel/flyout/tool-menu fades, mode-switch cross-fade, "Interface animations" (`feature/ui-motion`). Self-test `motion`.
-  - [ ] Original line-art tool icons (`feature/giga-tool-icons`): **batch 1 (paint/fill) merged, style OK'd**; batch 2 (8 selection tools, move, transform, crop, sampler, measure) in giga-test, waiting for a look; 3 (vector/text/shapes), 4 (hand/zoom + panel strip). Self-test `icons`.
+  - [ ] Original line-art tool icons (`feature/giga-tool-icons`): **batch 1 (paint/fill) merged, style OK'd**; batch 2 (8 selection tools, move, transform, crop, sampler, measure) in giga-test, unreviewed; batches 3–4 **extreme low priority** (user, 2026-11-16): 3 (vector/text/shapes), 4 (hand/zoom + panel strip). Self-test `icons`.
 
 ## Phase 5 — Feature blueprints (doc "Giga Sketch Feature Blueprints")
 - [x] Reference Board (`feature/reference-board`, merged 2026-11-14, hand-tested): Normalize, Arrange (5 styles,
@@ -139,6 +141,7 @@ Last updated: 2026-11-16 (icon batch 2 waiting for a look)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-16: new tool icons (batches 3–4) → extreme low priority; don't suggest them.
 - 2026-11-16: Board image search = small browser panel split inside the Board panel (not a separate panel, not
   APIs/scraping, not "use Firefox and drag"). Browser made on first Search click; WebEngine linked directly
   (~0.08 s startup), split into a lazy module only if needed.
