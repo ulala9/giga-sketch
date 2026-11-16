@@ -4,11 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Blender bridge step 0 waiting for a hand test)
+Last updated: 2026-11-16 (Blender bridge auto-layer + refresh waiting for a hand test)
 
 ## Resume here
-- **Next up:** user hand-tests Blender bridge step 0 (`feature/blender-bridge`: add-on
-  `giga-tools/blender/giga_viewport_send.py` + a File Layer). Their verdict decides whether to build the real layer type.
+- **Next up:** user hand-tests the Blender bridge (`feature/blender-bridge`): Send in Blender adds/updates a
+  "Blender: <camera>" layer by itself, switching to Giga Sketch refreshes it. Then merge; later maybe the real layer
+  type (capture saved in the .kra, Freeze to Paint Layer).
   New tool icons are **extreme low priority** (user, 2026-11-16): don't suggest batches 3–4.
   Batch 2 stays in giga-test as-is; merge it only if the user OKs the look.
 - Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
@@ -117,8 +118,11 @@ Last updated: 2026-11-16 (Blender bridge step 0 waiting for a hand test)
     (already auto-reloads, `kis_safe_document_loader.cpp`, 500 ms debounce). Tells whether the workflow fits.
   - Not in scope unless asked: live updates, Cycles, render passes (line art, colour IDs, AO, depth, normals),
     camera control from GigaSketch.
-  - Branch: `feature/blender-bridge`. **Step 0 done 2026-11-16** (add-on with Send, camera or current view, size,
-    transparent bg, hide overlays; self-tested in Blender 5.2.2), waiting for the user's hand test.
+  - Branch: `feature/blender-bridge`. **Step 0 done 2026-11-16**; user wanted less setup, so **step 1 done
+    2026-11-16**: local socket bridge (`GigaBlenderBridge`), Send adds the layer above the active one (or a new
+    document), later sends update it, switching to Giga Sketch asks Blender for a fresh picture (skipped if nothing
+    changed; pref in General > File Handling), Blender matches the canvas size. Still a File Layer pointing at the
+    PNG. Self-tests: `blender` + Blender-side scripts (NOTES). Waiting for the user's hand test.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
 - [x] Transform Last Stroke (`feature/transform-last-stroke`, merged 2026-11-16, hand-tested). Self-test `laststroke`.
@@ -134,6 +138,8 @@ Last updated: 2026-11-16 (Blender bridge step 0 waiting for a hand test)
 - After a Fedora update, link errors like `undefined reference to OpenColorIO_v2_4::…` / `Imf_3_2::…` = stale
   objects built against the old system library. Delete the `.o` files that mention the old namespace and rebuild
   (seen 2026-11-14: OCIO 2.4→2.5, OpenEXR 3.2→3.4).
+- `selftest.sh all`: 4 Reference Board checks (board-shift-space-rotate, board-focus-keeps-rotation,
+  board-reset-keeps-canvas-angle, arrange-canvas) fail in the full run but pass alone (seen 2026-11-16).
 - `panelsnap` self-test segfaults in a small test window (test dereferences a panel frame its drag docked).
 - After a crash/power loss: a 0-byte `build/libs/ui/kritaui_autogen/include/moc_*.cpp` causes link errors
   (`undefined reference to vtable/staticMetaObject`). Delete it and `touch` its header, then rebuild (2026-11-15).
@@ -143,6 +149,8 @@ Last updated: 2026-11-16 (Blender bridge step 0 waiting for a hand test)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-16: Blender bridge: Send creates the layer itself (above the active layer), refresh when switching
+  to Giga Sketch (on by default) instead of live streaming; one layer per camera.
 - 2026-11-16: new tool icons (batches 3–4) → extreme low priority; don't suggest them.
 - 2026-11-16: Board image search = small browser panel split inside the Board panel (not a separate panel, not
   APIs/scraping, not "use Firefox and drag"). Browser made on first Search click; WebEngine linked directly
