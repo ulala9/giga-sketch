@@ -8,6 +8,7 @@
 
 #include <QHash>
 #include <QPointer>
+#include <QUrl>
 #include <QRectF>
 #include <QSet>
 #include <QWidget>
@@ -18,7 +19,9 @@
 #include <KisReferenceImagesLayer.h>
 
 class KisCanvas2;
+class KisDocument;
 class KisReferenceImage;
+class QNetworkAccessManager;
 class QVariantAnimation;
 
 /**
@@ -74,9 +77,18 @@ public Q_SLOTS:
     void focusImage(KisReferenceImage *image);
     void focusStep(int direction); ///< -1 previous, +1 next (arrangement order)
     void resetRotation(); ///< back to upright, animated (F1 / the canvas reset key)
+    /**
+     * Downloads web images in the background and adds them to the Board in
+     * one undo step once all have arrived (or failed). Each entry is a list
+     * of addresses to try in order (full size first, then the one shown).
+     * http(s), data: and file: addresses work.
+     */
+    void addWebImages(const QList<QStringList> &images, const QUrl &referrer);
 
 Q_SIGNALS:
     void contentChanged();
+    /// "Adding 3 images…", "2 added, 1 couldn't be downloaded", or empty.
+    void fetchStatusChanged(const QString &text);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -137,6 +149,25 @@ private:
 
     void pickColor(KisReferenceImage *image, const QPointF &widgetPos);
     void addImages(const QList<QImage> &images, const QStringList &files, const QPointF *dropBoardPos);
+
+    // Web image downloads (addWebImages, drops of web links).
+    struct WebItem {
+        QStringList candidates; // still to try, in order
+        QImage image;           // the result
+        QImage fallback;        // e.g. the picture carried by a drag, if every address fails
+    };
+    struct WebBatch {
+        QVector<WebItem> items;
+        int pending = 0;
+        QUrl referrer;
+        QPointer<KisDocument> document; // dropped if the user switched documents meanwhile
+        bool hasDropPos = false;
+        QPointF dropPos;
+    };
+    void startWebBatch(const QVector<WebItem> &items, const QUrl &referrer, const QPointF *dropBoardPos);
+    void fetchNext(int batchId, int index);
+    void webItemDone(int batchId, int index, const QImage &image);
+    void updateFetchStatus();
     void pushCommand(KUndo2Command *command);
     void updateCursor(const QPointF &pos);
     void reportViewportSize();
@@ -192,6 +223,12 @@ private:
     qreal m_touchDistance = 0.0;
 
     QPointer<QWidget> m_focusBeforeHover;
+
+    QNetworkAccessManager *m_network {nullptr}; // made on the first web download
+    QHash<int, WebBatch> m_webBatches;
+    int m_nextBatchId = 1;
+    int m_lastAdded = 0;
+    int m_lastFailed = 0;
 };
 
 #endif

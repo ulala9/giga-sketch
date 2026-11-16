@@ -30,7 +30,14 @@
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QImageReader>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QtConcurrent>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMimeData>
@@ -1080,6 +1087,49 @@ void GigaReferenceBoardView::sendAllToCanvas()
     pushCommand(GigaReferenceBoard::sendToCanvas(liveImages()));
 }
 
+namespace
+{
+bool isWebImageAddress(const QUrl &url)
+{
+    const QString scheme = url.scheme();
+    return scheme == QLatin1String("http") || scheme == QLatin1String("https")
+        || (scheme == QLatin1String("data") && url.toString().startsWith(QLatin1String("data:image/")));
+}
+
+/// A dragged address from the image search browser may carry alternatives
+/// in "#giga-alt=[...]" (servers never see the part after #).
+QStringList candidatesFromDraggedUrl(const QUrl &url)
+{
+    if (url.scheme() == QLatin1String("data")) return {url.toString()};
+    QStringList out;
+    const QString fragment = url.fragment(QUrl::FullyDecoded);
+    QUrl main = url;
+    if (fragment.startsWith(QLatin1String("giga-alt="))) {
+        main.setFragment(QString());
+        out.append(main.toString());
+        const QJsonArray alts = QJsonDocument::fromJson(fragment.mid(9).toUtf8()).array();
+        for (const QJsonValue &v : alts) {
+            if (!v.toString().isEmpty()) out.append(v.toString());
+        }
+    } else {
+        out.append(url.toString());
+    }
+    return out;
+}
+
+/// Pictures from "data:image/png;base64,...." addresses (Google thumbnails).
+QByteArray dataUrlBytes(const QString &url)
+{
+    const int comma = url.indexOf(QLatin1Char(','));
+    if (comma < 0) return QByteArray();
+    const QString header = url.left(comma);
+    const QByteArray payload = url.mid(comma + 1).toLatin1();
+    return header.endsWith(QLatin1String(";base64")) ? QByteArray::fromBase64(payload) : QByteArray::fromPercentEncoding(payload);
+}
+
+constexpr qint64 kMaxDownloadBytes = 150ll * 1024 * 1024;
+} // namespace
+
 void GigaReferenceBoardView::paste()
 {
     const QMimeData *mime = QApplication::clipboard()->mimeData();
@@ -1090,10 +1140,16 @@ void GigaReferenceBoardView::paste()
         const QImage image = qvariant_cast<QImage>(mime->imageData());
         if (!image.isNull()) images.append(image);
     }
+    QList<QStringList> web;
     if (images.isEmpty() && mime->hasUrls()) {
         for (const QUrl &url : mime->urls()) {
             if (url.isLocalFile()) files.append(url.toLocalFile());
+            else if (isWebImageAddress(url)) web.append(candidatesFromDraggedUrl(url)); // Giga: copied image address
         }
+    }
+    if (!web.isEmpty() && files.isEmpty()) {
+        addWebImages(web, QUrl());
+        return;
     }
     addImages(images, files, nullptr);
 }
@@ -1167,27 +1223,184 @@ void GigaReferenceBoardView::dragEnterEvent(QDragEnterEvent *event)
     }
 }
 
+
 void GigaReferenceBoardView::dropEvent(QDropEvent *event)
 {
     const QMimeData *mime = event->mimeData();
     QList<QImage> images;
     QStringList files;
+    QVector<WebItem> webItems;
     if (mime->hasUrls()) {
         for (const QUrl &url : mime->urls()) {
             if (url.isLocalFile() && !QImageReader::imageFormat(url.toLocalFile()).isEmpty()) {
                 files.append(url.toLocalFile());
             } else if (url.isLocalFile()) {
                 files.append(url.toLocalFile()); // let Krita try (e.g. .kra)
+            } else if (isWebImageAddress(url)) {
+                // Giga Sketch: an image dragged from a web page (the image
+                // search panel or another browser): download it.
+                WebItem item;
+                item.candidates = candidatesFromDraggedUrl(url);
+                webItems.append(item);
             }
         }
     }
-    if (files.isEmpty() && mime->hasImage()) {
-        const QImage image = qvariant_cast<QImage>(mime->imageData());
-        if (!image.isNull()) images.append(image);
-    }
+    QImage carried;
+    if (mime->hasImage()) carried = qvariant_cast<QImage>(mime->imageData());
     const QPointF boardPos = toBoard(event->position());
-    addImages(images, files, liveImages().isEmpty() ? nullptr : &boardPos);
+    const QPointF *dropPos = liveImages().isEmpty() ? nullptr : &boardPos;
+    if (!webItems.isEmpty() && files.isEmpty()) {
+        // The browser's own picture (often the small preview) if every address fails.
+        if (webItems.size() == 1 && !carried.isNull()) webItems[0].fallback = carried;
+        startWebBatch(webItems, QUrl(), dropPos);
+        event->acceptProposedAction();
+        return;
+    }
+    if (files.isEmpty() && !carried.isNull()) images.append(carried);
+    addImages(images, files, dropPos);
     event->acceptProposedAction();
+}
+
+void GigaReferenceBoardView::addWebImages(const QList<QStringList> &images, const QUrl &referrer)
+{
+    QVector<WebItem> items;
+    for (const QStringList &candidates : images) {
+        if (candidates.isEmpty()) continue;
+        WebItem item;
+        item.candidates = candidates;
+        items.append(item);
+    }
+    startWebBatch(items, referrer, nullptr);
+}
+
+void GigaReferenceBoardView::startWebBatch(const QVector<WebItem> &items, const QUrl &referrer, const QPointF *dropBoardPos)
+{
+    if (!m_canvas || items.isEmpty()) return;
+    if (!m_network) {
+        m_network = new QNetworkAccessManager(this);
+        m_network->setRedirectPolicy(QNetworkRequest::NoLessSafeRedirectPolicy);
+    }
+    const int id = m_nextBatchId++;
+    WebBatch batch;
+    batch.items = items;
+    batch.pending = items.size();
+    batch.referrer = referrer;
+    batch.document = m_canvas->imageView()->document();
+    if (dropBoardPos) {
+        batch.hasDropPos = true;
+        batch.dropPos = *dropBoardPos;
+    }
+    m_webBatches.insert(id, batch);
+    if (m_webBatches.size() == 1) m_lastAdded = m_lastFailed = 0;
+    updateFetchStatus();
+    for (int i = 0; i < items.size(); ++i) fetchNext(id, i);
+}
+
+void GigaReferenceBoardView::fetchNext(int batchId, int index)
+{
+    auto it = m_webBatches.find(batchId);
+    if (it == m_webBatches.end()) return;
+    WebItem &item = it->items[index];
+    if (item.candidates.isEmpty()) { // every address failed
+        webItemDone(batchId, index, item.fallback);
+        return;
+    }
+    const QString address = item.candidates.takeFirst();
+
+    // Decoding a big photo takes a moment: do it off the interface thread.
+    QPointer<GigaReferenceBoardView> self(this);
+    auto decode = [self, batchId, index](const QByteArray &bytes) {
+        if (!self) return;
+        QFutureWatcher<QImage> *watcher = new QFutureWatcher<QImage>(self);
+        connect(watcher, &QFutureWatcher<QImage>::finished, self, [self, watcher, batchId, index]() {
+            const QImage image = watcher->result();
+            watcher->deleteLater();
+            if (!self) return;
+            if (image.isNull()) self->fetchNext(batchId, index); // not a picture: try the next address
+            else self->webItemDone(batchId, index, image);
+        });
+        watcher->setFuture(QtConcurrent::run([bytes]() { return QImage::fromData(bytes); }));
+    };
+
+    if (address.startsWith(QLatin1String("data:"))) {
+        decode(dataUrlBytes(address));
+        return;
+    }
+
+    const QUrl url(address);
+    if (!url.isValid()) {
+        fetchNext(batchId, index);
+        return;
+    }
+    QNetworkRequest request(url);
+    request.setTransferTimeout(20000);
+    // A plain desktop browser identity; some image hosts refuse unknown clients.
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      QStringLiteral("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"));
+    request.setRawHeader("Accept", "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5");
+    if (it->referrer.isValid() && it->referrer.scheme().startsWith(QLatin1String("http"))) {
+        request.setRawHeader("Referer", it->referrer.toEncoded());
+    }
+    QNetworkReply *reply = m_network->get(request);
+    connect(reply, &QNetworkReply::downloadProgress, reply, [reply](qint64 received, qint64) {
+        if (received > kMaxDownloadBytes) reply->abort();
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, batchId, index, decode]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            fetchNext(batchId, index);
+            return;
+        }
+        decode(reply->readAll());
+    });
+}
+
+void GigaReferenceBoardView::webItemDone(int batchId, int index, const QImage &image)
+{
+    auto it = m_webBatches.find(batchId);
+    if (it == m_webBatches.end()) return;
+    it->items[index].image = image;
+    if (--it->pending > 0) {
+        updateFetchStatus();
+        return;
+    }
+    // All of this batch is in: add the pictures together (one undo step).
+    WebBatch batch = it.value();
+    m_webBatches.erase(it);
+    QList<QImage> images;
+    for (const WebItem &item : batch.items) {
+        if (!item.image.isNull()) images.append(item.image);
+    }
+    const int failed = batch.items.size() - images.size();
+    const bool sameDocument = m_canvas && batch.document && batch.document == m_canvas->imageView()->document();
+    if (sameDocument && !images.isEmpty()) {
+        addImages(images, QStringList(), batch.hasDropPos ? &batch.dropPos : nullptr);
+        m_lastAdded += images.size();
+    }
+    m_lastFailed += sameDocument ? failed : batch.items.size();
+    updateFetchStatus();
+}
+
+void GigaReferenceBoardView::updateFetchStatus()
+{
+    int waiting = 0;
+    for (const WebBatch &batch : std::as_const(m_webBatches)) waiting += batch.pending;
+    if (waiting > 0) {
+        Q_EMIT fetchStatusChanged(i18np("Adding 1 image…", "Adding %1 images…", waiting));
+        return;
+    }
+    if (m_lastFailed == 0) {
+        Q_EMIT fetchStatusChanged(QString());
+        return;
+    }
+    const QString text = m_lastAdded > 0
+        ? i18np("%2 added, 1 couldn't be downloaded", "%2 added, %1 couldn't be downloaded", m_lastFailed, m_lastAdded)
+        : i18np("The image couldn't be downloaded", "%1 images couldn't be downloaded", m_lastFailed);
+    Q_EMIT fetchStatusChanged(text);
+    QPointer<GigaReferenceBoardView> self(this);
+    QTimer::singleShot(5000, this, [self]() {
+        if (self && self->m_webBatches.isEmpty()) Q_EMIT self->fetchStatusChanged(QString());
+    });
 }
 
 void GigaReferenceBoardView::contextMenuEvent(QContextMenuEvent *event)

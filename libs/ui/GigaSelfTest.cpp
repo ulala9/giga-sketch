@@ -52,6 +52,10 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QDir>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QLabel>
+#include <QBuffer>
 #include <QDockWidget>
 #include <QElapsedTimer>
 #include <QKeyEvent>
@@ -1082,6 +1086,176 @@ void testReferenceBoard(KisMainWindow *w)
     delete reopened;
 }
 
+/// Reference Board image search (feature/refboard-image-search): web image
+/// downloads (with fallback addresses, one undo step per batch, drops of web
+/// links) and, when built with Qt WebEngine, the search browser: full-size
+/// rules, right-click add, Pick mode. Local files only, no internet needed.
+void testReferenceBoardSearch(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    if (!doc || !view || !view->canvasBase()) { report(false, "refsearch-setup", QStringLiteral("no document")); return; }
+    QDockWidget *dock = w->dockWidget(QStringLiteral("GigaReferenceBoard"));
+    if (!dock) { report(false, "refsearch-setup", QStringLiteral("no Board panel")); return; }
+    dock->show();
+    dock->raise();
+    pump(10);
+    QWidget *boardView = dock->findChild<QWidget *>(QStringLiteral("GigaReferenceBoardView"));
+    if (!boardView) { report(false, "refsearch-setup", QStringLiteral("no Board view")); return; }
+    auto wait = [](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) pump(1); };
+    auto count = [boardView]() { return boardView->property("imageCount").toInt(); };
+    auto waitForCount = [&](int wanted, int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (count() != wanted && t.elapsed() < ms) pump(1);
+        return count() == wanted;
+    };
+    auto newestWidth = [doc]() {
+        KisSharedPtr<KisReferenceImagesLayer> layer = doc->referenceImagesLayer();
+        if (!layer || layer->referenceImages().isEmpty()) return 0;
+        int best = 0, z = -1;
+        for (KisReferenceImage *r : layer->referenceImages()) {
+            if (r->zIndex() > z) { z = r->zIndex(); best = r->imagePixelSize().width(); }
+        }
+        return best;
+    };
+
+    // Test pictures on disk.
+    const QDir home = QDir::home();
+    auto savePng = [&home](const QString &name, int w, int h, const QColor &c) {
+        QImage img(w, h, QImage::Format_ARGB32);
+        img.fill(c);
+        img.save(home.filePath(name), "PNG");
+        return QUrl::fromLocalFile(home.filePath(name)).toString();
+    };
+    const QString small = savePng(QStringLiteral("small.png"), 100, 80, Qt::red);
+    const QString big = savePng(QStringLiteral("big.png"), 800, 640, Qt::red);
+    const QString other = savePng(QStringLiteral("other.png"), 120, 90, Qt::green);
+    const QString big2 = savePng(QStringLiteral("big2.png"), 600, 300, Qt::blue);
+    const QString missing = QUrl::fromLocalFile(home.filePath(QStringLiteral("missing.png"))).toString();
+
+    // 1. Download with a fallback: the first address fails, the second works.
+    int before = count();
+    QList<QStringList> one = {{missing, big}};
+    QMetaObject::invokeMethod(boardView, "addWebImages", Qt::DirectConnection, Q_ARG(QList<QStringList>, one), Q_ARG(QUrl, QUrl()));
+    bool ok = waitForCount(before + 1, 5000);
+    report(ok && newestWidth() == 800, "refsearch-download-fallback",
+           QStringLiteral("count %1 -> %2, width %3").arg(before).arg(count()).arg(newestWidth()));
+
+    // 2. Two at once = one undo step.
+    before = count();
+    QList<QStringList> two = {{small}, {other}};
+    QMetaObject::invokeMethod(boardView, "addWebImages", Qt::DirectConnection, Q_ARG(QList<QStringList>, two), Q_ARG(QUrl, QUrl()));
+    ok = waitForCount(before + 2, 5000);
+    doc->undoStack()->undo();
+    pump(5);
+    report(ok && count() == before, "refsearch-batch-one-undo", QStringLiteral("after undo %1 (was %2)").arg(count()).arg(before));
+
+    // 3. Nothing works: nothing added, a note says so.
+    before = count();
+    QList<QStringList> bad = {{missing}};
+    QMetaObject::invokeMethod(boardView, "addWebImages", Qt::DirectConnection, Q_ARG(QList<QStringList>, bad), Q_ARG(QUrl, QUrl()));
+    wait(500);
+    QLabel *status = dock->findChild<QLabel *>(QStringLiteral("GigaReferenceBoardStatus"));
+    report(count() == before && status && status->text().contains(QStringLiteral("couldn't")), "refsearch-failed-note",
+           status ? status->text() : QStringLiteral("no status label"));
+
+    // 4. A dropped web image (data: address, like Google thumbnails).
+    {
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        QImage img(64, 32, QImage::Format_ARGB32);
+        img.fill(Qt::yellow);
+        img.save(&buffer, "PNG");
+        QMimeData mime;
+        mime.setUrls({QUrl(QStringLiteral("data:image/png;base64,") + QString::fromLatin1(png.toBase64()))});
+        before = count();
+        const QPointF at(boardView->width() / 2.0, boardView->height() / 2.0);
+        // Qt only delivers a drop to the widget a drag entered first.
+        QDragEnterEvent enter(at.toPoint(), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(boardView, &enter);
+        QDropEvent drop(at, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(boardView, &drop);
+        ok = waitForCount(before + 1, 5000);
+        report(ok && newestWidth() == 64, "refsearch-drop-web-image", QStringLiteral("count %1 -> %2, width %3, status %4").arg(before).arg(count()).arg(newestWidth()).arg(status ? status->text() : QString()));
+    }
+
+    // 5. The search browser (only when built with Qt WebEngine).
+    QToolButton *searchButton = dock->findChild<QToolButton *>(QStringLiteral("GigaImageSearchButton"));
+    if (!searchButton) {
+        info(QStringLiteral("built without Qt WebEngine: no Search button, browser checks skipped"));
+        return;
+    }
+    QElapsedTimer startup;
+    startup.start();
+    searchButton->click();
+    pump(5);
+    QWidget *search = dock->findChild<QWidget *>(QStringLiteral("GigaImageSearchView"));
+    report(search && search->isVisible(), "refsearch-opens", QStringLiteral("browser made in %1 ms").arg(startup.elapsed()));
+    if (!search) return;
+
+    // A local page: a srcset picture, a plain one, and a Bing-style tile.
+    QFile page(home.filePath(QStringLiteral("results.html")));
+    page.open(QIODevice::WriteOnly);
+    page.write(QStringLiteral(
+        "<html><body>"
+        "<img id=a src='%1' srcset='%1 100w, %2 800w' width=100>"
+        "<img id=b src='%3' width=100>"
+        "<a class=iusc m='{\"murl\":\"%4\",\"turl\":\"%3\"}'><img id=c src='%3' width=100></a>"
+        "</body></html>").arg(small, big, other, big2).toUtf8());
+    page.close();
+    QMetaObject::invokeMethod(search, "loadUrl", Qt::DirectConnection, Q_ARG(QUrl, QUrl::fromLocalFile(page.fileName())));
+    QElapsedTimer loading;
+    loading.start();
+    while (!search->property("pageLoaded").toBool() && loading.elapsed() < 15000) pump(1);
+    report(search->property("pageLoaded").toBool(), "refsearch-page-loads", QStringLiteral("%1 ms").arg(loading.elapsed()));
+    wait(300);
+
+    QString answer;
+    QMetaObject::invokeMethod(search, "runScriptForTest", Qt::DirectConnection, Q_RETURN_ARG(QString, answer),
+                              Q_ARG(QString, QStringLiteral("window.__giga.candidatesForUrl('https://i.pinimg.com/236x/aa/bb/cc/x.jpg')")));
+    report(answer.startsWith(QStringLiteral("https://i.pinimg.com/originals/aa/bb/cc/x.jpg")), "refsearch-pinterest-full-size",
+           answer.section(QLatin1Char('\n'), 0, 0));
+
+    // Right-click > Add to Board on the srcset picture: the 800 px one arrives.
+    before = count();
+    QMetaObject::invokeMethod(search, "addImageByIndex", Qt::DirectConnection, Q_ARG(int, 0));
+    ok = waitForCount(before + 1, 5000);
+    report(ok && newestWidth() == 800, "refsearch-add-full-size", QStringLiteral("width %1").arg(newestWidth()));
+
+    // Pick mode: mark two (the Bing tile gives its original), add them in one go.
+    search->setProperty("pickMode", true);
+    QMetaObject::invokeMethod(search, "togglePickByIndex", Qt::DirectConnection, Q_ARG(int, 1));
+    QMetaObject::invokeMethod(search, "togglePickByIndex", Qt::DirectConnection, Q_ARG(int, 2));
+    QElapsedTimer picking;
+    picking.start();
+    while (search->property("pickCount").toInt() != 2 && picking.elapsed() < 3000) pump(1);
+    report(search->property("pickCount").toInt() == 2, "refsearch-pick-count", QString::number(search->property("pickCount").toInt()));
+    before = count();
+    QMetaObject::invokeMethod(search, "addSelected", Qt::DirectConnection);
+    ok = waitForCount(before + 2, 5000);
+    int widest = 0;
+    if (KisSharedPtr<KisReferenceImagesLayer> layer = doc->referenceImagesLayer()) {
+        for (KisReferenceImage *r : layer->referenceImages()) widest = qMax(widest, r->imagePixelSize().width() == 600 ? 600 : 0);
+    }
+    report(ok && widest == 600, "refsearch-pick-add", QStringLiteral("count %1 -> %2, Bing original found: %3").arg(before).arg(count()).arg(widest == 600));
+    wait(300);
+    report(search->property("pickCount").toInt() == 0, "refsearch-pick-cleared", QString::number(search->property("pickCount").toInt()));
+    doc->undoStack()->undo();
+    pump(5);
+    report(count() == before, "refsearch-pick-one-undo", QString::number(count()));
+
+    // Closing the split hides the browser, reopening shows the same one.
+    searchButton->click();
+    pump(5);
+    const bool hidden = !search->isVisible();
+    searchButton->click();
+    pump(5);
+    QWidget *again = dock->findChild<QWidget *>(QStringLiteral("GigaImageSearchView"));
+    report(hidden && again == search && search->isVisible(), "refsearch-toggle-keeps-browser", QString());
+}
+
 QString s_dumpSuffix;
 
 /// Canvas look: dark surround, and the grid drawn over it only when
@@ -1532,6 +1706,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("autosave"), testAutosaveName},
         {QStringLiteral("accent"), testAccentColor},
         {QStringLiteral("refboard"), testReferenceBoard},
+        {QStringLiteral("refsearch"), testReferenceBoardSearch},
         {QStringLiteral("icons"), testToolIcons},
         {QStringLiteral("canvaslook"), testCanvasLook},
         {QStringLiteral("layerbuttons"), testLayerButtons},

@@ -4,12 +4,18 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (backlog: Reference Board image search)
+Last updated: 2026-11-16 (Reference Board image search built, waiting for hand test)
 
 ## Resume here
-- **Next up:** the user's hand test of Transform Last Stroke + its Points mode (below), then icon batches 2–4
-  (user OK'd the batch 1 style).
+- **Next up:** the user's hand test of Transform Last Stroke + its Points mode and of Reference Board image search
+  (below), then icon batches 2–4 (user OK'd the batch 1 style).
 - Waiting for a hand test (in `giga-test`):
+  - `feature/refboard-image-search` — Board header Search button splits the panel into a small browser (Google
+    Images / Bing / Pinterest) + the Board. Drag an image over, right-click ▸ Add to Board, or Pick mode → "Add
+    selected (N)" (one Ctrl+Z). Tries the full-size image first. Own logins (Look ▸ Clear Browsing Data…, Close
+    Browser). Needs `qt6-qtwebengine-devel` to build (installed). Self-test `refsearch` (13 checks).
+    Hand-test: real searches on all three sites, full size vs preview, Pinterest login, drag from Firefox too,
+    painting while the browser is open (no lag), wide vs tall panel.
   - `feature/transform-last-stroke` — Edit ▸ Transform Last Stroke (Ctrl+Shift+Alt+T): Transform tool (Warp by
     default, remembers the last mode) on only the last stroke; what it covered reappears; Esc puts it back; one
     Ctrl+Z = stroke as drawn. Self-test `laststroke` (15 checks).
@@ -37,7 +43,7 @@ Last updated: 2026-11-16 (backlog: Reference Board image search)
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
   Pending in `giga-test` now: `feature/transform-last-stroke`, `feature/stroke-points`,
-  `feature/stroke-points-proportional`.
+  `feature/stroke-points-proportional`, `feature/refboard-image-search`.
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -107,6 +113,7 @@ Last updated: 2026-11-16 (backlog: Reference Board image search)
   order, shape, spacing), Board panel with own camera, Send to Board / Canvas, click-to-focus, ←/→, Ctrl+click colour,
   drop/paste, look options, Resample to Current Size + shrink-on-save. Self-test `refboard`.
 - [x] Board rotate/zoom/flip with the canvas (`feature/refboard-rotate-zoom`, `feature/refboard-flip`, merged 2026-11-15)
+- [ ] Board image search: small browser panel (`feature/refboard-image-search`, built 2026-11-16, waiting for hand test)
 - [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
 - [ ] **Blender Viewport Layer** (replaces the "3D Model Layer" blueprint; scoped 2026-11-16, not started).
   A basic capture of Blender's viewport onto a GigaSketch layer, instead of importing models.
@@ -147,19 +154,12 @@ Last updated: 2026-11-16 (backlog: Reference Board image search)
 - Pre-existing upstream test failures (not ours): TestSvgParser/Cloned/RoundTrip, SvgTextCursorTest RTL/vertical.
 
 ## Backlog / ideas (not scheduled)
-- 2026-11-16: **Reference Board image search mode** — a small browser panel attached to the Reference Board
-  (user chose this over "search in Firefox and drag in"; not an API/scraper: no free search APIs, scraping breaks
-  terms).
-  - Top: search bar + site picker (Google Images / Bing Images / Pinterest). Below: the real site's results.
-  - Drag an image onto the board, or right-click ▸ Add to Board; lands in the board's Arrange layout.
-  - Pick mode: click several images, "Add selected" lays them all out at once.
-  - Try to fetch the full-size image, not the thumbnail, where the site links to it.
-  - Normal browsing, so the user's own logins work (their Pinterest boards/results).
-  - Qt WebEngine (Chromium): bigger app, a few hundred MB of memory while open → load it only when the panel
-    opens. Runtime is installed; needs `qt6-qtwebengine-devel` to build.
-  - Branch when started: `feature/refboard-image-search`.
+- (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-16: Board image search = small browser panel split inside the Board panel (not a separate panel, not
+  APIs/scraping, not "use Firefox and drag"). Browser made on first Search click; WebEngine linked directly
+  (~0.08 s startup), split into a lazy module only if needed.
 - 2026-11-16: 3D = bridge to Blender (capture its viewport onto a layer), not model import. On demand,
   Solid/EEVEE, one plain image.
 - 2026-11-15: Points drag = bend the last repaint on screen while dragging, real repaint on release (user chose
