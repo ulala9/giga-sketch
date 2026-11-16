@@ -69,6 +69,7 @@
 #include "GigaFloatingPanelManager.h"
 #include "GigaSelfTest.h"
 #include "GigaSaveDated.h"
+#include "GigaLastStrokeTransform.h"
 #include "GigaZoomOption.h"
 #include <kis_action_registry.h>
 #include <QToolBar>
@@ -955,6 +956,20 @@ void KisMainWindow::gigaAddFileMenuItems()
     const int at = items.indexOf(saveAs);
     QAction *before = (at >= 0 && at + 1 < items.size()) ? items.at(at + 1) : nullptr;
     fileMenu->insertAction(before, saveDated);
+    gigaAddEditMenuItems();
+}
+
+void KisMainWindow::gigaAddEditMenuItems()
+{
+    // Edit > Transform Last Stroke, right after Redo. Added in code (not in
+    // the .xmlgui files) so it shows in every interface mode's menus.
+    QMenu *editMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("edit"), this));
+    QAction *lastStroke = actionCollection()->action(QStringLiteral("giga_transform_last_stroke"));
+    if (!editMenu || !lastStroke || editMenu->actions().contains(lastStroke)) return;
+    const QList<QAction *> items = editMenu->actions();
+    const int at = items.indexOf(actionCollection()->action(QStringLiteral("edit_redo")));
+    QAction *before = (at >= 0 && at + 1 < items.size()) ? items.at(at + 1) : nullptr;
+    editMenu->insertAction(before, lastStroke);
 }
 
 void KisMainWindow::gigaAddViewMenuItems()
@@ -3912,6 +3927,12 @@ void KisMainWindow::createActions()
     // it can be given a shortcut in Settings > Configure Shortcuts).
     if (KisAction *saveDated = actionManager->createAction("giga_save_dated_jpg")) {
         connect(saveDated, &QAction::triggered, this, [this]() { GigaSaveDated::saveDatedJpg(this); });
+    }
+
+    // Giga Sketch: Edit > Transform Last Stroke (gigasketch.action, Ctrl+Shift+Alt+T).
+    if (KisAction *lastStroke = actionManager->createAction("giga_transform_last_stroke")) {
+        GigaLastStrokeTransform *controller = new GigaLastStrokeTransform(this);
+        connect(lastStroke, &QAction::triggered, this, [this, controller]() { controller->trigger(viewManager()); });
     }
 
     d->exportFileAdvance  = actionManager->createAction("file_export_advanced");

@@ -218,6 +218,22 @@ Q_SIGNALS:
     void freeTransformChanged();
     void warpTransformChanged();
 
+    /**
+     * Giga Sketch (Transform Last Stroke): emitted once when a transform
+     * that was started with an external image (newActivationWithExternalSource)
+     * ends. @p applied is true when the image was placed on the layer,
+     * false when it was cancelled or could not start. @p mode is the
+     * TransformToolMode that was in use (so it can be offered again).
+     */
+    void gigaExternalSourceStrokeFinished(bool applied, int mode);
+
+public:
+    /// Giga Sketch: callable without linking to this plugin (QMetaObject::invokeMethod).
+    /// @p mode is a TransformToolMode value; it is used for the next activation only.
+    Q_INVOKABLE void gigaSetNextActivationMode(int mode);
+    /// Giga Sketch: the mode currently in use, as a TransformToolMode value.
+    Q_INVOKABLE int gigaCurrentMode() const;
+
 public Q_SLOTS:
     void requestUndoDuringStroke() override;
     void requestRedoDuringStroke() override;
@@ -283,6 +299,7 @@ private:
     KisSignalAutoConnectionsStore m_actionConnections;
 
     TransformToolMode nextActivationTransformMode {FreeTransformMode};
+    bool m_gigaExternalStroke {false}; // Giga Sketch: the running stroke places an external image
 
     /// actions for the context click menu
     KisAction* warpAction {0};

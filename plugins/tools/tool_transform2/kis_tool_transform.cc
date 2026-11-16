@@ -546,6 +546,17 @@ void KisToolTransform::setNextActivationTransformMode(KisToolTransform::Transfor
     nextActivationTransformMode = mode;
 }
 
+void KisToolTransform::gigaSetNextActivationMode(int mode)
+{
+    if (mode < FreeTransformMode || mode > MeshTransformMode) mode = FreeTransformMode;
+    nextActivationTransformMode = TransformToolMode(mode);
+}
+
+int KisToolTransform::gigaCurrentMode() const
+{
+    return int(transformMode());
+}
+
 KisToolTransform::TransformToolMode KisToolTransform::transformMode() const
 {
     TransformToolMode mode = FreeTransformMode;
@@ -915,6 +926,18 @@ void KisToolTransform::startStroke(ToolTransformArgs::TransformMode mode, bool f
     KisPaintDeviceSP externalSource = m_externalSourceForNextActivation;
     m_externalSourceForNextActivation.clear();
 
+    // Giga Sketch: if a transform of an external image can't start (locked
+    // layer, wrong layer type, ...), say so, so a waiting caller can undo
+    // its preparations. A small guard object does this on every early return.
+    struct GigaStartGuard {
+        KisToolTransform *tool;
+        bool external;
+        bool started = false;
+        ~GigaStartGuard() {
+            if (external && !started) Q_EMIT tool->gigaExternalSourceStrokeFinished(false, int(tool->nextActivationTransformMode));
+        }
+    } gigaGuard{this, bool(externalSource)};
+
     // set up and null checks before we do anything
     KisResourcesSnapshotSP resources =
             new KisResourcesSnapshot(image(), currentNode(), this->canvas()->resourceManager(), 0, selectedNodes(), 0);
@@ -1040,6 +1063,8 @@ void KisToolTransform::startStroke(ToolTransformArgs::TransformMode mode, bool f
     }
 
     m_strokeId = image()->startStroke(strategy);
+    m_gigaExternalStroke = bool(externalSource);
+    gigaGuard.started = true;
 
     if (!m_currentlyUsingOverlayPreviewStyle) {
         m_asyncUpdateHelper.initUpdateStreamLowLevel(image().data(), m_strokeId);
@@ -1073,6 +1098,11 @@ void KisToolTransform::endStroke()
     m_changesTracker.reset();
     m_transaction = TransformTransactionProperties(QRectF(), &m_currentArgs, KisNodeList(), {});
     outlineChanged();
+
+    if (m_gigaExternalStroke) {
+        m_gigaExternalStroke = false;
+        Q_EMIT gigaExternalSourceStrokeFinished(true, int(transformMode()));
+    }
 }
 
 void KisToolTransform::slotTransactionGenerated(TransformTransactionProperties transaction, ToolTransformArgs args, void *strokeStrategyCookie)
@@ -1150,6 +1180,11 @@ void KisToolTransform::cancelStroke()
     m_changesTracker.reset();
     m_transaction = TransformTransactionProperties(QRectF(), &m_currentArgs, KisNodeList(), {});
     outlineChanged();
+
+    if (m_gigaExternalStroke) {
+        m_gigaExternalStroke = false;
+        Q_EMIT gigaExternalSourceStrokeFinished(false, int(transformMode()));
+    }
 }
 
 void KisToolTransform::commitChanges()

@@ -36,6 +36,16 @@ public:
     int levelOfDetail() const;
     void setLevelOfDetail(int value);
 
+    /**
+     * Giga Sketch (Transform Last Stroke): an independent copy whose
+     * generators start in the same state as this one. The normal copy
+     * constructor shares the generators (on purpose, for LoD clones), so
+     * reading numbers from one would advance the other. Taken before a
+     * stroke starts, it lets the same stroke be repainted with exactly the
+     * same jitter/scatter.
+     */
+    KisStrokeRandomSource gigaDeepCopy() const;
+
 private:
     struct Private;
     const QScopedPointer<Private> m_d;

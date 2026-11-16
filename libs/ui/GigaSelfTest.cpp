@@ -45,6 +45,7 @@
 #include "GigaMotion.h"
 #include "GigaAccent.h"
 #include <kundo2stack.h>
+#include <klocalizedstring.h>
 #include <KoCanvasResourceProvider.h>
 #include <KoColor.h>
 #include <KoColorSpaceRegistry.h>
@@ -64,6 +65,7 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QTimer>
+#include <QThread>
 
 #include <cmath>
 #include <algorithm>
@@ -1518,6 +1520,212 @@ void testCursorLook(KisMainWindow *w)
     report(after > 0.99, "cursorlook-back-after-stroke", QString::number(after));
 }
 
+/// Edit > Transform Last Stroke: paint a blue line and a red line across it,
+/// lift the red one into the Transform tool, cancel (nothing changes), then
+/// move it and apply; check pixels and the undo history.
+void testLastStroke(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
+    KisImageSP image = doc->image();
+    KisNodeSP layer = image->root()->lastChild();
+    if (!layer || !layer->paintDevice()) { report(false, "setup", QStringLiteral("no paint layer")); return; }
+    w->setActiveView(view);
+    view->viewManager()->setCurrentView(view);
+    pump(10);
+    view->viewManager()->nodeManager()->slotNonUiActivatedNode(layer);
+    pump(5);
+    if (!view->currentNode()) {
+        view->setCurrentNode(layer);
+        canvas->resourceManager()->setResource(KoCanvasResource::CurrentKritaNode, QVariant::fromValue(KisNodeWSP(layer)));
+        pump(5);
+    }
+    const KoColorSpace *cs = layer->paintDevice()->colorSpace();
+
+    // Let time pass with the event loop running. With @p idle, also wait
+    // (at most 5 s) for the image to finish its work; never while a stroke
+    // is still open (waitForDone would hang on it).
+    auto pass = [&](int ms, bool idle) {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < ms) { pump(1); QThread::msleep(5); }
+        if (idle) {
+            t.restart();
+            while (!image->isIdle() && t.elapsed() < 5000) { pump(1); QThread::msleep(5); }
+        }
+        pump(5);
+    };
+    auto wait = [&](int ms) { pass(ms, true); };
+
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    pump(20);
+    KoToolBase *brush = KoToolManager::instance()->toolById(canvas, QStringLiteral("KritaShape/KisToolBrush"));
+    if (!brush) { report(false, "setup", QStringLiteral("no brush tool")); return; }
+    brush->optionWidgets();
+    pump(5);
+
+    QWidget *cw = canvas->canvasWidget();
+    const QPoint c = cw->rect().center();
+    const int r = qMin(cw->width(), cw->height()) / 4;
+    auto line = [&](const QPoint &a, const QPoint &b) {
+        auto send = [&](int phase, const QPoint &p) {
+            QMouseEvent e(phase == 0 ? QEvent::MouseButtonPress : phase == 1 ? QEvent::MouseMove : QEvent::MouseButtonRelease,
+                          p, cw->mapToGlobal(p), Qt::LeftButton, phase == 2 ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            QSpontaneKeyEvent::setSpontaneous(&e);
+            KoPointerEvent ev(&e, canvas->coordinatesConverter()->widgetToDocument(QPointF(p)));
+            KisTool *kt = static_cast<KisTool *>(brush);
+            if (phase == 0) kt->beginPrimaryAction(&ev);
+            else if (phase == 1) kt->continuePrimaryAction(&ev);
+            else kt->endPrimaryAction(&ev);
+        };
+        send(0, a);
+        for (int i = 1; i <= 40; ++i) {
+            send(1, a + (b - a) * i / 40);
+            pass(8, false);
+        }
+        send(2, b);
+        wait(600); // let a Smooth Curve tail land
+    };
+    auto px = [&](const QPoint &widgetPt) {
+        return canvas->coordinatesConverter()->widgetToImage(QPointF(widgetPt)).toPoint();
+    };
+    auto pixel = [&](const QPoint &imagePt) {
+        QColor q;
+        layer->paintDevice()->pixel(imagePt.x(), imagePt.y(), &q);
+        return q;
+    };
+    auto isRed = [](const QColor &q) { return q.alpha() > 200 && q.red() > 200 && q.blue() < 80; };
+    auto isBlue = [](const QColor &q) { return q.alpha() > 200 && q.blue() > 200 && q.red() < 80; };
+    auto isEmpty = [](const QColor &q) { return q.alpha() < 30 || (q.red() > 230 && q.green() > 230 && q.blue() > 230); };
+    auto name = [](const QColor &q) { return q.name(QColor::HexArgb); };
+
+    canvas->resourceManager()->setForegroundColor(KoColor(Qt::blue, cs));
+    line(c + QPoint(-r, 0), c + QPoint(r, 0));                 // blue, horizontal
+    canvas->resourceManager()->setForegroundColor(KoColor(Qt::red, cs));
+    line(c + QPoint(0, -r), c + QPoint(0, r));                 // red, vertical, on top
+
+    const QPoint cross = px(c);
+    const QPoint onRed = px(c + QPoint(0, -r / 2));
+    const QPoint onBlue = px(c + QPoint(-r / 2, 0));
+    // Where the red line ends up after moving 60 image pixels to the right.
+    const QPoint movedRed = onRed + QPoint(60, 0);
+    KUndo2Stack *stack = doc->undoStack();
+    const int countBefore = stack->count();
+    const QString strokeName = stack->undoText();
+    report(isRed(pixel(cross)) && isRed(pixel(onRed)) && isBlue(pixel(onBlue)), "laststroke-painted",
+           QStringLiteral("cross %1, red %2, blue %3, undo '%4' (%5 entries)")
+               .arg(name(pixel(cross)), name(pixel(onRed)), name(pixel(onBlue)), strokeName).arg(countBefore));
+
+    KisAction *action = view->viewManager()->actionManager()->actionByName(QStringLiteral("giga_transform_last_stroke"));
+    report(action != nullptr, "laststroke-action", action ? action->shortcut().toString() : QStringLiteral("missing"));
+    if (!action) return;
+
+    // Free transform for the test, so it can be moved by a number.
+    KisConfig(false).writeEntry<int>("gigaLastStrokeTransformMode", 0);
+    action->trigger();
+    wait(400);
+    KoToolBase *transform = KoToolManager::instance()->toolById(canvas, QStringLiteral("KisToolTransform"));
+    report(KoToolManager::instance()->activeToolId() == QLatin1String("KisToolTransform"), "laststroke-opens-transform",
+           KoToolManager::instance()->activeToolId());
+    if (!transform) return;
+    // While transforming, the history ends at the blue line (red one lifted).
+    report(stack->index() == countBefore - 1, "laststroke-lifted",
+           QStringLiteral("index %1 of %2, undo '%3'").arg(stack->index()).arg(stack->count()).arg(stack->undoText()));
+
+    // Cancel: the red line is back exactly, history as before.
+    static_cast<KisTool *>(transform)->requestStrokeCancellation();
+    wait(400);
+    report(isRed(pixel(cross)) && isRed(pixel(onRed)) && stack->count() == countBefore && stack->index() == countBefore,
+           "laststroke-cancel-restores",
+           QStringLiteral("cross %1, red %2, %3/%4 entries, undo '%5'")
+               .arg(name(pixel(cross)), name(pixel(onRed))).arg(stack->index()).arg(stack->count()).arg(stack->undoText()));
+
+    // Again, this time move it 60 px right and apply.
+    action->trigger();
+    wait(400);
+    const double tx = transform->property("translateX").toDouble();
+    transform->setProperty("translateX", tx + 60.0);
+    QMetaObject::invokeMethod(transform, "requestImageRecalculation");
+    wait(300);
+    static_cast<KisTool *>(transform)->requestStrokeEnd();
+    wait(800);
+    report(isBlue(pixel(cross)) && isEmpty(pixel(onRed)) && isRed(pixel(movedRed)) && isBlue(pixel(onBlue)),
+           "laststroke-apply-moves-only-the-stroke",
+           QStringLiteral("cross %1, old red %2, moved red %3, blue %4")
+               .arg(name(pixel(cross)), name(pixel(onRed)), name(pixel(movedRed)), name(pixel(onBlue))));
+    report(stack->count() == countBefore + 1 && stack->undoText() == i18n("Transform Last Stroke"),
+           "laststroke-history",
+           QStringLiteral("%1 entries (was %2), top '%3'").arg(stack->count()).arg(countBefore).arg(stack->undoText()));
+
+    // One undo: the red line as drawn. Two: gone.
+    stack->undo();
+    wait(300);
+    report(isRed(pixel(cross)) && isRed(pixel(onRed)) && isEmpty(pixel(movedRed)), "laststroke-undo-shows-as-drawn",
+           QStringLiteral("cross %1, red %2, moved spot %3, undo '%4'")
+               .arg(name(pixel(cross)), name(pixel(onRed)), name(pixel(movedRed)), stack->undoText()));
+    stack->undo();
+    wait(300);
+    report(isBlue(pixel(cross)) && isEmpty(pixel(onRed)), "laststroke-undo-twice-removes",
+           QStringLiteral("cross %1, red spot %2").arg(name(pixel(cross)), name(pixel(onRed))));
+    info(QStringLiteral("before redo: %1/%2 canRedo %3 idle %4").arg(stack->index()).arg(stack->count()).arg(stack->canRedo()).arg(image->isIdle()));
+    stack->redo();
+    wait(200);
+    info(QStringLiteral("after redo 1: %1/%2 cross %3 red %4").arg(stack->index()).arg(stack->count()).arg(name(pixel(cross)), name(pixel(onRed))));
+    stack->redo();
+    wait(300);
+    info(QStringLiteral("after redo 2: %1/%2").arg(stack->index()).arg(stack->count()));
+    report(isBlue(pixel(cross)) && isRed(pixel(movedRed)), "laststroke-redo",
+           QStringLiteral("cross %1, moved red %2").arg(name(pixel(cross)), name(pixel(movedRed))));
+
+    // Default Warp mode, finished by switching to another tool (applies).
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    wait(200);
+    line(c + QPoint(-r, r / 2), c + QPoint(r, r / 2));          // red, horizontal, lower
+    const QPoint onLower = px(c + QPoint(r / 2, r / 2));
+    const int countWarp = stack->count();
+    KisConfig(false).writeEntry<int>("gigaLastStrokeTransformMode", 1);
+    action->trigger();
+    wait(400);
+    int modeNow = -1;
+    QMetaObject::invokeMethod(transform, "gigaCurrentMode", Q_RETURN_ARG(int, modeNow));
+    report(KoToolManager::instance()->activeToolId() == QLatin1String("KisToolTransform") && modeNow == 1,
+           "laststroke-opens-in-warp", QStringLiteral("tool %1, mode %2").arg(KoToolManager::instance()->activeToolId()).arg(modeNow));
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    wait(800);
+    report(isRed(pixel(onLower)) && stack->count() == countWarp && stack->index() == countWarp,
+           "laststroke-tool-switch-keeps-stroke",
+           QStringLiteral("lower line %1, %2/%3 entries (was %4), undo '%5'")
+               .arg(name(pixel(onLower))).arg(stack->index()).arg(stack->count()).arg(countWarp).arg(stack->undoText()));
+
+    // Unchanged, so it can be opened again; cancel this time.
+    action->trigger();
+    wait(400);
+    report(KoToolManager::instance()->activeToolId() == QLatin1String("KisToolTransform")
+               && stack->index() == countWarp - 1,
+           "laststroke-reopens-unchanged-stroke",
+           QStringLiteral("tool %1, %2/%3 entries").arg(KoToolManager::instance()->activeToolId()).arg(stack->index()).arg(stack->count()));
+    static_cast<KisTool *>(transform)->requestStrokeCancellation();
+    wait(400);
+    report(isRed(pixel(onLower)) && stack->count() == countWarp && stack->index() == countWarp,
+           "laststroke-reopen-cancel-restores",
+           QStringLiteral("lower line %1, %2/%3 entries").arg(name(pixel(onLower))).arg(stack->index()).arg(stack->count()));
+
+    // After any other action (here: a new layer), it must refuse and change nothing.
+    view->viewManager()->nodeManager()->createNode(QStringLiteral("KisPaintLayer"));
+    wait(300);
+    const int countOther = stack->count();
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    wait(200);
+    action->trigger();
+    wait(300);
+    report(KoToolManager::instance()->activeToolId() != QLatin1String("KisToolTransform")
+               && stack->count() == countOther && stack->index() == countOther && isRed(pixel(onLower)),
+           "laststroke-refuses-after-other-action",
+           QStringLiteral("tool %1, %2/%3 entries").arg(KoToolManager::instance()->activeToolId()).arg(stack->index()).arg(stack->count()));
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -1538,6 +1746,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("lassofill"), testLassoFill},
         {QStringLiteral("menuletter"), testMenuLetter},
         {QStringLiteral("cursorlook"), testCursorLook},
+        {QStringLiteral("laststroke"), testLastStroke},
     };
     bool found = false;
     for (const auto &test : tests) {
