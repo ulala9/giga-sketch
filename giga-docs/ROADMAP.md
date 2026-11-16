@@ -147,12 +147,17 @@ Last updated: 2026-11-16 (backlog: Reference Board image search)
 - Pre-existing upstream test failures (not ours): TestSvgParser/Cloned/RoundTrip, SvgTextCursorTest RTL/vertical.
 
 ## Backlog / ideas (not scheduled)
-- 2026-11-16: **Reference Board image search mode.** Type a search, pick Google Images / Bing Images /
-  Pinterest, and the results get laid out on the board (using the existing Arrange styles). Open question
-  before scoping: how to get results. These sites have no free open search API for this (Pinterest's API needs
-  app approval; scraping breaks their terms and breaks often). Likely options: an official API where one exists
-  (user's own key), or a built-in browser panel where the user searches normally and picks/drags images onto the
-  board. Branch when started: `feature/refboard-image-search`.
+- 2026-11-16: **Reference Board image search mode** — a small browser panel attached to the Reference Board
+  (user chose this over "search in Firefox and drag in"; not an API/scraper: no free search APIs, scraping breaks
+  terms).
+  - Top: search bar + site picker (Google Images / Bing Images / Pinterest). Below: the real site's results.
+  - Drag an image onto the board, or right-click ▸ Add to Board; lands in the board's Arrange layout.
+  - Pick mode: click several images, "Add selected" lays them all out at once.
+  - Try to fetch the full-size image, not the thumbnail, where the site links to it.
+  - Normal browsing, so the user's own logins work (their Pinterest boards/results).
+  - Qt WebEngine (Chromium): bigger app, a few hundred MB of memory while open → load it only when the panel
+    opens. Runtime is installed; needs `qt6-qtwebengine-devel` to build.
+  - Branch when started: `feature/refboard-image-search`.
 
 ## Decisions log
 - 2026-11-16: 3D = bridge to Blender (capture its viewport onto a layer), not model import. On demand,
