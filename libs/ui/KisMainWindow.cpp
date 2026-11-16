@@ -65,6 +65,7 @@
 #include "dialogs/GigaNewDocumentDialog.h"
 #include "GigaInterfaceModes.h"
 #include "GigaFloatingPanel.h"
+#include "GigaMotion.h"
 #include "GigaFloatingPanelManager.h"
 #include "GigaSelfTest.h"
 #include "GigaSaveDated.h"
@@ -1184,6 +1185,7 @@ void KisMainWindow::gigaShowPanelFlyout(const QString &dockId, QWidget *anchor)
         }
     };
     flyout->show();
+    GigaMotion::reveal(flyout); // Giga Sketch: fade in
 }
 
 bool KisMainWindow::eventFilter(QObject *watched, QEvent *event)

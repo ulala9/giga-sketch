@@ -25,6 +25,7 @@
 #include <QScreen>
 #include <QFileDialog>
 #include <QFormLayout>
+#include "GigaMotion.h"
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
@@ -392,6 +393,17 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
     m_chkRubberBand->setChecked(cfg.readEntry<int>("mdi_rubberband", cfg.useOpenGL()));
 
     m_chkCanvasMessages->setChecked(cfg.showCanvasMessages());
+
+    // Giga Sketch: short fades for panels, flyouts, tool menus and mode switches.
+    m_chkGigaUiAnimations = new QCheckBox(i18n("Interface animations"), this);
+    m_chkGigaUiAnimations->setToolTip(i18n("Panels, flyouts and tool menus fade in; switching interface modes cross-fades."));
+    m_chkGigaUiAnimations->setChecked(GigaMotion::enabled());
+    if (QFormLayout *motionForm = qobject_cast<QFormLayout*>(m_chkCanvasMessages->parentWidget()->layout())) {
+        int row = -1;
+        QFormLayout::ItemRole role;
+        motionForm->getWidgetPosition(m_chkCanvasMessages, &row, &role);
+        motionForm->insertRow(row, QString(), m_chkGigaUiAnimations);
+    }
 
     // Giga Sketch: "brush selected" popup when switching brushes by shortcut.
     m_chkGigaBrushSwitchMessage = new QCheckBox(i18n("Show brush name when switching brushes"), this);
@@ -923,6 +935,7 @@ void GeneralTab::setDefault()
 
 
     chkUseCustomFont->setChecked(false);
+    if (m_chkGigaUiAnimations) m_chkGigaUiAnimations->setChecked(true);
     cmbCustomFont->setCurrentFont(qApp->font());
     intFontSize->setValue(qApp->font().pointSize());
 
@@ -3064,6 +3077,7 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
 
 
         cfg.setShowCanvasMessages(m_general->showCanvasMessages());
+        GigaMotion::setEnabled(m_general->m_chkGigaUiAnimations->isChecked());
         cfg.setGigaShowBrushSwitchMessage(m_general->gigaShowBrushSwitchMessage());
         cfg.writeEntry<bool>("gigaInWindowPanels", m_general->gigaInWindowPanels());
         cfg.writeEntry<QString>(GigaAccent::configKey(), m_general->gigaAccentColor());

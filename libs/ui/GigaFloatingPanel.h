@@ -85,6 +85,8 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void leaveEvent(QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
+    /// Giga Sketch: fade the panel in when it appears (GigaMotion::reveal).
+    void showEvent(QShowEvent *event) override;
 
 private:
     QRect titleArea() const; ///< in dock coordinates

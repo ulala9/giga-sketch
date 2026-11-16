@@ -4,6 +4,7 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "GigaFloatingPanel.h"
+#include "GigaMotion.h"
 
 #include <QApplication>
 #include <QDockWidget>
@@ -371,6 +372,12 @@ void GigaFloatingPanel::leaveEvent(QEvent *event)
 {
     if (!m_resizeEdges && !m_moving) unsetCursor();
     QFrame::leaveEvent(event);
+}
+
+void GigaFloatingPanel::showEvent(QShowEvent *event)
+{
+    QFrame::showEvent(event);
+    GigaMotion::reveal(this);
 }
 
 void GigaFloatingPanel::paintEvent(QPaintEvent *)

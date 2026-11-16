@@ -22,6 +22,7 @@
 #include <QStyle>
 #include <QTimer>
 #include <QMenu>
+#include <GigaMotion.h>
 #include <QAction>
 #include <QScreen>
 #include <QContextMenuEvent>
@@ -270,6 +271,8 @@ void KoToolBox::addButton(KoToolAction *toolAction)
         if (!menu) {
             menu = new QMenu(this);
             d->gigaMenus.insert(gigaGroup, menu);
+            // Giga Sketch: the tool group popup fades in.
+            connect(menu, &QMenu::aboutToShow, menu, [menu]() { GigaMotion::reveal(menu, 100); });
         }
         menu->clear();
         Q_FOREACH (KoToolBoxButton *member, members) {

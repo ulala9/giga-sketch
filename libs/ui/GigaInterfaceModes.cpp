@@ -4,6 +4,7 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "GigaInterfaceModes.h"
+#include "GigaMotion.h"
 
 #include "GigaFloatingPanelManager.h"
 
@@ -208,6 +209,8 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
         m_modeActions[mode]->setChecked(true);
         return;
     }
+    // Giga Sketch: picture of the old layout, faded out over the new one at the end.
+    const QPixmap before = atStartup ? QPixmap() : GigaMotion::snapshot(m_mainWindow);
     // One clean change instead of several partial redraws.
     m_mainWindow->setUpdatesEnabled(false);
     KisConfig cfg(false);
@@ -289,6 +292,7 @@ void GigaInterfaceModes::switchTo(int mode, bool atStartup)
     m_modeActions[mode]->setChecked(true);
     cfg.writeEntry<int>("gigaInterfaceMode", mode);
     m_mainWindow->setUpdatesEnabled(true);
+    GigaMotion::crossFade(m_mainWindow, before);
 }
 
 bool GigaInterfaceModes::oneTheme() const
