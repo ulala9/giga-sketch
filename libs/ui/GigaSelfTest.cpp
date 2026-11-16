@@ -1554,6 +1554,54 @@ void testStrokePoints(KisMainWindow *w)
                QStringLiteral("warping %1, layer new %2, old %3").arg(warping)
                    .arg(name(pixel((at + QPointF(0, 40)).toPoint())), name(pixel(at.toPoint()))));
     }
+    // Small radius, long drag: the bent preview must stay near the line (it
+    // used to blow up into a huge fan: a perspective map of an over-stretched
+    // piece). Count preview pixels far away from line, dot and drag.
+    {
+        QMetaObject::invokeMethod(points, "gigaSetProportional", Q_ARG(bool, true), Q_ARG(int, 15), Q_ARG(int, 0));
+        const QPointF at = vertexPos(pmid);
+        const QPointF target = at + QPointF(-120, -260);
+        const QPoint a = toWidget(at);
+        const QPoint b = toWidget(target);
+        auto send = [&](int phase, const QPoint &p) {
+            QMouseEvent e(phase == 0 ? QEvent::MouseButtonPress : phase == 1 ? QEvent::MouseMove : QEvent::MouseButtonRelease,
+                          p, cw->mapToGlobal(p), Qt::LeftButton, phase == 2 ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            KoPointerEvent ev(&e, conv->widgetToDocument(QPointF(p)));
+            KisTool *kt = static_cast<KisTool *>(points);
+            if (phase == 0) kt->beginPrimaryAction(&ev);
+            else if (phase == 1) kt->continuePrimaryAction(&ev);
+            else kt->endPrimaryAction(&ev);
+        };
+        send(0, a);
+        for (int i = 1; i <= 10; ++i) {
+            send(1, a + (b - a) * i / 10);
+            pass(15, false);
+        }
+        pass(400, false);
+        QImage overlay(cw->size(), QImage::Format_ARGB32_Premultiplied);
+        overlay.fill(Qt::transparent);
+        {
+            QPainter p(&overlay);
+            p.setTransform(conv->flakeToWidgetTransform());
+            points->paint(p, *canvas->viewConverter());
+        }
+        // Allowed area: the line, the drag and the dot, plus a generous margin.
+        const QRectF lineArea = QRectF(toWidget(at + QPointF(-r * 2.0, 0)), toWidget(at + QPointF(r * 2.0, 0))).normalized()
+                | QRectF(QPointF(b), QSizeF(1, 1)) | QRectF(QPointF(a), QSizeF(1, 1));
+        const QRect allowed = lineArea.toAlignedRect().adjusted(-80, -80, 80, 80);
+        int stray = 0;
+        for (int y = 0; y < overlay.height(); y += 2) {
+            for (int x = 0; x < overlay.width(); x += 2) {
+                if (!allowed.contains(x, y) && qAlpha(overlay.pixel(x, y)) > 60) ++stray;
+            }
+        }
+        send(2, b);
+        wait(800);
+        report(stray == 0, "strokepoints-no-fan-on-small-radius",
+               QStringLiteral("%1 preview pixels far from the line (sampled every 2 px)").arg(stray));
+        stack->undo();
+        wait(600);
+    }
     static_cast<KisTool *>(points)->requestStrokeCancellation();
     wait(600);
     KisConfig(false).writeEntry<int>("gigaLastStrokeEditMode", 0);

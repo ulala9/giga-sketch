@@ -42,6 +42,27 @@ const char *PropKey = "gigaStrokePointsProportional";
 const char *RadiusKey = "gigaStrokePointsRadius";      // screen px
 const char *FalloffKey = "gigaStrokePointsFalloff";    // GigaStrokePath::Falloff
 const int MinRadius = 5;
+
+/**
+ * Affine map taking triangle @p src onto triangle @p dst. Unlike a
+ * four-corner (perspective) map, an affine map can't blow up: an
+ * over-stretched piece just stretches, it never smears to infinity.
+ */
+bool triangleMap(const QPointF *src, const QPointF *dst, QTransform &out)
+{
+    const QTransform fromUnit(src[1].x() - src[0].x(), src[1].y() - src[0].y(),
+                              src[2].x() - src[0].x(), src[2].y() - src[0].y(),
+                              src[0].x(), src[0].y());
+    const QTransform toUnitDst(dst[1].x() - dst[0].x(), dst[1].y() - dst[0].y(),
+                               dst[2].x() - dst[0].x(), dst[2].y() - dst[0].y(),
+                               dst[0].x(), dst[0].y());
+    if (qAbs(fromUnit.determinant()) < 1e-6) return false; // flat source triangle
+    bool ok = false;
+    const QTransform inverse = fromUnit.inverted(&ok);
+    if (!ok) return false;
+    out = inverse * toUnitDst;
+    return true;
+}
 const int MaxRadius = 3000;
 }
 
@@ -735,26 +756,32 @@ void GigaToolStrokePoints::paintWarp(QPainter &gc, GigaLastStrokeTransform *s)
             continue;
         }
         const QPointF ma = normal(a.toT), mb = normal(b.toT);
-        const QPolygonF dst({pixelToView(a.to + ma * w), pixelToView(b.to + mb * w),
-                             pixelToView(b.to - mb * w), pixelToView(a.to - ma * w)});
-        QTransform map;
-        if (!QTransform::quadToQuad(src, dst, map)) continue;
-        gc.setTransform(map * base);
-        QPainterPath clip;
-        clip.addPolygon(src);
-        clip.closeSubpath();
-        gc.setClipPath(clip);
-        const QRectF area = src.boundingRect();
-        gc.drawImage(area, m_warpImage, area);
+        const QPointF dst[4] = {pixelToView(a.to + ma * w), pixelToView(b.to + mb * w),
+                                pixelToView(b.to - mb * w), pixelToView(a.to - ma * w)};
+        // Two triangles per piece (0-1-2 and 0-2-3), each mapped affinely.
+        static const int tri[2][3] = {{0, 1, 2}, {0, 2, 3}};
+        for (const auto &t : tri) {
+            const QPointF s3[3] = {src[t[0]], src[t[1]], src[t[2]]};
+            const QPointF d3[3] = {dst[t[0]], dst[t[1]], dst[t[2]]};
+            QTransform map;
+            if (!triangleMap(s3, d3, map)) continue;
+            gc.setTransform(map * base);
+            QPainterPath clip;
+            clip.addPolygon(QPolygonF({s3[0], s3[1], s3[2]}));
+            clip.closeSubpath();
+            gc.setClipPath(clip);
+            const QRectF area = clip.boundingRect();
+            gc.drawImage(area, m_warpImage, area);
+        }
     }
     if (!unchanged.isEmpty()) {
         // Image pixel -> view, without bending.
         const QRectF all(QPointF(0, 0), QSizeF(m_warpImage.size()));
-        const QPolygonF src(all);
-        QPolygonF dst;
-        for (const QPointF &c : src) dst << pixelToView(m_warpOrigin + c / m_warpImageScale);
+        const QPointF s3[3] = {all.topLeft(), all.topRight(), all.bottomLeft()};
+        QPointF d3[3];
+        for (int i = 0; i < 3; ++i) d3[i] = pixelToView(m_warpOrigin + s3[i] / m_warpImageScale);
         QTransform map;
-        if (QTransform::quadToQuad(src, dst, map)) {
+        if (triangleMap(s3, d3, map)) {
             gc.setTransform(map * base);
             gc.setClipPath(unchanged);
             const QRectF area = unchanged.boundingRect() & all;
