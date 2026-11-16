@@ -4,7 +4,7 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-15 (Points mode for Transform Last Stroke built)
+Last updated: 2026-11-15 (proportional editing for Points mode built)
 
 ## Resume here
 - **Next up:** the user's hand test of Transform Last Stroke + its Points mode (below), then icon batches 2–4
@@ -19,6 +19,10 @@ Last updated: 2026-11-15 (Points mode for Transform Last Stroke built)
     remembered (default Pixels: switch once with the top-bar buttons or the shortcut). Self-test `strokepoints`.
     Hand-test: long strokes (lag on release?), textured/jittery brushes look the same after bending, pressure
     taper kept, multi-brush tool, mirror mode, Esc, Ctrl+Z, switching modes both ways.
+  - `feature/stroke-points-proportional` (built on `feature/stroke-points`; merging it merges all three) —
+    Proportional editing in Points mode: top-bar Proportional toggle, Radius, Falloff (Smooth/Sphere/Root/Sharp/
+    Linear/Constant); wheel while dragging = radius; the reach is tinted. Radius is measured along the line.
+    Self-test `strokepoints` (18 checks).
 - Repo state: everything else merged and pushed (the ten look/hand-test branches on 2026-11-15).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
@@ -28,7 +32,8 @@ Last updated: 2026-11-15 (Points mode for Transform Last Stroke built)
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/transform-last-stroke`, `feature/stroke-points`.
+  Pending in `giga-test` now: `feature/transform-last-stroke`, `feature/stroke-points`,
+  `feature/stroke-points-proportional`.
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -103,6 +108,7 @@ Last updated: 2026-11-15 (Points mode for Transform Last Stroke built)
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
 - [ ] Transform Last Stroke (`feature/transform-last-stroke`, built, waiting for the user's hand test).
 - [ ] Points mode: bend the stroke by dots, brush repaints it (`feature/stroke-points`, built, waiting for hand test).
+- [ ] Proportional editing in Points mode (`feature/stroke-points-proportional`, built, waiting for hand test).
 - Later, if wanted: Alt+drag a dot = thicker/thinner there (per-dot pressure, like Grease Pencil thickness);
   a top-bar button right after a stroke; editing strokes other than the last one (would need a vector stroke layer —
   much bigger, out of scope so far).
@@ -121,6 +127,8 @@ Last updated: 2026-11-15 (Points mode for Transform Last Stroke built)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-15: Proportional editing falloff acts on the whole line inside the radius (not only on the dots), radius
+  measured along the line (Blender "connected only"); no O key (O = increase opacity).
 - 2026-11-15: Transform Last Stroke "Points" mode = repaint the recorded dabs along a bent path (not pixel warp);
   last stroke only; refuses the same brushes as Pixels mode. Toggle = same shortcut again + top-bar buttons.
 - 2026-11-15: Transform Last Stroke = pixel transform of the isolated stroke (reuses Krita's Transform tool, user's

@@ -674,3 +674,14 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   `startingRepaint()` guard around startStroke. `setRequestsOtherStrokesToEnd` is protected, so no way to turn it off
   from outside.
 - Self-test `strokepoints` (15 checks). `selftest.sh all` takes ~2 min now (timeout raised to 180 s).
+- **Proportional editing** (`feature/stroke-points-proportional`, built on `feature/stroke-points`): `GigaStrokePath::Move`
+  {centers s, radius (image px along the line), falloff, delta} is added on top of the dots' spline
+  (`OffsetEvaluator` = spline + Σ weight·delta, weight = Blender-style falloff of the distance to the nearest centre).
+  A proportional drag adds one Move and only changes its delta (the dots' own offsets stay); `insertVertex` uses the
+  spline only (else moves count twice); `placeVertices` folds moves into the new dots. Undo stack = `Shape` (dots + moves).
+  Tool: wheel during a drag is caught by an **application** event filter (installed only during the drag; Krita's
+  input manager filters on the canvas widget, app filters run first) → radius ×1.15 per notch, no zoom.
+  Keys gigaStrokePointsProportional / gigaStrokePointsRadius (screen px, default 120) / gigaStrokePointsFalloff.
+- Self-test gotcha: in `selftest.sh all`, Krita sometimes drops a Ctrl+Z/redo (image busy with an idle task that
+  started right after the test's wait). laststroke/strokepoints retry undo/redo until the index moves (max 5).
+
