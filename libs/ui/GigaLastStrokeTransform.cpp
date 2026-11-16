@@ -12,6 +12,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <cstring>
+#include <cstdio>
 #include <functional>
 
 #include <klocalizedstring.h>
@@ -36,6 +37,7 @@
 #include "kis_transaction.h"
 #include "kis_raster_keyframe_channel.h"
 #include <brushengine/kis_paintop_preset.h>
+#include <brushengine/kis_paintop_settings.h>
 #include "tool/kis_tool.h"
 #include "tool/kis_resources_snapshot.h"
 #include "tool/strokes/freehand_stroke.h"
@@ -643,7 +645,9 @@ bool GigaLastStrokeTransform::startPoints(KisViewManager *view, KisImageSP image
     }
     m_lifted = new KisPaintDevice(*layer->paintDevice());
     m_drawnRect = differingRect(m_lifted, m_withStroke);
-    m_previewRect = m_drawnRect;
+    // Where the layer differs from m_lifted. Only the image's (sequential,
+    // exclusive) jobs read and write it, so they never race on it.
+    m_liveRect = QSharedPointer<QRect>::create(m_drawnRect);
 
     // Show the stroke again right away (no undo entry): while editing, the
     // layer is "lifted + stroke", and the history ends at the lifted state.
@@ -675,7 +679,13 @@ bool GigaLastStrokeTransform::startPoints(KisViewManager *view, KisImageSP image
     m_renderedSerial = -1;
     m_undoShapes.clear();
     m_redoShapes.clear();
+    m_dragging = false;
+    m_warping = false;
+    m_warpOk = false;
     s_pointsSession = this;
+    // A first repaint right away (same shape as drawn), so a drag can bend
+    // its pixels on screen from the start.
+    startPreviewRender();
 
     // The points tool places the dots (it knows the zoom) when it opens.
     m_previousToolId = KoToolManager::instance()->activeToolId();
@@ -730,6 +740,9 @@ void GigaLastStrokeTransform::startPreviewRender()
     m_renderBusy = true;
     m_renderDirty = false;
     const int serial = m_editSerial;
+    const GigaStrokePath::Shape shape = m_path.shape();
+    static const bool trace = qEnvironmentVariableIsSet("GIGA_POINTS_TRACE");
+    if (trace) { m_traceClock.start(); }
 
     // 1. Repaint the bent stroke on a layer that is not in the image (no
     //    undo entry, nothing on screen), like renderStrokeOnly() but without
@@ -773,10 +786,15 @@ void GigaLastStrokeTransform::startPreviewRender()
     KisPaintDeviceSP target = m_layer->paintDevice();
     KisPaintDeviceSP lifted = m_lifted;
     KisNodeSP node = m_layer;
-    const QRect previous = m_previewRect;
+    QSharedPointer<QRect> live = m_liveRect;
     QPointer<GigaLastStrokeTransform> self(this);
+    QElapsedTimer *clock = &m_traceClock;
+    const qint64 queued = trace ? clock->elapsed() : 0;
     runNoUndo(image, [=]() mutable {
+        if (trace) fprintf(stderr, "GIGA_POINTS repaint #%d: queued %lld ms, brush done at %lld ms, %d jobs\n",
+                           serial, (long long)queued, (long long)clock->elapsed(), int(jobs.size()));
         const QRect strokeRect = strokeDevice->exactBounds();
+        const QRect previous = *live;
         if (!previous.isEmpty()) {
             KisPainter::copyAreaOptimized(previous.topLeft(), lifted, target, previous);
         }
@@ -785,26 +803,113 @@ void GigaLastStrokeTransform::startPreviewRender()
             gc.setCompositeOpId(COMPOSITE_OVER);
             gc.bitBlt(strokeRect.topLeft(), strokeDevice, strokeRect);
         }
+        *live = strokeRect;
         node->setDirty(previous | strokeRect);
         // Back to the GUI thread (queued: this runs on a worker thread).
-        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, serial, strokeRect, strokeDevice]() {
-            if (self) self->previewRendered(serial, strokeRect, strokeDevice);
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, serial, strokeRect, strokeDevice, shape]() {
+            if (self) self->previewRendered(serial, strokeRect, strokeDevice, shape);
         }, Qt::QueuedConnection);
     });
 }
 
-void GigaLastStrokeTransform::previewRendered(int serial, const QRect &rect, KisPaintDeviceSP strokeDevice)
+void GigaLastStrokeTransform::previewRendered(int serial, const QRect &rect, KisPaintDeviceSP strokeDevice,
+                                              const GigaStrokePath::Shape &shape)
 {
     if (!m_points) return;
+    if (qEnvironmentVariableIsSet("GIGA_POINTS_TRACE")) {
+        fprintf(stderr, "GIGA_POINTS repaint #%d landed at %lld ms (rect %dx%d)\n", serial,
+                (long long)m_traceClock.elapsed(), rect.width(), rect.height());
+    }
     m_renderBusy = false;
-    m_previewRect = rect;
     m_lastRender = strokeDevice;
     m_renderedSerial = serial;
-    // While finishing, only waitPreview() decides whether to paint again.
-    if (!m_finishing && (m_renderDirty || m_renderedSerial != m_editSerial)) {
+    m_renderedShape = shape;
+    m_warpOk = checkWarpable(rect);
+    // While finishing, only waitPreview() decides whether to paint again;
+    // during a warped drag nothing repaints until the pen lifts.
+    if (!m_finishing && !(m_dragging && m_warping) && (m_renderDirty || m_renderedSerial != m_editSerial)) {
         m_renderDirty = false;
         startPreviewRender();
     }
+    if (m_warping && !m_dragging && serial >= m_warpEndSerial) {
+        // The real repaint is in the layer now. Keep the bent preview a
+        // couple of frames longer, until the canvas has shown the layer.
+        QTimer::singleShot(80, this, [this]() {
+            if (m_points && m_warping && !m_dragging && m_renderedSerial >= m_warpEndSerial) {
+                m_warping = false;
+                Q_EMIT sigPointsChanged();
+            }
+        });
+    }
+    Q_EMIT sigPointsChanged();
+}
+
+bool GigaLastStrokeTransform::checkWarpable(const QRect &renderRect) const
+{
+    // Bending pixels along the line only works when every painted pixel
+    // belongs to the band around the line: not for multi-brush copies,
+    // canvas mirroring or very wide scatter. Those keep the live repaint.
+    if (!m_record || m_record->startDistances.size() > 1 || renderRect.isEmpty()) return false;
+    const QVector<QPointF> line = m_path.bentPolyline(m_renderedShape);
+    if (line.isEmpty()) return false;
+    QRectF bounds(line.first(), QSizeF(0, 0));
+    for (const QPointF &p : line) bounds |= QRectF(p, QSizeF(0.001, 0.001));
+    const qreal margin = pointsBrushHalfWidth() * 1.6 + 8.0;
+    return bounds.adjusted(-margin, -margin, margin, margin).contains(QRectF(renderRect));
+}
+
+qreal GigaLastStrokeTransform::pointsBrushHalfWidth() const
+{
+    KisPaintOpPresetSP preset = (m_record && m_record->resources) ? m_record->resources->currentPaintOpPreset()
+                                                                   : KisPaintOpPresetSP();
+    const qreal size = (preset && preset->settings()) ? preset->settings()->paintOpSize() : 20.0;
+    return qMax<qreal>(3.0, size * 0.5 * 1.25 + 3.0);
+}
+
+qreal GigaLastStrokeTransform::pointsLayerOpacity() const
+{
+    return m_layer ? m_layer->opacity() / 255.0 : 1.0;
+}
+
+void GigaLastStrokeTransform::pointsDragStarted()
+{
+    if (!m_points || m_dragging) return;
+    m_dragging = true;
+    if (!m_warpOk || !m_lastRender) return; // live repaint for this drag
+    m_warping = true;
+    m_renderDirty = false;
+    // The layer without the stroke; the tool draws the last repaint, bent
+    // to the new shape, on top. Queued (no waiting): it runs after any
+    // repaint that is still on its way.
+    KisImageSP image = m_image;
+    if (image && m_layer && m_lifted) {
+        KisPaintDeviceSP target = m_layer->paintDevice();
+        KisPaintDeviceSP lifted = m_lifted;
+        KisNodeSP node = m_layer;
+        QSharedPointer<QRect> live = m_liveRect;
+        runNoUndo(image, [target, lifted, node, live]() mutable {
+            const QRect rect = *live;
+            if (rect.isEmpty()) return;
+            KisPainter::copyAreaOptimized(rect.topLeft(), lifted, target, rect);
+            *live = QRect();
+            node->setDirty(rect);
+        });
+    }
+    Q_EMIT sigPointsChanged();
+}
+
+void GigaLastStrokeTransform::pointsDragFinished()
+{
+    if (!m_points) return;
+    m_dragging = false;
+    if (!m_warping) {
+        pointsChanged();
+        return;
+    }
+    // One real repaint of the final shape; the bent preview stays until it lands.
+    ++m_editSerial;
+    m_warpEndSerial = m_editSerial;
+    startPreviewRender();
     Q_EMIT sigPointsChanged();
 }
 
@@ -826,26 +931,21 @@ void GigaLastStrokeTransform::restoreLifted()
 {
     KisImageSP image = m_image;
     if (!image || !m_layer || !m_lifted) return;
-    // A repaint still on its way would draw after this: let it land first
-    // (m_previewRect then covers it).
+    // No new repaints; one still on its way runs before this job (strokes
+    // run in order), and the shared rect then covers what it drew.
     m_renderDirty = false;
-    QElapsedTimer timer;
-    timer.start();
-    while (m_renderBusy && timer.elapsed() < 20000) {
-        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 5);
-        QThread::msleep(2);
-    }
     KisPaintDeviceSP target = m_layer->paintDevice();
     KisPaintDeviceSP lifted = m_lifted;
     KisNodeSP node = m_layer;
-    const QRect rect = m_previewRect;
-    runNoUndo(image, [target, lifted, node, rect]() mutable {
+    QSharedPointer<QRect> live = m_liveRect;
+    runNoUndo(image, [target, lifted, node, live]() mutable {
+        const QRect rect = *live;
         if (rect.isEmpty()) return;
         KisPainter::copyAreaOptimized(rect.topLeft(), lifted, target, rect);
+        *live = QRect();
         node->setDirty(rect);
     });
-    m_previewRect = QRect();
-    waitIdle(image, 5000);
+    waitIdle(image, 20000);
 }
 
 void GigaLastStrokeTransform::pointsFinish(bool apply, bool switchBack)
@@ -940,8 +1040,11 @@ void GigaLastStrokeTransform::endPoints(bool switchBack)
     m_path = GigaStrokePath();
     m_lifted.clear();
     m_lastRender.clear();
-    m_previewRect = QRect();
+    m_liveRect.clear();
     m_drawnRect = QRect();
+    m_dragging = false;
+    m_warping = false;
+    m_warpOk = false;
     m_renderBusy = false;
     m_renderDirty = false;
     m_undoShapes.clear();

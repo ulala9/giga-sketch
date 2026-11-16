@@ -116,6 +116,11 @@ public:
     QPointF offsetAt(qreal s) const;
     /// The bent path, one point per piece end (main copy only).
     QVector<QPointF> bentPolyline() const;
+    /// The path bent by another shape (e.g. the one of the last repaint);
+    /// same points, in the same order, as bentPolyline().
+    QVector<QPointF> bentPolyline(const Shape &shape) const;
+    /// The bent path's point at distance @p s.
+    QPointF bentPointAt(qreal s) const;
     /// Bounding box of the bent path (image px).
     QRectF bentBounds() const;
 

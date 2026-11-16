@@ -14,7 +14,11 @@
 #include <QLineF>
 #include <QPainter>
 #include <QPalette>
+#include <QPainterPath>
 #include <QPushButton>
+#include <QTimer>
+#include <QTransform>
+#include <cstdio>
 #include <QToolButton>
 
 #include <KoPointerEvent.h>
@@ -172,6 +176,7 @@ void GigaToolStrokePoints::drag(KoPointerEvent *event)
         if (QLineF(QPointF(), delta).length() * viewScale() < 2.0) return;
         s->pointsBeginEdit();
         m_moved = true;
+        s->pointsDragStarted();
         if (m_propDrag) {
             // One proportional move for this drag; the dots' own offsets
             // stay, the move pulls the line around them.
@@ -191,10 +196,11 @@ void GigaToolStrokePoints::drag(KoPointerEvent *event)
             if (i >= 0 && i < m_startOffsets.size()) s->path().setOffset(i, m_startOffsets[i] + delta);
         }
     }
-    // Repaint live while dragging. The controller runs one repaint at a
-    // time and folds the moves made meanwhile into the next one, so this
-    // never queues up work or waits on the painting threads.
-    s->pointsChanged();
+    // Strokes that can be bent on screen are (pointsWarping): nothing
+    // repaints until release, so it follows at full frame rate whatever the
+    // brush costs. Others repaint live: one repaint at a time, newer moves
+    // folded into the next, never waiting on the painting threads.
+    if (!s->pointsWarping()) s->pointsChanged();
     updateOverlay();
 }
 
@@ -206,7 +212,7 @@ void GigaToolStrokePoints::release()
     m_moved = false;
     m_propDrag = false;
     setWheelCatcher(false);
-    if (s && moved) s->pointsChanged(); // final shape (the live repaints may lag one step)
+    if (s && moved) s->pointsDragFinished(); // one real repaint of the final shape
     updateOverlay();
 }
 
@@ -304,7 +310,9 @@ void GigaToolStrokePoints::updateOverlay()
 {
     QRectF rect = m_lastOverlay;
     if (GigaLastStrokeTransform *s = session()) {
-        const qreal margin = 12.0 / viewScale();
+        qreal margin = 12.0 / viewScale();
+        if (m_proportional) margin = qMax(margin, (m_radius + 60.0) / viewScale());
+        if (s->pointsWarping()) margin += s->pointsBrushHalfWidth();
         const QRectF now = s->path().bentBounds().adjusted(-margin, -margin, margin, margin);
         rect = rect.isEmpty() ? now : rect.united(now);
         m_lastOverlay = now;
@@ -324,10 +332,17 @@ void GigaToolStrokePoints::paint(QPainter &gc, const KoViewConverter &converter)
     gc.save();
     gc.setRenderHint(QPainter::Antialiasing, true);
 
-    // While dragging (and until the repaint lands): a faint guide of the new
-    // path. The stroke itself repaints live; this only shows where it is
-    // heading when a big stroke's repaint is a step behind.
-    if ((m_dragging && m_moved) || s->pointsRepainting()) {
+    if (s->pointsWarping()) {
+        static const bool trace = qEnvironmentVariableIsSet("GIGA_POINTS_TRACE");
+        QElapsedTimer clock;
+        if (trace) clock.start();
+        paintWarp(gc, s);
+        if (trace) fprintf(stderr, "GIGA_POINTS bent preview drawn in %.2f ms\n", clock.nsecsElapsed() / 1e6);
+    }
+
+    // Live repaint (strokes that can't be bent on screen): a faint guide of
+    // the new path while the repaint is a step behind.
+    if (!s->pointsWarping() && ((m_dragging && m_moved) || s->pointsRepainting())) {
         QPolygonF line;
         const QVector<QPointF> points = path.bentPolyline();
         line.reserve(points.size());
@@ -378,6 +393,7 @@ void GigaToolStrokePoints::paint(QPainter &gc, const KoViewConverter &converter)
         gc.setBrush(fill);
         gc.drawEllipse(c, r, r);
     }
+    paintCircles(gc, s);
     gc.restore();
 }
 
@@ -599,8 +615,10 @@ void GigaToolStrokePoints::slotRadiusChanged(int value)
     if (s && m_propDrag && m_moved) {
         // Live while dragging: the move being made gets the new radius.
         if (GigaStrokePath::Move *move = s->path().lastMove()) move->radius = m_radius / viewScale();
-        s->pointsChanged(); // live, like dragging
+        if (!s->pointsWarping()) s->pointsChanged(); // live, like dragging
     }
+    m_radiusChanged.start();
+    QTimer::singleShot(1300, this, [this]() { updateOverlay(); }); // hide the label
     updateOverlay();
 }
 
@@ -619,4 +637,161 @@ void GigaToolStrokePoints::gigaSetProportional(bool on, int radiusScreenPx, int 
     else slotRadiusChanged(radiusScreenPx);
     if (m_falloffBox) m_falloffBox->setCurrentIndex(falloff);
     else slotFalloffChanged(falloff);
+}
+
+bool GigaToolStrokePoints::gigaWarping() const
+{
+    GigaLastStrokeTransform *s = session();
+    return s && s->pointsWarping();
+}
+
+void GigaToolStrokePoints::ensureWarpImage(GigaLastStrokeTransform *s)
+{
+    const int serial = s->pointsWarpSerial();
+    // About screen resolution (a bit more), never more than the stroke's own.
+    const qreal want = qMin<qreal>(1.0, viewScale() * 1.25);
+    if (serial == m_warpImageSerial && !m_warpImage.isNull() && qAbs(want - m_warpImageScale) < 0.1) return;
+    m_warpImage = QImage();
+    m_warpImageSerial = serial;
+    KisPaintDeviceSP device = s->pointsWarpDevice();
+    if (!device) return;
+    const QRect rect = device->exactBounds();
+    if (rect.isEmpty()) return;
+    QImage image = device->convertToQImage(nullptr, rect.x(), rect.y(), rect.width(), rect.height());
+    if (want < 0.95) {
+        image = image.scaled(qMax(1, qRound(rect.width() * want)), qMax(1, qRound(rect.height() * want)),
+                             Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    }
+    m_warpImage = image;
+    m_warpOrigin = rect.topLeft();
+    m_warpImageScale = qreal(image.width()) / rect.width();
+}
+
+void GigaToolStrokePoints::paintWarp(QPainter &gc, GigaLastStrokeTransform *s)
+{
+    ensureWarpImage(s);
+    if (m_warpImage.isNull()) return;
+
+    const GigaStrokePath &path = s->path();
+    const QVector<QPointF> from = path.bentPolyline(s->pointsWarpShape()); // as last painted
+    const QVector<QPointF> to = path.bentPolyline();                       // as now
+    const QVector<qreal> &lengths = path.pathLengths();
+    const int n = qMin(from.size(), qMin(to.size(), lengths.size()));
+    if (n < 1) return;
+    const qreal w = s->pointsBrushHalfWidth();
+
+    // Cross-sections every ~8 screen px along the line.
+    const qreal step = qMax<qreal>(1.0, 8.0 / viewScale());
+    QVector<int> picks;
+    picks << 0;
+    qreal last = 0.0;
+    for (int i = 1; i < n - 1; ++i) {
+        if (lengths[i] - last >= step) {
+            picks << i;
+            last = lengths[i];
+        }
+    }
+    if (n > 1) picks << n - 1;
+
+    auto tangent = [n](const QVector<QPointF> &v, int i) {
+        const QPointF d = v[qMin(n - 1, i + 2)] - v[qMax(0, i - 2)];
+        const qreal len = std::hypot(d.x(), d.y());
+        return len > 1e-6 ? d / len : QPointF(1.0, 0.0);
+    };
+    struct Section { QPointF from, fromT, to, toT; };
+    QVector<Section> sections;
+    for (int i : picks) sections << Section{from[i], tangent(from, i), to[i], tangent(to, i)};
+    // Caps: the brush reaches past both ends of the line.
+    {
+        const Section a = sections.first();
+        sections.prepend(Section{a.from - a.fromT * w, a.fromT, a.to - a.toT * w, a.toT});
+        const Section b = sections.last();
+        sections.append(Section{b.from + b.fromT * w, b.fromT, b.to + b.toT * w, b.toT});
+    }
+
+    // Stroke pixel -> preview image pixel.
+    auto toImage = [this](const QPointF &p) { return (p - m_warpOrigin) * m_warpImageScale; };
+    auto normal = [](const QPointF &t) { return QPointF(-t.y(), t.x()); };
+
+    const QTransform base = gc.transform();
+    gc.save();
+    gc.setOpacity(s->pointsLayerOpacity());
+    gc.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    gc.setRenderHint(QPainter::Antialiasing, false); // shared edges, no seams
+
+    QPainterPath unchanged; // pieces that didn't move: one draw
+    unchanged.setFillRule(Qt::WindingFill);
+    for (int k = 0; k + 1 < sections.size(); ++k) {
+        const Section &a = sections[k];
+        const Section &b = sections[k + 1];
+        const QPointF na = normal(a.fromT), nb = normal(b.fromT);
+        const QPolygonF src({toImage(a.from + na * w), toImage(b.from + nb * w),
+                             toImage(b.from - nb * w), toImage(a.from - na * w)});
+        const bool same = QLineF(a.from, a.to).length() < 0.05 && QLineF(b.from, b.to).length() < 0.05
+                && QPointF::dotProduct(a.fromT, a.toT) > 0.99999 && QPointF::dotProduct(b.fromT, b.toT) > 0.99999;
+        if (same) {
+            unchanged.addPolygon(src);
+            unchanged.closeSubpath();
+            continue;
+        }
+        const QPointF ma = normal(a.toT), mb = normal(b.toT);
+        const QPolygonF dst({pixelToView(a.to + ma * w), pixelToView(b.to + mb * w),
+                             pixelToView(b.to - mb * w), pixelToView(a.to - ma * w)});
+        QTransform map;
+        if (!QTransform::quadToQuad(src, dst, map)) continue;
+        gc.setTransform(map * base);
+        QPainterPath clip;
+        clip.addPolygon(src);
+        clip.closeSubpath();
+        gc.setClipPath(clip);
+        const QRectF area = src.boundingRect();
+        gc.drawImage(area, m_warpImage, area);
+    }
+    if (!unchanged.isEmpty()) {
+        // Image pixel -> view, without bending.
+        const QRectF all(QPointF(0, 0), QSizeF(m_warpImage.size()));
+        const QPolygonF src(all);
+        QPolygonF dst;
+        for (const QPointF &c : src) dst << pixelToView(m_warpOrigin + c / m_warpImageScale);
+        QTransform map;
+        if (QTransform::quadToQuad(src, dst, map)) {
+            gc.setTransform(map * base);
+            gc.setClipPath(unchanged);
+            const QRectF area = unchanged.boundingRect() & all;
+            gc.drawImage(area, m_warpImage, area);
+        }
+    }
+    gc.restore();
+}
+
+void GigaToolStrokePoints::paintCircles(QPainter &gc, GigaLastStrokeTransform *s)
+{
+    if (!m_proportional) return;
+    const QVector<qreal> centers = proportionalCenters();
+    if (centers.isEmpty()) return;
+    gc.save();
+    gc.setRenderHint(QPainter::Antialiasing, true);
+    gc.setBrush(Qt::NoBrush);
+    const qreal r = m_radius; // the radius is set in screen px
+    const bool label = m_radiusChanged.isValid() && m_radiusChanged.elapsed() < 1200;
+    for (qreal at : centers) {
+        const QPointF c = pixelToView(s->path().bentPointAt(at));
+        // Same two-tone line as the brush outline: readable on any colour.
+        gc.setPen(QPen(QColor(0, 0, 0, 140), 3.0));
+        gc.drawEllipse(c, r, r);
+        gc.setPen(QPen(QColor(255, 255, 255, 220), 1.2));
+        gc.drawEllipse(c, r, r);
+        if (label) {
+            const QString text = i18n("%1 px", m_radius);
+            const QPointF at2 = c + QPointF(r * 0.72 + 6, -r * 0.72 - 6);
+            QFont font = gc.font();
+            font.setBold(true);
+            gc.setFont(font);
+            gc.setPen(QColor(0, 0, 0, 170));
+            gc.drawText(at2 + QPointF(1, 1), text);
+            gc.setPen(QColor(255, 255, 255));
+            gc.drawText(at2, text);
+        }
+    }
+    gc.restore();
 }

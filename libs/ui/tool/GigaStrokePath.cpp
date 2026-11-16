@@ -459,6 +459,22 @@ QVector<QPointF> GigaStrokePath::bentPolyline() const
     return result;
 }
 
+QVector<QPointF> GigaStrokePath::bentPolyline(const Shape &shape) const
+{
+    const OffsetEvaluator spline(shape.vertices, shape.moves);
+    QVector<QPointF> result;
+    result.reserve(m_points.size());
+    for (int i = 0; i < m_points.size(); ++i) {
+        result << m_points[i] + spline.at(m_lengths[i]);
+    }
+    return result;
+}
+
+QPointF GigaStrokePath::bentPointAt(qreal s) const
+{
+    return basePointAt(s) + offsetAt(s);
+}
+
 QRectF GigaStrokePath::bentBounds() const
 {
     const QVector<QPointF> line = bentPolyline();

@@ -7,6 +7,8 @@
 #ifndef GIGA_TOOL_STROKE_POINTS_H
 #define GIGA_TOOL_STROKE_POINTS_H
 
+#include <QElapsedTimer>
+#include <QImage>
 #include <QPointer>
 #include <QSet>
 #include <QVector>
@@ -75,6 +77,7 @@ public:
     Q_INVOKABLE QPointF gigaVertexImagePos(int index) const;
     Q_INVOKABLE void gigaSetProportional(bool on, int radiusScreenPx, int falloff);
     Q_INVOKABLE int gigaRadius() const { return m_radius; }
+    Q_INVOKABLE bool gigaWarping() const;
 
 private Q_SLOTS:
     void slotSessionChanged();
@@ -98,6 +101,10 @@ private:
     void changeRadius(int wheelSteps);
     /// Centres (s) the proportional preview is drawn around, or empty.
     QVector<qreal> proportionalCenters() const;
+    /// While dragging: the last repaint, bent piece by piece to the new shape.
+    void paintWarp(QPainter &gc, GigaLastStrokeTransform *s);
+    void ensureWarpImage(GigaLastStrokeTransform *s);
+    void paintCircles(QPainter &gc, GigaLastStrokeTransform *s);
 
     QPointer<GigaLastStrokeTransform> m_session;
     QSet<int> m_selected;
@@ -122,6 +129,13 @@ private:
     QPointer<QToolButton> m_propButton;
     QPointer<KisSliderSpinBox> m_radiusBox;
     QPointer<QComboBox> m_falloffBox;
+    QElapsedTimer m_radiusChanged;     ///< shows the "120 px" label for a moment
+
+    // Bent preview: the last repaint as an image (at about screen resolution)
+    QImage m_warpImage;
+    int m_warpImageSerial {-2};
+    qreal m_warpImageScale {1.0};      ///< image pixels per stroke pixel
+    QPointF m_warpOrigin;              ///< stroke pixel at the image's top-left
 };
 
 class GigaToolStrokePointsFactory : public KoToolFactoryBase

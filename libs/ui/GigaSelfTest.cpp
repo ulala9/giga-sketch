@@ -1524,12 +1524,35 @@ void testStrokePoints(KisMainWindow *w)
             pass(15, false);
         }
         pass(800, false); // button still down: no release yet
-        const QColor held = pixel((at + QPointF(0, 40)).toPoint());
-        const QColor oldPlace = pixel(at.toPoint());
+        // Held: no repaint (layer without the stroke), the tool draws the
+        // last repaint bent to the new place on top.
+        bool warping = false;
+        QMetaObject::invokeMethod(points, "gigaWarping", Q_RETURN_ARG(bool, warping));
+        const QColor layerNew = pixel((at + QPointF(0, 40)).toPoint());
+        const QColor layerOld = pixel(at.toPoint());
+        QImage overlay(cw->size(), QImage::Format_ARGB32_Premultiplied);
+        overlay.fill(Qt::transparent);
+        {
+            QPainter p(&overlay);
+            p.setTransform(conv->flakeToWidgetTransform());
+            points->paint(p, *canvas->viewConverter());
+        }
+        // A little beside the held dot (the dot itself is drawn on top there).
+        const QPoint shownAt = toWidget(at + QPointF(0, 40)) + QPoint(10, 0);
+        const QPoint oldAt = toWidget(at) + QPoint(10, 0);
+        const QColor drawnNew = overlay.pixelColor(shownAt);
+        const QColor drawnOld = overlay.pixelColor(oldAt);
+        report(warping && isEmpty(layerNew) && isEmpty(layerOld) && isRed(drawnNew) && drawnOld.alpha() < 30,
+               "strokepoints-bent-preview-while-dragging",
+               QStringLiteral("warping %1; layer new %2 old %3; preview new %4 old %5")
+                   .arg(warping).arg(name(layerNew), name(layerOld), name(drawnNew), name(drawnOld)));
         send(2, b);
-        wait(600);
-        report(isRed(held) && isEmpty(oldPlace), "strokepoints-live-while-dragging",
-               QStringLiteral("while held: new place %1, old place %2").arg(name(held), name(oldPlace)));
+        wait(800);
+        QMetaObject::invokeMethod(points, "gigaWarping", Q_RETURN_ARG(bool, warping));
+        report(!warping && isRed(pixel((at + QPointF(0, 40)).toPoint())) && isEmpty(pixel(at.toPoint())),
+               "strokepoints-repaint-on-release",
+               QStringLiteral("warping %1, layer new %2, old %3").arg(warping)
+                   .arg(name(pixel((at + QPointF(0, 40)).toPoint())), name(pixel(at.toPoint()))));
     }
     static_cast<KisTool *>(points)->requestStrokeCancellation();
     wait(600);
