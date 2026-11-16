@@ -4,16 +4,11 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Blender bridge faster + progress bar, waiting for a hand test)
+Last updated: 2026-11-16 (Blender bridge merged)
 
 ## Resume here
-- **Next up:** user hand-tests the Blender bridge (`feature/blender-bridge`, steps 1+2 not hand-tested yet):
-  Send adds/updates a "Blender: <camera>" layer, switching to Giga Sketch refreshes it, the picture is saved in the
-  .kra, Layer > Refresh Blender Layers. User said it "works pretty well" but tab-back took 1.5-2 s at 7020x3120;
-  step 3 (raw pixels via /dev/shm, no GUI freeze, progress bar) brings a Send to ~0.5 s — user to re-test.
-  Then merge `--no-ff` into giga-main and push.
-  New tool icons are **extreme low priority** (user, 2026-11-16): don't suggest batches 3–4.
-  Batch 2 stays in giga-test as-is; merge it only if the user OKs the look.
+- **Next up:** not chosen. Candidates: a Phase 5 blueprint (Annotations, Bubble Guess, Blob Brush, Harmony Wheel),
+  Phase 6 extras, or Blender bridge extras if wanted (live updates, render passes — out of scope so far).
 - Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
 - Repo state: everything merged and pushed (2026-11-16: transform-last-stroke, stroke-points,
   stroke-points-proportional, refboard-image-search, refboard-delete-key, all hand-tested by the user).
@@ -25,7 +20,7 @@ Last updated: 2026-11-16 (Blender bridge faster + progress bar, waiting for a ha
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2), `feature/blender-bridge` (step 0).
+  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2, unreviewed, extreme low priority).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -102,7 +97,8 @@ Last updated: 2026-11-16 (Blender bridge faster + progress bar, waiting for a ha
 - [x] Board: Delete / Backspace / the Clear shortcut (Ctrl+Q for the user) delete the focused or outlined image
   (`fix/refboard-delete-key`, merged 2026-11-16).
 - [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
-- [ ] **Blender Viewport Layer** (replaces the "3D Model Layer" blueprint; scoped 2026-11-16, not started).
+- [x] **Blender Viewport Layer** (`feature/blender-bridge`, merged 2026-11-16, hand-tested). Self-test `blender`;
+  add-on `giga-tools/blender/giga_viewport_send.py`.
   A basic capture of Blender's viewport onto a GigaSketch layer, instead of importing models.
   - Scope (user): **on demand** (a "Send" in Blender / "Refresh" in GigaSketch, no live streaming);
     **Solid/EEVEE viewport look** (no Cycles); **one plain image** (no passes).
@@ -120,7 +116,7 @@ Last updated: 2026-11-16 (Blender bridge faster + progress bar, waiting for a ha
     (already auto-reloads, `kis_safe_document_loader.cpp`, 500 ms debounce). Tells whether the workflow fits.
   - Not in scope unless asked: live updates, Cycles, render passes (line art, colour IDs, AO, depth, normals),
     camera control from GigaSketch.
-  - Branch: `feature/blender-bridge`. **Step 0 done 2026-11-16**; user wanted less setup, so **step 1 done
+  - Branch: `feature/blender-bridge` (merged). **Step 0 done 2026-11-16**; user wanted less setup, so **step 1 done
     2026-11-16**: local socket bridge (`GigaBlenderBridge`), Send adds the layer above the active one (or a new
     document), later sends update it, switching to Giga Sketch asks Blender for a fresh picture (skipped if nothing
     changed; pref in General > File Handling), Blender matches the canvas size. Still a File Layer pointing at the
@@ -129,8 +125,8 @@ Last updated: 2026-11-16 (Blender bridge faster + progress bar, waiting for a ha
     (`giga-blender="1"`), no missing-file dialog/error, Layer > Refresh Blender Layers; Freeze = existing Convert to
     Paint Layer. Krita's kra loader/saver tests pass.
     **Step 3 done 2026-11-16** (speed): raw pixels via shared memory, decoded off the GUI thread, Blender layers no
-    longer watch their PNG (no double load), canvas progress bar, Blender "Resolution: Full / Half". Waiting for the
-    user's hand test.
+    longer watch their PNG (no double load), canvas progress bar, Blender "Resolution: Full / Half". Hand-tested,
+    merged 2026-11-16.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
 - [x] Transform Last Stroke (`feature/transform-last-stroke`, merged 2026-11-16, hand-tested). Self-test `laststroke`.
