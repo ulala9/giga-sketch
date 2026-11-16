@@ -390,18 +390,47 @@ bool GigaReferenceBoardView::isResetRotationKey(QKeyEvent *event) const
 {
     if (isModifierKey(event->key())) return false;
     // The canvas "Reset Canvas Rotation" shortcut (Keyboard Shortcuts, F1 here)...
-    if (m_canvas && m_canvas->viewManager()) {
-        if (KisAction *action = m_canvas->viewManager()->actionManager()->actionByName(QStringLiteral("reset_canvas_rotation"))) {
-            const QKeySequence pressed(QKeyCombination(event->modifiers() & ~Qt::KeypadModifier, Qt::Key(event->key())));
-            for (const QKeySequence &shortcut : action->shortcuts()) {
-                if (shortcut == pressed) return true;
-            }
-        }
-    }
+    if (matchesActionShortcut(event, QStringLiteral("reset_canvas_rotation"))) return true;
     // ...and the reset keys of Canvas Input Settings > Rotate Canvas.
     return GigaCanvasInputKeys::matchKey(GigaCanvasInputKeys::currentBindings(),
                                          GigaCanvasInputKeys::heldKeys(event->modifiers(), {event->key()}))
         >= 0;
+}
+
+bool GigaReferenceBoardView::matchesActionShortcut(QKeyEvent *event, const QString &name) const
+{
+    if (isModifierKey(event->key()) || !m_canvas || !m_canvas->viewManager()) return false;
+    // Read fresh every time, so a rebind in Keyboard Shortcuts applies at once.
+    KisAction *action = m_canvas->viewManager()->actionManager()->actionByName(name);
+    if (!action) return false;
+    const QKeySequence pressed(QKeyCombination(event->modifiers() & ~Qt::KeypadModifier, Qt::Key(event->key())));
+    for (const QKeySequence &shortcut : action->shortcuts()) {
+        if (shortcut == pressed) return true;
+    }
+    return false;
+}
+
+bool GigaReferenceBoardView::isDeleteKey(QKeyEvent *event) const
+{
+    const Qt::KeyboardModifiers mods = event->modifiers() & ~Qt::KeypadModifier;
+    if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) && mods == Qt::NoModifier) return true;
+    // Whatever deletes on the canvas ("Clear", Ctrl+Q / Q for the user).
+    return matchesActionShortcut(event, QStringLiteral("clear"));
+}
+
+void GigaReferenceBoardView::deleteImage(KisReferenceImage *image)
+{
+    KisReferenceImagesLayer *l = layer();
+    if (!image || !l || !m_canvas || !liveImages().contains(image)) return;
+    const bool wasFocused = image == m_focused;
+    pushCommand(l->removeReferenceImages(m_canvas->imageView()->document(), {image}));
+    // Zoomed in on it: fly back to the overview instead of staring at a gap.
+    if (wasFocused) fitAll();
+}
+
+void GigaReferenceBoardView::deleteCurrent()
+{
+    deleteImage(m_focused ? m_focused : m_current);
 }
 
 QRectF GigaReferenceBoardView::displayRect(KisReferenceImage *image) const
@@ -869,7 +898,7 @@ bool GigaReferenceBoardView::event(QEvent *event)
         QKeyEvent *key = static_cast<QKeyEvent *>(event);
         const int k = key->key();
         if (k == Qt::Key_Escape || k == Qt::Key_Home || k == Qt::Key_Left || k == Qt::Key_Right || k == Qt::Key_Space
-            || key->matches(QKeySequence::Paste) || isResetRotationKey(key)) {
+            || key->matches(QKeySequence::Paste) || isResetRotationKey(key) || isDeleteKey(key)) {
             event->accept();
             return true;
         }
@@ -964,6 +993,10 @@ void GigaReferenceBoardView::keyPressEvent(QKeyEvent *event)
     }
     if (!event->isAutoRepeat() && isResetRotationKey(event)) {
         resetRotation();
+        return;
+    }
+    if (isDeleteKey(event)) {
+        if (!event->isAutoRepeat()) deleteCurrent(); // holding the key deletes one, not all
         return;
     }
     switch (event->key()) {
@@ -1429,10 +1462,9 @@ void GigaReferenceBoardView::contextMenuEvent(QContextMenuEvent *event)
         resample->setEnabled(!summary.isEmpty());
         resample->setToolTip(i18n("Keeps the size it fills here and on the canvas sharp (×1.5). Detail is lost once the file is saved and closed."));
         menu.addSeparator();
-        menu.addAction(KisIconUtils::loadIcon("edit-delete"), i18n("Delete"), this, [this, image]() {
-            KisReferenceImagesLayer *l = layer();
-            if (l && m_canvas) pushCommand(l->removeReferenceImages(m_canvas->imageView()->document(), {image}));
-        });
+        QAction *del = menu.addAction(KisIconUtils::loadIcon("edit-delete"), i18n("Delete"), this,
+                                      [this, image]() { deleteImage(image); });
+        del->setShortcut(QKeySequence(Qt::Key_Delete)); // shown as a hint; the key itself is handled in keyPressEvent
     } else {
         menu.addAction(KisIconUtils::loadIcon("zoom-fit"), i18n("Fit All"), this, &GigaReferenceBoardView::fitAll);
         menu.addAction(i18n("Arrange"), this, &GigaReferenceBoardView::arrange);

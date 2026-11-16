@@ -1025,6 +1025,58 @@ void testReferenceBoard(KisMainWindow *w)
         }
     }
 
+    // Delete key over the Board deletes the focused image (also the "clear"
+    // action's shortcut, Ctrl+Q for the user); undo brings it back.
+    {
+        auto wait = [](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) pump(1); };
+        auto clickImage = [boardView](int index) {
+            QPointF c;
+            QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, c), Q_ARG(int, index));
+            const QPoint p = c.toPoint();
+            QMouseEvent press(QEvent::MouseButtonPress, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(boardView, &press);
+            QMouseEvent release(QEvent::MouseButtonRelease, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(boardView, &release);
+            pump(3);
+        };
+        auto pressKey = [boardView](const QKeyCombination &combo) {
+            QKeyEvent over(QEvent::ShortcutOverride, combo.key(), combo.keyboardModifiers());
+            QCoreApplication::sendEvent(boardView, &over);
+            const bool claimed = over.isAccepted();
+            QKeyEvent key(QEvent::KeyPress, combo.key(), combo.keyboardModifiers());
+            QCoreApplication::sendEvent(boardView, &key);
+            QKeyEvent up(QEvent::KeyRelease, combo.key(), combo.keyboardModifiers());
+            QCoreApplication::sendEvent(boardView, &up);
+            pump(5);
+            return claimed;
+        };
+        wait(300);
+        const int countBefore = boardView->property("imageCount").toInt();
+        clickImage(1);
+        const bool claimed = pressKey(QKeyCombination(Qt::NoModifier, Qt::Key_Delete));
+        const int countAfter = boardView->property("imageCount").toInt();
+        report(claimed && countAfter == countBefore - 1 && boardView->property("focusedIndex").toInt() == -1,
+               "board-delete-key", QStringLiteral("%1 -> %2 images, claimed %3").arg(countBefore).arg(countAfter).arg(claimed));
+        doc->undoStack()->undo();
+        pump(5);
+        report(boardView->property("imageCount").toInt() == countBefore && refs[1]->isOnBoard(), "board-delete-undo",
+               QString::number(boardView->property("imageCount").toInt()));
+        wait(400);
+
+        KisAction *clear = w->viewManager()->actionManager()->actionByName(QStringLiteral("clear"));
+        if (clear && !clear->shortcut().isEmpty()) {
+            clickImage(1);
+            pressKey(clear->shortcut()[0]);
+            report(boardView->property("imageCount").toInt() == countBefore - 1, "board-clear-shortcut-deletes",
+                   clear->shortcut().toString());
+            doc->undoStack()->undo();
+            pump(5);
+            wait(400);
+        } else {
+            info(QStringLiteral("board-clear-shortcut-deletes skipped: \"clear\" has no shortcut here"));
+        }
+    }
+
     // Send back to the canvas: exact same transform as before.
     canvas->addCommand(sendToCanvas({refs[1]}));
     pump(5);
