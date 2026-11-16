@@ -166,8 +166,8 @@ private:
     bool m_renderDirty {false};
     int m_editSerial {0};
     int m_renderedSerial {-1};
-    QStack<QVector<GigaStrokePath::Vertex>> m_undoShapes;
-    QStack<QVector<GigaStrokePath::Vertex>> m_redoShapes;
+    QStack<GigaStrokePath::Shape> m_undoShapes;
+    QStack<GigaStrokePath::Shape> m_redoShapes;
 };
 
 #endif // GIGA_LAST_STROKE_TRANSFORM_H

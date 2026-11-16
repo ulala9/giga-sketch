@@ -687,7 +687,7 @@ bool GigaLastStrokeTransform::startPoints(KisViewManager *view, KisImageSP image
 void GigaLastStrokeTransform::pointsBeginEdit()
 {
     if (!m_points) return;
-    m_undoShapes.push(m_path.vertices());
+    m_undoShapes.push(m_path.shape());
     m_redoShapes.clear();
 }
 
@@ -708,12 +708,12 @@ void GigaLastStrokeTransform::pointsUndo(bool redo)
             pointsFinish(false, true);
             return;
         }
-        m_redoShapes.push(m_path.vertices());
-        m_path.setVertices(m_undoShapes.pop());
+        m_redoShapes.push(m_path.shape());
+        m_path.setShape(m_undoShapes.pop());
     } else {
         if (m_redoShapes.isEmpty()) return;
-        m_undoShapes.push(m_path.vertices());
-        m_path.setVertices(m_redoShapes.pop());
+        m_undoShapes.push(m_path.shape());
+        m_path.setShape(m_redoShapes.pop());
     }
     pointsChanged();
 }

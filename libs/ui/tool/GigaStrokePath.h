@@ -53,6 +53,43 @@ public:
         QPointF offset;       ///< how far it has been moved (image px)
     };
 
+    /// Falloff curves of proportional editing (same idea as Blender's).
+    enum Falloff { Smooth = 0, Sphere, Root, Sharp, Linear, Constant };
+
+    /**
+     * A proportional move: the line within @c radius (measured *along* the
+     * line) of the nearest centre moves by @c delta times the falloff
+     * weight (1 at a centre, 0 at the radius). Added on top of the dots'
+     * own bend, so the whole line inside the radius follows smoothly, not
+     * just the dots.
+     */
+    struct Move {
+        QVector<qreal> centers;   ///< s of the dragged dots
+        qreal radius {50.0};      ///< image px along the line
+        int falloff {Smooth};
+        QPointF delta;            ///< image px
+    };
+
+    /// Everything that defines the bend (for Ctrl+Z).
+    struct Shape {
+        QVector<Vertex> vertices;
+        QVector<Move> moves;
+    };
+    Shape shape() const { return Shape{m_vertices, m_moves}; }
+    void setShape(const Shape &shape) { m_vertices = shape.vertices; m_moves = shape.moves; }
+
+    void addMove(const Move &move) { m_moves << move; }
+    /// The move being dragged right now (the last one added).
+    Move *lastMove() { return m_moves.isEmpty() ? nullptr : &m_moves.last(); }
+
+    /// Weight of a falloff curve at @p t = distance / radius (0..1).
+    static qreal falloffWeight(int falloff, qreal t);
+    /// Strongest weight of @p move at distance @p s (0 outside its radius).
+    static qreal moveWeight(const Move &move, qreal s);
+
+    /// s of every path point (piece ends), for drawing the radius preview.
+    const QVector<qreal> &pathLengths() const { return m_lengths; }
+
     /// Read the recording. False (with a message) when it can't be edited.
     bool build(const GigaLastStrokeRecord &record, QString *error = nullptr);
 
@@ -61,7 +98,8 @@ public:
 
     /// Place the dots again, about @p spacing image px apart on straight
     /// parts and closer where the line turns. The current bend is kept
-    /// (the new dots take the offsets the path has at their place).
+    /// (the new dots take the offsets the path has at their place; the
+    /// proportional moves are folded into the dots).
     void placeVertices(qreal spacing);
 
     const QVector<Vertex> &vertices() const { return m_vertices; }
@@ -108,6 +146,7 @@ private:
     QVector<QPointF> m_points;         ///< main copy path, piece ends
     QVector<qreal> m_lengths;          ///< s of each m_points entry
     QVector<Vertex> m_vertices;        ///< sorted by s, first at 0, last at length()
+    QVector<Move> m_moves;             ///< proportional moves, in order
 };
 
 #endif // GIGA_STROKE_PATH_H

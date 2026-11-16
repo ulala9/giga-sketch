@@ -133,7 +133,51 @@ struct OffsetSpline
     }
 };
 
+/// The whole bend at distance s: the dots' curve plus every proportional move.
+struct OffsetEvaluator
+{
+    OffsetSpline spline;
+    const QVector<GigaStrokePath::Move> &moves;
+
+    OffsetEvaluator(const QVector<GigaStrokePath::Vertex> &vertices, const QVector<GigaStrokePath::Move> &m)
+        : spline(vertices), moves(m) {}
+
+    QPointF at(qreal s) const
+    {
+        QPointF offset = spline.at(s);
+        for (const GigaStrokePath::Move &move : moves) {
+            const qreal w = GigaStrokePath::moveWeight(move, s);
+            if (w > 0.0) offset += w * move.delta;
+        }
+        return offset;
+    }
+};
+
 } // namespace
+
+qreal GigaStrokePath::falloffWeight(int falloff, qreal t)
+{
+    if (t >= 1.0) return 0.0;
+    if (t <= 0.0) return 1.0;
+    const qreal x = 1.0 - t; // 1 at the centre, 0 at the radius
+    switch (falloff) {
+    case Sphere:   return std::sqrt(qMax<qreal>(0.0, 2.0 * x - x * x));
+    case Root:     return std::sqrt(x);
+    case Sharp:    return x * x;
+    case Linear:   return x;
+    case Constant: return 1.0;
+    case Smooth:
+    default:       return x * x * (3.0 - 2.0 * x);
+    }
+}
+
+qreal GigaStrokePath::moveWeight(const Move &move, qreal s)
+{
+    if (move.radius <= 0.0 || move.centers.isEmpty()) return 0.0;
+    qreal nearest = std::numeric_limits<qreal>::max();
+    for (qreal c : move.centers) nearest = qMin(nearest, qAbs(s - c));
+    return falloffWeight(move.falloff, nearest / move.radius);
+}
 
 bool GigaStrokePath::build(const GigaLastStrokeRecord &record, QString *error)
 {
@@ -142,6 +186,7 @@ bool GigaStrokePath::build(const GigaLastStrokeRecord &record, QString *error)
     m_points.clear();
     m_lengths.clear();
     m_vertices.clear();
+    m_moves.clear();
 
     auto fail = [&](const QString &message) {
         m_pieces.clear();
@@ -325,7 +370,8 @@ void GigaStrokePath::placeVertices(qreal spacing)
 {
     if (!isValid()) return;
     spacing = qMax<qreal>(spacing, 2.0);
-    const OffsetSpline old(m_vertices);
+    const QVector<Move> oldMoves = m_moves;
+    const OffsetEvaluator old(m_vertices, oldMoves);
     const qreal total = length();
 
     QVector<qreal> places;
@@ -368,6 +414,7 @@ void GigaStrokePath::placeVertices(qreal spacing)
         fresh << Vertex{at, old.at(at)};
     }
     m_vertices = fresh;
+    m_moves.clear(); // folded into the new dots
 }
 
 void GigaStrokePath::setOffset(int index, const QPointF &offset)
@@ -382,7 +429,8 @@ int GigaStrokePath::insertVertex(qreal s)
     for (int i = 0; i < m_vertices.size(); ++i) {
         if (qAbs(m_vertices[i].s - s) < 0.5) return i;
     }
-    const QPointF offset = offsetAt(s);
+    // Only the dots' own curve: the proportional moves are added on top.
+    const QPointF offset = OffsetSpline(m_vertices).at(s);
     int at = 0;
     while (at < m_vertices.size() && m_vertices[at].s < s) ++at;
     m_vertices.insert(at, Vertex{s, offset});
@@ -392,17 +440,17 @@ int GigaStrokePath::insertVertex(qreal s)
 QPointF GigaStrokePath::vertexPosition(int index) const
 {
     if (index < 0 || index >= m_vertices.size()) return QPointF();
-    return basePointAt(m_vertices[index].s) + m_vertices[index].offset;
+    return basePointAt(m_vertices[index].s) + offsetAt(m_vertices[index].s);
 }
 
 QPointF GigaStrokePath::offsetAt(qreal s) const
 {
-    return OffsetSpline(m_vertices).at(s);
+    return OffsetEvaluator(m_vertices, m_moves).at(s);
 }
 
 QVector<QPointF> GigaStrokePath::bentPolyline() const
 {
-    const OffsetSpline spline(m_vertices);
+    const OffsetEvaluator spline(m_vertices, m_moves);
     QVector<QPointF> result;
     result.reserve(m_points.size());
     for (int i = 0; i < m_points.size(); ++i) {
@@ -454,12 +502,15 @@ bool GigaStrokePath::isEdited() const
     for (const Vertex &v : m_vertices) {
         if (qAbs(v.offset.x()) > 1e-3 || qAbs(v.offset.y()) > 1e-3) return true;
     }
+    for (const Move &m : m_moves) {
+        if (qAbs(m.delta.x()) > 1e-3 || qAbs(m.delta.y()) > 1e-3) return true;
+    }
     return false;
 }
 
 QVector<GigaLastStrokeRecord::Job> GigaStrokePath::bentJobs() const
 {
-    const OffsetSpline spline(m_vertices);
+    const OffsetEvaluator spline(m_vertices, m_moves);
     QVector<GigaLastStrokeRecord::Job> jobs;
     jobs.reserve(m_pieces.size());
     for (const Piece &piece : m_pieces) {

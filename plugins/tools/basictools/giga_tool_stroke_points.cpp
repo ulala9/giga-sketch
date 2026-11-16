@@ -7,6 +7,8 @@
 
 #include <QApplication>
 #include <QButtonGroup>
+#include <QComboBox>
+#include <QWheelEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineF>
@@ -16,8 +18,10 @@
 #include <QToolButton>
 
 #include <KoPointerEvent.h>
+#include <KoCanvasBase.h>
 #include <kis_cursor.h>
 #include <kis_slider_spin_box.h>
+#include <kis_config.h>
 
 #include <kis_node.h>
 #include <kis_image.h>
@@ -30,12 +34,21 @@ const qreal DotRadius = 4.5;      // screen px
 const qreal DotHoverRadius = 6.0; // screen px
 const qreal HitRadius = 9.0;      // screen px
 const qreal LineHitRadius = 10.0; // screen px, double-click on the line
+const char *PropKey = "gigaStrokePointsProportional";
+const char *RadiusKey = "gigaStrokePointsRadius";      // screen px
+const char *FalloffKey = "gigaStrokePointsFalloff";    // GigaStrokePath::Falloff
+const int MinRadius = 5;
+const int MaxRadius = 3000;
 }
 
 GigaToolStrokePoints::GigaToolStrokePoints(KoCanvasBase *canvas)
     : KisTool(canvas, KisCursor::arrowCursor())
 {
     setObjectName(QStringLiteral("tool_giga_stroke_points"));
+    KisConfig cfg(true);
+    m_proportional = cfg.readEntry<bool>(PropKey, false);
+    m_radius = qBound(MinRadius, cfg.readEntry<int>(RadiusKey, 120), MaxRadius);
+    m_falloff = qBound(0, cfg.readEntry<int>(FalloffKey, 0), int(GigaStrokePath::Constant));
 }
 
 GigaToolStrokePoints::~GigaToolStrokePoints()
@@ -81,9 +94,11 @@ void GigaToolStrokePoints::deactivate()
     if (GigaLastStrokeTransform *s = session()) {
         s->pointsFinish(true, false);
     }
+    setWheelCatcher(false);
     updateOverlay();
     m_selected.clear();
     m_dragging = false;
+    m_propDrag = false;
     KisTool::deactivate();
 }
 
@@ -142,6 +157,8 @@ void GigaToolStrokePoints::press(KoPointerEvent *event, bool toggleSelection)
     m_dragStart = pos;
     m_startOffsets.clear();
     for (const GigaStrokePath::Vertex &v : s->path().vertices()) m_startOffsets << v.offset;
+    m_propDrag = m_proportional;
+    if (m_propDrag) setWheelCatcher(true); // wheel = radius while dragging
     updateOverlay();
 }
 
@@ -155,9 +172,24 @@ void GigaToolStrokePoints::drag(KoPointerEvent *event)
         if (QLineF(QPointF(), delta).length() * viewScale() < 2.0) return;
         s->pointsBeginEdit();
         m_moved = true;
+        if (m_propDrag) {
+            // One proportional move for this drag; the dots' own offsets
+            // stay, the move pulls the line around them.
+            GigaStrokePath::Move move;
+            for (int i : m_selected) {
+                if (i >= 0 && i < s->path().vertices().size()) move.centers << s->path().vertices()[i].s;
+            }
+            move.radius = m_radius / viewScale();
+            move.falloff = m_falloff;
+            s->path().addMove(move);
+        }
     }
-    for (int i : m_selected) {
-        if (i >= 0 && i < m_startOffsets.size()) s->path().setOffset(i, m_startOffsets[i] + delta);
+    if (m_propDrag) {
+        if (GigaStrokePath::Move *move = s->path().lastMove()) move->delta = delta;
+    } else {
+        for (int i : m_selected) {
+            if (i >= 0 && i < m_startOffsets.size()) s->path().setOffset(i, m_startOffsets[i] + delta);
+        }
     }
     updateOverlay();
 }
@@ -168,6 +200,8 @@ void GigaToolStrokePoints::release()
     const bool moved = m_dragging && m_moved;
     m_dragging = false;
     m_moved = false;
+    m_propDrag = false;
+    setWheelCatcher(false);
     if (s && moved) s->pointsChanged(); // repaint the stroke along the new path
     updateOverlay();
 }
@@ -300,11 +334,42 @@ void GigaToolStrokePoints::paint(QPainter &gc, const KoViewConverter &converter)
     }
 
     const QColor accent = qApp->palette().color(QPalette::Highlight);
+
+    // Proportional: tint the part of the line that will follow, strong at the
+    // dot, fading to nothing at the radius.
+    GigaStrokePath::Move reach;
+    reach.centers = proportionalCenters();
+    reach.radius = m_radius / viewScale();
+    reach.falloff = m_falloff;
+    const bool showReach = !reach.centers.isEmpty();
+    if (showReach) {
+        const QVector<QPointF> points = path.bentPolyline();
+        const QVector<qreal> &lengths = path.pathLengths();
+        for (int i = 0; i + 1 < points.size() && i + 1 < lengths.size(); ++i) {
+            const qreal w = GigaStrokePath::moveWeight(reach, 0.5 * (lengths[i] + lengths[i + 1]));
+            if (w <= 0.0) continue;
+            QColor tint = accent;
+            tint.setAlphaF(0.15 + 0.6 * w);
+            gc.setPen(QPen(tint, 6.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            gc.drawLine(pixelToView(points[i]), pixelToView(points[i + 1]));
+        }
+    }
+
     for (int i = 0; i < path.vertices().size(); ++i) {
         const QPointF c = pixelToView(path.vertexPosition(i));
         const qreal r = (i == m_hover) ? DotHoverRadius : DotRadius;
+        QColor fill(255, 255, 255);
+        if (m_selected.contains(i)) {
+            fill = accent;
+        } else if (showReach) {
+            // How strongly this dot follows: white -> accent.
+            const qreal w = GigaStrokePath::moveWeight(reach, path.vertices()[i].s);
+            fill = QColor::fromRgbF(1.0 + (accent.redF() - 1.0) * w * 0.7,
+                                    1.0 + (accent.greenF() - 1.0) * w * 0.7,
+                                    1.0 + (accent.blueF() - 1.0) * w * 0.7);
+        }
         gc.setPen(QPen(QColor(0, 0, 0, 170), 1.5));
-        gc.setBrush(m_selected.contains(i) ? accent : QColor(255, 255, 255));
+        gc.setBrush(fill);
         gc.drawEllipse(c, r, r);
     }
     gc.restore();
@@ -345,6 +410,42 @@ QWidget *GigaToolStrokePoints::createOptionWidget()
     m_spacing->setMinimumWidth(170);
     connect(m_spacing, SIGNAL(valueChanged(int)), this, SLOT(slotSpacingChanged(int)));
     layout->addWidget(m_spacing);
+    layout->addSpacing(12);
+
+    // Proportional editing: on/off, radius (mouse wheel while dragging), falloff.
+    m_propButton = new QToolButton(w);
+    m_propButton->setText(i18n("Proportional"));
+    m_propButton->setToolTip(i18n("Dragging a dot also pulls the line around it, within the radius "
+                                  "(measured along the line). Mouse wheel while dragging: radius."));
+    m_propButton->setCheckable(true);
+    m_propButton->setChecked(m_proportional);
+    connect(m_propButton, SIGNAL(toggled(bool)), this, SLOT(slotProportionalToggled(bool)));
+    layout->addWidget(m_propButton);
+
+    m_radiusBox = new KisSliderSpinBox(w);
+    m_radiusBox->setRange(MinRadius, MaxRadius);
+    m_radiusBox->setExponentRatio(3.0); // fine control for small radii
+    m_radiusBox->setPrefix(i18n("Radius: "));
+    m_radiusBox->setSuffix(i18n(" px"));
+    m_radiusBox->setValue(m_radius);
+    m_radiusBox->setToolTip(i18n("How far along the line a drag reaches (on screen). Mouse wheel while dragging."));
+    m_radiusBox->setMinimumWidth(150);
+    m_radiusBox->setEnabled(m_proportional);
+    connect(m_radiusBox, SIGNAL(valueChanged(int)), this, SLOT(slotRadiusChanged(int)));
+    layout->addWidget(m_radiusBox);
+
+    m_falloffBox = new QComboBox(w);
+    m_falloffBox->addItem(i18n("Smooth"));
+    m_falloffBox->addItem(i18n("Sphere"));
+    m_falloffBox->addItem(i18n("Root"));
+    m_falloffBox->addItem(i18n("Sharp"));
+    m_falloffBox->addItem(i18n("Linear"));
+    m_falloffBox->addItem(i18n("Constant"));
+    m_falloffBox->setCurrentIndex(m_falloff);
+    m_falloffBox->setToolTip(i18n("How the pull fades towards the edge of the radius"));
+    m_falloffBox->setEnabled(m_proportional);
+    connect(m_falloffBox, SIGNAL(currentIndexChanged(int)), this, SLOT(slotFalloffChanged(int)));
+    layout->addWidget(m_falloffBox);
     layout->addSpacing(12);
 
     QPushButton *apply = new QPushButton(i18n("Apply"), w);
@@ -419,4 +520,96 @@ QPointF GigaToolStrokePoints::gigaVertexImagePos(int index) const
 {
     GigaLastStrokeTransform *s = session();
     return s ? s->path().vertexPosition(index) : QPointF();
+}
+
+QVector<qreal> GigaToolStrokePoints::proportionalCenters() const
+{
+    QVector<qreal> centers;
+    GigaLastStrokeTransform *s = session();
+    if (!s || !m_proportional) return centers;
+    if (m_propDrag && m_moved) {
+        GigaStrokePath::Move *move = s->path().lastMove();
+        return move ? move->centers : centers;
+    }
+    const QVector<GigaStrokePath::Vertex> &vertices = s->path().vertices();
+    for (int i : m_selected) {
+        if (i >= 0 && i < vertices.size()) centers << vertices[i].s;
+    }
+    // Hovering an unselected dot shows what dragging it would pull.
+    if (m_hover >= 0 && m_hover < vertices.size() && !m_selected.contains(m_hover)) {
+        centers = {vertices[m_hover].s};
+    }
+    return centers;
+}
+
+void GigaToolStrokePoints::setWheelCatcher(bool on)
+{
+    if (on == m_wheelCatcher) return;
+    m_wheelCatcher = on;
+    // On the application: it sees the wheel before Krita's canvas input
+    // handling (which would zoom). Only installed while dragging.
+    if (on) qApp->installEventFilter(this);
+    else qApp->removeEventFilter(this);
+}
+
+bool GigaToolStrokePoints::eventFilter(QObject *watched, QEvent *event)
+{
+    if (m_wheelCatcher && event->type() == QEvent::Wheel) {
+        QWidget *canvasWidget = canvas() ? canvas()->canvasWidget() : nullptr;
+        QWidget *target = qobject_cast<QWidget*>(watched);
+        if (canvasWidget && target && (target == canvasWidget || canvasWidget->isAncestorOf(target))) {
+            QWheelEvent *wheel = static_cast<QWheelEvent*>(event);
+            const int dy = wheel->angleDelta().y();
+            if (dy != 0) changeRadius(dy > 0 ? 1 : -1);
+            return true; // no zoom while dragging
+        }
+    }
+    return KisTool::eventFilter(watched, event);
+}
+
+void GigaToolStrokePoints::changeRadius(int wheelSteps)
+{
+    qreal radius = m_radius;
+    for (int i = 0; i < qAbs(wheelSteps); ++i) radius *= wheelSteps > 0 ? 1.15 : 1.0 / 1.15;
+    const int value = qBound(MinRadius, qRound(radius), MaxRadius);
+    if (m_radiusBox) m_radiusBox->setValue(value); // -> slotRadiusChanged
+    else slotRadiusChanged(value);
+}
+
+void GigaToolStrokePoints::slotProportionalToggled(bool on)
+{
+    m_proportional = on;
+    KisConfig(false).writeEntry<bool>(PropKey, on);
+    if (m_radiusBox) m_radiusBox->setEnabled(on);
+    if (m_falloffBox) m_falloffBox->setEnabled(on);
+    updateOverlay();
+}
+
+void GigaToolStrokePoints::slotRadiusChanged(int value)
+{
+    m_radius = qBound(MinRadius, value, MaxRadius);
+    KisConfig(false).writeEntry<int>(RadiusKey, m_radius);
+    GigaLastStrokeTransform *s = session();
+    if (s && m_propDrag && m_moved) {
+        // Live while dragging: the move being made gets the new radius.
+        if (GigaStrokePath::Move *move = s->path().lastMove()) move->radius = m_radius / viewScale();
+    }
+    updateOverlay();
+}
+
+void GigaToolStrokePoints::slotFalloffChanged(int index)
+{
+    m_falloff = qBound(0, index, int(GigaStrokePath::Constant));
+    KisConfig(false).writeEntry<int>(FalloffKey, m_falloff);
+    updateOverlay();
+}
+
+void GigaToolStrokePoints::gigaSetProportional(bool on, int radiusScreenPx, int falloff)
+{
+    if (m_propButton) m_propButton->setChecked(on);
+    else slotProportionalToggled(on);
+    if (m_radiusBox) m_radiusBox->setValue(radiusScreenPx);
+    else slotRadiusChanged(radiusScreenPx);
+    if (m_falloffBox) m_falloffBox->setCurrentIndex(falloff);
+    else slotFalloffChanged(falloff);
 }
