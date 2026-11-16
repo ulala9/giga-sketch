@@ -4,7 +4,7 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Blender Viewport Layer replaces 3D Model Layer idea)
+Last updated: 2026-11-16 (backlog: Reference Board image search)
 
 ## Resume here
 - **Next up:** the user's hand test of Transform Last Stroke + its Points mode (below), then icon batches 2–4
@@ -147,7 +147,12 @@ Last updated: 2026-11-16 (Blender Viewport Layer replaces 3D Model Layer idea)
 - Pre-existing upstream test failures (not ours): TestSvgParser/Cloned/RoundTrip, SvgTextCursorTest RTL/vertical.
 
 ## Backlog / ideas (not scheduled)
-- (empty — add user ideas here with the date)
+- 2026-11-16: **Reference Board image search mode.** Type a search, pick Google Images / Bing Images /
+  Pinterest, and the results get laid out on the board (using the existing Arrange styles). Open question
+  before scoping: how to get results. These sites have no free open search API for this (Pinterest's API needs
+  app approval; scraping breaks their terms and breaks often). Likely options: an official API where one exists
+  (user's own key), or a built-in browser panel where the user searches normally and picks/drags images onto the
+  board. Branch when started: `feature/refboard-image-search`.
 
 ## Decisions log
 - 2026-11-16: 3D = bridge to Blender (capture its viewport onto a layer), not model import. On demand,
