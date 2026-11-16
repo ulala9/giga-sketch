@@ -474,6 +474,10 @@ private:
     void gigaDetachActiveView();
     /// Giga Sketch: rename menu items to Photoshop-style wording.
     void gigaApplyWording();
+    /// Giga Sketch: a menu's Alt+letter (e.g. Alt+A for "&Arrange") is
+    /// dropped when the user gave that key to an action, so their shortcut
+    /// wins. Runs after the menus are built and whenever shortcuts change.
+    void gigaResolveMenuLetterConflicts();
 protected:
     /// Giga Sketch: watches the document tab bar for "drag a tab out".
     bool eventFilter(QObject *watched, QEvent *event) override;

@@ -27,6 +27,9 @@
 #include <kis_layer.h>
 #include <KoToolManager.h>
 #include <KoToolRegistry.h>
+#include <kis_action_registry.h>
+#include <KConfigGroup>
+#include <KSharedConfig>
 #include <KoPointerEvent.h>
 #include <kis_tool.h>
 #include "kis_grid_config.h"
@@ -1149,6 +1152,54 @@ void testLassoFill(KisMainWindow *w)
     pump(10);
 }
 
+/// A shortcut the user gave to Alt+<letter> wins over a menu's Alt+letter
+/// (e.g. Feather Selection on Alt+A vs "&Arrange & Documents").
+void testMenuLetter(KisMainWindow *w)
+{
+    openTestDocument(w);
+    KisView *view = w->activeView();
+    KisAction *feather = view ? view->viewManager()->actionManager()->actionByName(QStringLiteral("featherselection")) : nullptr;
+    // The top-level menu is "&Arrange && Documents" or "&Window", depending
+    // on the layout earlier tests left behind. Use whichever is there.
+    QAction *menu = nullptr;
+    for (QAction *m : w->menuBar()->actions()) {
+        if (m->text() == QStringLiteral("&Arrange && Documents") || m->text() == QStringLiteral("&Window")) menu = m;
+    }
+    if (!feather || !menu) {
+        QStringList titles;
+        for (QAction *m : w->menuBar()->actions()) titles << m->text();
+        report(false, "menuletter-setup", QStringLiteral("feather %1, menu %2; menus: %3")
+                                              .arg(!!feather).arg(!!menu).arg(titles.join(QStringLiteral(" | "))));
+        return;
+    }
+    const QString before = menu->text();
+    const QString letter = before.mid(1, 1); // the character after the leading '&'
+    const QString altKey = QStringLiteral("Alt+") + letter;
+    // Same path as Settings > Keyboard Shortcuts > OK: write the custom
+    // shortcut file, then let the registry reload it and update every action.
+    // (Setting the action directly would be undone by KisPart::updateShortcuts.)
+    // selftest.sh runs in a throw-away config, so this never touches yours.
+    const QList<QKeySequence> oldKeys = feather->shortcuts();
+    KConfigGroup custom(KSharedConfig::openConfig(GigaBranding::shortcutsConfigFile()), QStringLiteral("Shortcuts"));
+    auto shortcutsChanged = [&]() {
+        custom.sync();
+        KisActionRegistry::instance()->settingsPageSaved();
+        pump(5);
+    };
+    custom.writeEntry("featherselection", altKey);
+    shortcutsChanged();
+    const QString during = menu->text();
+    report(!during.contains(QStringLiteral("&") + letter) && during == QString(before).remove(0, 1)
+               && feather->shortcut() == QKeySequence(altKey),
+           "menuletter-user-shortcut-wins", QStringLiteral("%1: menu \"%2\" -> \"%3\"").arg(altKey, before, during));
+    // Write the old key back (deleting the only entry would leave an empty
+    // group, which the registry skips reloading).
+    custom.writeEntry("featherselection", oldKeys.isEmpty() ? QStringLiteral("none")
+                                                            : QKeySequence::listToString(oldKeys));
+    shortcutsChanged();
+    report(menu->text() == before, "menuletter-restored", QStringLiteral("menu \"%1\"").arg(menu->text()));
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -1164,6 +1215,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("canvaslook"), testCanvasLook},
         {QStringLiteral("layerbuttons"), testLayerButtons},
         {QStringLiteral("lassofill"), testLassoFill},
+        {QStringLiteral("menuletter"), testMenuLetter},
     };
     bool found = false;
     for (const auto &test : tests) {
