@@ -4,7 +4,7 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-15 (Points mode: smooth bent preview while dragging)
+Last updated: 2026-11-16 (Blender Viewport Layer replaces 3D Model Layer idea)
 
 ## Resume here
 - **Next up:** the user's hand test of Transform Last Stroke + its Points mode (below), then icon batches 2–4
@@ -107,7 +107,26 @@ Last updated: 2026-11-15 (Points mode: smooth bent preview while dragging)
   order, shape, spacing), Board panel with own camera, Send to Board / Canvas, click-to-focus, ←/→, Ctrl+click colour,
   drop/paste, look options, Resample to Current Size + shrink-on-save. Self-test `refboard`.
 - [x] Board rotate/zoom/flip with the canvas (`feature/refboard-rotate-zoom`, `feature/refboard-flip`, merged 2026-11-15)
-- [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel, 3D Model Layer: blueprinted only.
+- [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
+- [ ] **Blender Viewport Layer** (replaces the "3D Model Layer" blueprint; scoped 2026-11-16, not started).
+  A basic capture of Blender's viewport onto a GigaSketch layer, instead of importing models.
+  - Scope (user): **on demand** (a "Send" in Blender / "Refresh" in GigaSketch, no live streaming);
+    **Solid/EEVEE viewport look** (no Cycles); **one plain image** (no passes).
+  - Blender side: small add-on (Python) renders the active camera view offscreen
+    (`gpu.types.GPUOffScreen` + `draw_view3d`), reads the pixels back, sends them with the colours as Blender
+    displays them (view transform AgX/Filmic applied, else it looks washed out).
+  - Transport: shared-memory file in `/dev/shm` for pixels + local socket for small messages
+    ("frame ready, W×H", "canvas is W×H", "refresh"); version number in the first message.
+    Linux has no Spout/Syphon equivalent, so CPU copy.
+  - GigaSketch side: new layer type modelled on the File Layer (`libs/ui/kis_file_layer.*`): shows the last
+    capture, updates go through the normal async update path (never block the paint thread), no undo entries
+    for refreshes, last capture saved in the .kra (opens fine without Blender), "Freeze to Paint Layer".
+    Canvas size → Blender render size.
+  - Step 0 (try before any C++): Blender script saves a PNG on "Send"; add it in GigaSketch as a File Layer
+    (already auto-reloads, `kis_safe_document_loader.cpp`, 500 ms debounce). Tells whether the workflow fits.
+  - Not in scope unless asked: live updates, Cycles, render passes (line art, colour IDs, AO, depth, normals),
+    camera control from GigaSketch.
+  - Branch when started: `feature/blender-bridge`.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
 - [ ] Transform Last Stroke (`feature/transform-last-stroke`, built, waiting for the user's hand test).
@@ -131,6 +150,8 @@ Last updated: 2026-11-15 (Points mode: smooth bent preview while dragging)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-16: 3D = bridge to Blender (capture its viewport onto a layer), not model import. On demand,
+  Solid/EEVEE, one plain image.
 - 2026-11-15: Points drag = bend the last repaint on screen while dragging, real repaint on release (user chose
   option A over "repaint only the moving part"). Measured: user's stroke 3423 calls, ~100 ms per repaint.
 - 2026-11-15: Proportional editing falloff acts on the whole line inside the radius (not only on the dots), radius
