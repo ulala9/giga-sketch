@@ -139,6 +139,8 @@ private Q_SLOTS:
 public:
     QButtonGroup m_pasteFormatGroup;
     KisCumulativeUndoData m_cumulativeUndoData;
+    // Giga Sketch: softer slider look (GigaSliderStyle), added in code
+    QCheckBox *m_chkGigaSliderStyle {nullptr};
 
 private:
     // Giga Sketch: added in code (not in the .ui) under "Show on-canvas popup messages"
