@@ -16,9 +16,31 @@
 #include <kis_icon_utils.h>
 #include <kis_config.h>
 #include <kis_config_notifier.h>
+#include <KisPart.h>
+#include <KisView.h>
+#include <kis_canvas2.h>
+#include <QPointer>
 
+#include <QComboBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QSpinBox>
 #include <QStandardItem>
 #include <QStandardItemModel>
+
+namespace {
+// Giga Sketch: the grid-area settings only change what the grid decoration
+// draws, so a repaint is enough (a full config-changed notification resets
+// every canvas, which is too heavy for a spin box).
+void gigaRepaintAllCanvases()
+{
+    Q_FOREACH (QPointer<KisView> view, KisPart::instance()->views()) {
+        if (view && view->canvasBase()) {
+            view->canvasBase()->updateCanvas();
+        }
+    }
+}
+}
 
 struct GridConfigWidget::Private
 {
@@ -89,6 +111,65 @@ GridConfigWidget::GridConfigWidget(QWidget *parent) :
 
     connect(ui->chkShowGrid, SIGNAL(stateChanged(int)), SLOT(slotGridGuiChanged()));
     connect(ui->chkSnapToGrid, SIGNAL(stateChanged(int)), SLOT(slotGridGuiChanged()));
+
+    // Giga Sketch: where the grid is drawn (canvas / canvas + background /
+    // background only) and the screen size of the background-only squares.
+    // Global preferences (not saved in the document): stored in KisConfig, and
+    // every canvas is told to repaint.
+    {
+        KisConfig cfg(true);
+        QHBoxLayout *row = new QHBoxLayout();
+        QLabel *areaLabel = new QLabel(i18n("Draw on:"), this);
+        QComboBox *areaCombo = new QComboBox(this);
+        areaCombo->setObjectName("gigaGridAreaCombo");
+        areaCombo->addItem(i18n("Canvas"));
+        areaCombo->addItem(i18n("Canvas + background"));
+        areaCombo->addItem(i18n("Background only"));
+        areaCombo->setToolTip(i18n("Background only: squares of a fixed screen size around the canvas, none on it"));
+        areaCombo->setCurrentIndex(int(cfg.gigaGridArea()));
+
+        QLabel *sizeLabel = new QLabel(i18n("Size:"), this);
+        QSpinBox *sizeSpin = new QSpinBox(this);
+        sizeSpin->setObjectName("gigaBackgroundGridSize");
+        sizeSpin->setRange(8, 600);
+        sizeSpin->setSuffix(i18n(" px"));
+        sizeSpin->setToolTip(i18n("Square size on screen; stays the same at every zoom"));
+        sizeSpin->setValue(cfg.gigaBackgroundGridSize());
+
+        row->addWidget(areaLabel);
+        row->addWidget(areaCombo, 1);
+        row->addWidget(sizeLabel);
+        row->addWidget(sizeSpin);
+        ui->verticalLayout->insertLayout(1, row);
+
+        auto updateSizeVisible = [sizeLabel, sizeSpin](int area) {
+            const bool show = area == int(KisConfig::GigaGridBackgroundOnly);
+            sizeLabel->setVisible(show);
+            sizeSpin->setVisible(show);
+        };
+        updateSizeVisible(areaCombo->currentIndex());
+
+        connect(areaCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [updateSizeVisible](int index) {
+            updateSizeVisible(index);
+            KisConfig cfg(false);
+            if (int(cfg.gigaGridArea()) == index) return;
+            cfg.setGigaGridArea(KisConfig::GigaGridArea(index));
+            gigaRepaintAllCanvases();
+        });
+        connect(sizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int value) {
+            KisConfig cfg(false);
+            if (cfg.gigaBackgroundGridSize() == value) return;
+            cfg.setGigaBackgroundGridSize(value);
+            gigaRepaintAllCanvases();
+        });
+    }
+
+    // Giga Sketch: more range for big grid squares (Krita: 500 px rectangle
+    // spacing before a document loads, 1000 px isometric cells).
+    ui->intHSpacing->setMaximum(10000);
+    ui->intVSpacing->setMaximum(10000);
+    ui->cellSpacingSpinbox->setMaximum(10000);
+    ui->cellSizeSpinbox->setMaximum(10000);
 
     connect(ui->chkShowGuides, SIGNAL(stateChanged(int)), SLOT(slotGuidesGuiChanged()));
     connect(ui->chkSnapToGuides, SIGNAL(stateChanged(int)), SLOT(slotGuidesGuiChanged()));

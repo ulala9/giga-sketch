@@ -12,12 +12,105 @@
 #include <QPainter>
 #include <QPen>
 #include <QtMath>
+#include <QPainterPath>
+#include <QPolygonF>
 #include <klocalizedstring.h>
 
 #include <KoUnit.h>
 
 #include "kis_grid_config.h"
 #include "kis_coordinates_converter.h"
+#include "kis_config.h"
+
+namespace {
+// Giga Sketch: used only when "Grid over background" is on. Draws a family of
+// parallel lines  y = c + slope * (x - anchorX),  c = c0 + k * step,  for every
+// k whose line crosses `area`. Line k gets the main pen when
+// |index0 + k| % subdivision == 0 (the same rule Krita uses), so lines
+// inside the image land exactly where Krita's own loop would put them.
+void gigaDrawLineFamily(QPainter &gc, const QRectF &area,
+                        qreal anchorX, qreal c0, qreal step, qreal slope,
+                        int index0, int subdivision,
+                        const QPen &mainPen, const QPen &subdivisionPen)
+{
+    if (step <= 0.0 || area.isEmpty()) return;
+    subdivision = qMax(1, subdivision);
+
+    // c = y - slope * (x - anchorX); find its range over the rect corners
+    const QPointF corners[4] = {area.topLeft(), area.topRight(), area.bottomLeft(), area.bottomRight()};
+    qreal cMin = 0.0, cMax = 0.0;
+    for (int i = 0; i < 4; i++) {
+        const qreal c = corners[i].y() - slope * (corners[i].x() - anchorX);
+        cMin = (i == 0) ? c : qMin(cMin, c);
+        cMax = (i == 0) ? c : qMax(cMax, c);
+    }
+    const qreal kMin = qCeil((cMin - c0) / step);
+    const qreal kMax = qFloor((cMax - c0) / step);
+    // Far zoomed out the lines would be closer than a pixel: draw nothing
+    // rather than thousands of lines (keeps panning smooth).
+    if (kMax - kMin > 4000) return;
+
+    for (qreal k = kMin; k <= kMax; k += 1.0) {
+        const qreal c = c0 + k * step;
+        const int index = index0 + int(k);
+        gc.setPen(qAbs(index) % subdivision == 0 ? mainPen : subdivisionPen);
+        gc.drawLine(QPointF(area.left(), c + slope * (area.left() - anchorX)),
+                    QPointF(area.right(), c + slope * (area.right() - anchorX)));
+    }
+}
+
+// Giga Sketch: "Background only" grid. Square cells of a fixed size in
+// screen pixels, drawn in widget coordinates on the area around the image
+// only. It is anchored to the image origin, so it moves when you pan, but it
+// does not zoom or rotate with the canvas.
+void gigaDrawBackgroundGrid(QPainter &gc, const QRectF &updateArea,
+                            const KisCoordinatesConverter *converter,
+                            const KisGridConfig &config, int cellSize)
+{
+    const QRectF area = converter->documentToWidget(updateArea);
+    if (area.isEmpty() || cellSize < 1) return;
+
+    // Mask out the image (a polygon, so a rotated canvas works too).
+    const QRectF imageRect = converter->imageRectInImagePixels();
+    const QPolygonF imagePolygon = converter->imageToWidgetTransform().map(imageRect);
+    QPainterPath clip;
+    clip.addRect(area);
+    QPainterPath imagePath;
+    imagePath.addPolygon(imagePolygon);
+    imagePath.closeSubpath();
+    clip = clip.subtracted(imagePath);
+
+    gc.save();
+    gc.resetTransform();
+    gc.setClipPath(clip, Qt::IntersectClip);
+    gc.setRenderHints(QPainter::Antialiasing, false);
+
+    // Subdivision lines only when they stay at least 4 px apart.
+    int subdivision = qMax(1, int(config.subdivision()));
+    while (subdivision > 1 && cellSize / subdivision < 4) subdivision--;
+    const qreal step = qreal(cellSize) / subdivision;
+    const QPen mainPen = config.penMain();
+    const QPen subdivisionPen = config.penSubdivision();
+
+    const QPointF origin = converter->imageToWidgetTransform().map(QPointF(0, 0));
+
+    const int firstX = qCeil((area.left() - origin.x()) / step);
+    const int lastX = qFloor((area.right() - origin.x()) / step);
+    for (int i = firstX; i <= lastX; i++) {
+        const qreal x = qRound(origin.x() + i * step) + 0.5;
+        gc.setPen(i % subdivision == 0 ? mainPen : subdivisionPen);
+        gc.drawLine(QPointF(x, area.top()), QPointF(x, area.bottom()));
+    }
+    const int firstY = qCeil((area.top() - origin.y()) / step);
+    const int lastY = qFloor((area.bottom() - origin.y()) / step);
+    for (int i = firstY; i <= lastY; i++) {
+        const qreal y = qRound(origin.y() + i * step) + 0.5;
+        gc.setPen(i % subdivision == 0 ? mainPen : subdivisionPen);
+        gc.drawLine(QPointF(area.left(), y), QPointF(area.right(), y));
+    }
+    gc.restore();
+}
+}
 
 struct KisGridDecoration::Private
 {
@@ -46,6 +139,13 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
     if (!m_d->config.showGrid()) return;
 
     Q_UNUSED(canvas);
+
+    // Giga Sketch: "Background only" has its own screen-fixed grid.
+    const KisConfig gigaCfg(true);
+    if (gigaCfg.gigaGridArea() == KisConfig::GigaGridBackgroundOnly) {
+        gigaDrawBackgroundGrid(gc, updateArea, converter, m_d->config, gigaCfg.gigaBackgroundGridSize());
+        return;
+    }
 
     QTransform transform = converter->imageToWidgetTransform();
 
@@ -77,9 +177,13 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
     gc.setTransform(transform);
 
     const QRect imageRectInImagePixels = converter->imageRectInImagePixels();
-    const QRectF updateRectInImagePixels =
-        converter->documentToImage(updateArea) &
-        imageRectInImagePixels;
+
+    // Giga Sketch: "Grid over background" lets the grid continue past the
+    // image edges over the area around the canvas. Off = Krita's behaviour.
+    const bool gigaOverBackground = gigaCfg.gigaGridArea() == KisConfig::GigaGridCanvasAndBackground;
+    const QRectF updateRectInImagePixels = gigaOverBackground
+        ? converter->documentToImage(updateArea)
+        : converter->documentToImage(updateArea) & imageRectInImagePixels;
 
     // for angles. This will later be a combobox to select different types of options
     // also add options to hide specific lines (vertical, horizontal, angle 1, etc
@@ -117,7 +221,7 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
 
                 gc.setPen(i % subdivision == 0 ? mainPen : subdivisionPen);
                 // we adjusted y2 to draw the grid correctly, clip it now...
-                gc.drawLine(QPointF(w, y1),QPointF(w, qMin(y2, qreal(imageRectInImagePixels.bottom() + 1))));
+                gc.drawLine(QPointF(w, y1),QPointF(w, gigaOverBackground ? y2 : qMin(y2, qreal(imageRectInImagePixels.bottom() + 1))));
             }
         }
 
@@ -143,7 +247,7 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
 
                 gc.setPen(i % subdivision == 0 ? mainPen : subdivisionPen);
                 // we adjusted x2 to draw the grid correctly, clip it now...
-                gc.drawLine(QPointF(x1, w),QPointF(qMin(x2, qreal(imageRectInImagePixels.right() + 1)), w));
+                gc.drawLine(QPointF(x1, w),QPointF(gigaOverBackground ? x2 : qMin(x2, qreal(imageRectInImagePixels.right() + 1)), w));
             }
         }
     } else if (gridType == KisGridConfig::GRID_ISOMETRIC_LEGACY)  {
@@ -187,6 +291,15 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
             }
 
             qreal counter = qFloor((-(offset + offsetY)) / correctedAngleSpacing);
+
+            if (gigaOverBackground) {
+                // same lines as below: from (x1, w) to (x2, w - tan * x2)
+                const qreal slope = -qTan(qDegreesToRadians(gridXAngle)) * x2 / qMax(qreal(1.0), x2 - x1);
+                gigaDrawLineFamily(gc, updateRectInImagePixels, x1,
+                                   counter * correctedAngleSpacing + offsetY + offset,
+                                   correctedAngleSpacing, slope, 0, 1, mainPen, mainPen);
+                finalY = bottomRightOfImageY; // skip Krita's image-only loop
+            }
 
             while (finalY < bottomRightOfImageY) {
 
@@ -236,6 +349,15 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
             const qreal additionalOffset = yLeftFirst - yHigher;
             qreal finalY = 0.0;
             qreal counter = qFloor((-(offsetY - offset)) / correctedAngleSpacing);
+
+            if (gigaOverBackground) {
+                // same lines as below: from (x2, w) to (0, w - length2)
+                const qreal slope = length2 / qMax(qreal(1.0), horizontalDistance);
+                gigaDrawLineFamily(gc, updateRectInImagePixels, x2,
+                                   counter * correctedAngleSpacing + offsetY - offset + additionalOffset,
+                                   correctedAngleSpacing, slope, 0, 1, mainPen, mainPen);
+                finalY = bottomLeftOfImageY; // skip Krita's image-only loop
+            }
 
             while (finalY < bottomLeftOfImageY) {
 
@@ -301,6 +423,14 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
 
             qreal startingY = yLeftFirst + offsetY + offsetX + additionalOffset;
 
+            if (gigaOverBackground) {
+                // same lines as below: from (0, s) to (xRight, s - tan * xRight)
+                gigaDrawLineFamily(gc, updateRectInImagePixels, 0.0, startingY,
+                                   trigoCache.correctedAngleLeftCellSize, -trigoCache.tanAngleLeft,
+                                   subdivisionIndex, subdivision, mainPen, subdivisionPen);
+                finalY = yBottom; // skip Krita's image-only loop
+            }
+
             while (finalY < yBottom) {
                 // calculate where the ending point will be based off the angle
                 finalY = startingY - length2;
@@ -338,6 +468,14 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
 
             qreal startingY = yLeftFirst + offsetY - offsetX + additionalOffset;
 
+            if (gigaOverBackground) {
+                // same lines as below: from (xRight, s) to (0, s - tan * xRight)
+                gigaDrawLineFamily(gc, updateRectInImagePixels, xRight, startingY,
+                                   trigoCache.correctedAngleRightCellSize, trigoCache.tanAngleRight,
+                                   subdivisionIndex, subdivision, mainPen, subdivisionPen);
+                finalY = yBottom; // skip Krita's image-only loop
+            }
+
             while (finalY < yBottom) {
                 // calculate where the ending point will be based off the angle
                 finalY = startingY - length2;
@@ -367,6 +505,14 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
             qreal pX = (xRight - x1)/(2*trigoCache.verticalSpace);
             pX = offset + (pX - qFloor(pX)) * trigoCache.verticalSpace;
             pX = pX - trigoCache.verticalSpace * qFloor(pX/trigoCache.verticalSpace);
+
+            if (gigaOverBackground) {
+                // start at the first line left of the visible area (may be < 0)
+                if (pX > updateRectInImagePixels.left()) {
+                    pX -= trigoCache.verticalSpace * qCeil((pX - updateRectInImagePixels.left()) / trigoCache.verticalSpace);
+                }
+                yBottom = updateRectInImagePixels.bottom() + 1;
+            }
 
             while(pX <= updateRectInImagePixels.right()) {
                 if (pX > updateRectInImagePixels.left()) {

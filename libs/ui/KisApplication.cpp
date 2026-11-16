@@ -514,6 +514,9 @@ bool KisApplication::start(const KisApplicationArguments &args)
     KisAndroidDonations::showDonationDialog(true);
 #endif
 
+    // Giga Sketch: switch old configs to the dark canvas look (runs once)
+    KisConfig::gigaMigrateCanvasLook();
+
     KisConfig cfg(false);
 
 #if defined(Q_OS_WIN)

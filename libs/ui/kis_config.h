@@ -654,6 +654,26 @@ public:
     bool gigaShowBrushSwitchMessage(bool defaultValue = false) const;
     void setGigaShowBrushSwitchMessage(bool show);
 
+    /// Giga Sketch: one-time switch of the canvas surround, checkerboard and
+    /// grid colours to the dark "calm canvas" look, for configs that still hold
+    /// Krita's old defaults. Call once at startup before any canvas exists.
+    static void gigaMigrateCanvasLook();
+
+    /// Giga Sketch: where the grid is drawn. Global preference.
+    enum GigaGridArea {
+        GigaGridOnCanvas = 0,          ///< Krita's behaviour: on the image only
+        GigaGridCanvasAndBackground,   ///< one image-pixel grid, continued over the surround
+        GigaGridBackgroundOnly         ///< screen-fixed squares on the surround only
+    };
+    GigaGridArea gigaGridArea(bool defaultValue = false) const;
+    void setGigaGridArea(GigaGridArea value);
+    /// True when the grid paints outside the image (either background mode).
+    bool gigaGridPaintsBackground() const { return gigaGridArea() != GigaGridOnCanvas; }
+
+    /// Giga Sketch: square size, in screen pixels, of the "Background only" grid.
+    int gigaBackgroundGridSize(bool defaultValue = false) const;
+    void setGigaBackgroundGridSize(int value);
+
     bool compressKra(bool defaultValue = false) const;
     void setCompressKra(bool compress);
 
