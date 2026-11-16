@@ -4,37 +4,16 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-15 (Transform Last Stroke built)
+Last updated: 2026-11-15 (ten branches merged after hand test)
 
 ## Resume here
-- **Next up:** the user's look test of the six aesthetic branches (Phase 4 list below), then icon batches 2–4.
-- Also waiting: `feature/procreate-canvas-look` (unmerged, waiting for the user's hand test): dark canvas surround,
-  finer checkerboard, light blue grid, Grid panel "Draw on" (Canvas / Canvas + background / Background only with
-  screen-fixed Size), grid limits 10000 px, two upstream grid fixes. Merge after the user OKs it.
-- Also waiting for a hand test (all 2026-11-15, all in `giga-test`, all with a Preferences on/off switch):
-  - `fix/shortcut-beats-menu-letter` — a user shortcut on Alt+<letter> (e.g. Feather Selection on Alt+A) wins over a
-    menu's Alt+letter; the menu drops its underline letter while the key is taken. Self-test `menuletter`.
-  - `feature/accent-color` — Preferences > General > Accent colour (presets + Custom). Self-test `accent`.
-  - `feature/slider-look` — softer slider spin boxes (Preferences > General > "Softer sliders").
-  - `feature/canvas-shadow` — soft shadow around the image (Preferences > Display).
-  - `feature/ui-motion` — fades for floating panels/flyouts/tool menus, cross-fade on mode switch
-    (Preferences > General > "Interface animations"). Self-test `motion`.
-  - `feature/brush-cursor-look` — two-tone brush outline, fade while painting, "24 px" readout on Shift+drag
-    resize. Self-test `cursorlook`.
-  - `feature/refboard-rotate-zoom` — Reference Board gets the canvas navigation: Ctrl+Space drag zoom, Shift+Space
-    drag rotate (+Alt = stepped), Reset Canvas Rotation key (F1 for the user) turns it upright. Follows Canvas Input
-    Settings / Keyboard Shortcuts. Self-test `refboard` (4 new checks).
-  - `feature/refboard-flip` (built on `feature/refboard-rotate-zoom`; merging it merges both) — Board flips with the
-    canvas (Mirror View, F2), Board ▸ Look ▸ "Flip With Canvas" (default on), and turns with the canvas rotation,
-    "Rotate With Canvas" (default on; Shift+Space on the Board adds its own turn, F1 over the Board removes it).
-    Self-test `refboard`.
-  - `feature/giga-tool-icons` — original tool icons, batch 1 (paint, retouch, fill tools); needs a restart.
-    Self-test `icons`. Next batches: the remaining toolbox tools.
+- **Next up:** talk through Transform Last Stroke with the user (they want to discuss it before it merges), then icon
+  batches 2–4 (user OK'd the batch 1 style).
+- Waiting for a hand test / discussion (in `giga-test`):
   - `feature/transform-last-stroke` — Edit ▸ Transform Last Stroke (Ctrl+Shift+Alt+T): Transform tool (Warp by
     default, remembers the last mode) on only the last stroke; what it covered reappears; Esc puts it back; one
-    Ctrl+Z = stroke as drawn. Hand-test: crossing lines, warp/liquify, Esc, Ctrl+Z, mirrored brush, textured brush,
-    Smooth Curve (press right after lifting). Self-test `laststroke` (15 checks).
-- Repo state: everything else merged and pushed (`feature/lasso-fill-erase` on 2026-11-15).
+    Ctrl+Z = stroke as drawn. Self-test `laststroke` (15 checks).
+- Repo state: everything else merged and pushed (the ten look/hand-test branches on 2026-11-15).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -43,10 +22,7 @@ Last updated: 2026-11-15 (Transform Last Stroke built)
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/procreate-canvas-look`, `fix/shortcut-beats-menu-letter`,
-  `feature/brush-cursor-look`, `feature/accent-color`, `feature/slider-look`, `feature/canvas-shadow`,
-  `feature/ui-motion`, `feature/giga-tool-icons`, `feature/refboard-rotate-zoom`, `feature/refboard-flip`,
-  `feature/transform-last-stroke`.
+  Pending in `giga-test` now: `feature/transform-last-stroke`.
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -98,22 +74,24 @@ Last updated: 2026-11-15 (Transform Last Stroke built)
 - [x] Save Dated JPG, Ctrl+Space zoom toward pointer, no brush-switch popup
 - [x] Lasso Fill tool (one-stroke loop fill, in the Fill group) + E erases with Lasso Fill / Enclose and Fill,
   also with custom blending (`feature/lasso-fill-erase`, merged 2026-11-15, hand-tested). Self-test `lassofill`.
+- [x] Canvas look: dark surround, finer checkerboard, blue grid, Grid "Draw on" (`feature/procreate-canvas-look`, merged 2026-11-15)
+- [x] User shortcut on Alt+<letter> beats a menu's Alt+letter (`fix/shortcut-beats-menu-letter`, merged 2026-11-15)
 - [x] Taskbar icon: WM_CLASS `gigasketch` set before the app starts (`fix/taskbar-icon`)
 - [x] No stray "No text" menu: Window menu is named `settings` in gigasketch.xmlgui so Toolbars Shown merges into it (`fix/no-text-menu`)
-- Aesthetic polish (approved 2026-11-15, one branch each). Built, in `giga-test`, **waiting for the user's look/hand test**:
-  - [ ] Brush cursor: two-tone outline, fade while painting, size readout (`feature/brush-cursor-look`). Self-test `cursorlook`.
+- Aesthetic polish (approved 2026-11-15, one branch each), merged 2026-11-15 after the user's look test:
+  - [x] Brush cursor: two-tone outline, fade while painting, size readout (`feature/brush-cursor-look`). Self-test `cursorlook`.
     The fade only runs when Preferences > Cursor > While painting > "Show outline" is off (user has it on).
-  - [ ] Accent colour choice in Preferences > General (`feature/accent-color`). Self-test `accent`.
-  - [ ] Softer slider look, Preferences > General "Softer sliders" (`feature/slider-look`)
-  - [ ] Soft shadow around the canvas, Preferences > Display (`feature/canvas-shadow`)
-  - [ ] Interface motion: panel/flyout/tool-menu fades, mode-switch cross-fade, "Interface animations" (`feature/ui-motion`). Self-test `motion`.
-  - [ ] Original line-art tool icons (`feature/giga-tool-icons`): **batch 1 (paint/fill) done**, waiting for the user's
-    style feedback before batch 2 (select/move/crop/sample), 3 (vector/text/shapes), 4 (hand/zoom + panel strip). Self-test `icons`.
+  - [x] Accent colour choice in Preferences > General (`feature/accent-color`). Self-test `accent`.
+  - [x] Softer slider look, Preferences > General "Softer sliders" (`feature/slider-look`)
+  - [x] Soft shadow around the canvas, Preferences > Display (`feature/canvas-shadow`)
+  - [x] Interface motion: panel/flyout/tool-menu fades, mode-switch cross-fade, "Interface animations" (`feature/ui-motion`). Self-test `motion`.
+  - [ ] Original line-art tool icons (`feature/giga-tool-icons`): **batch 1 (paint/fill) merged, style OK'd**; next batch 2 (select/move/crop/sample), 3 (vector/text/shapes), 4 (hand/zoom + panel strip). Self-test `icons`.
 
 ## Phase 5 — Feature blueprints (doc "Giga Sketch Feature Blueprints")
 - [x] Reference Board (`feature/reference-board`, merged 2026-11-14, hand-tested): Normalize, Arrange (5 styles,
   order, shape, spacing), Board panel with own camera, Send to Board / Canvas, click-to-focus, ←/→, Ctrl+click colour,
   drop/paste, look options, Resample to Current Size + shrink-on-save. Self-test `refboard`.
+- [x] Board rotate/zoom/flip with the canvas (`feature/refboard-rotate-zoom`, `feature/refboard-flip`, merged 2026-11-15)
 - [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel, 3D Model Layer: blueprinted only.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
