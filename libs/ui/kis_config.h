@@ -673,6 +673,7 @@ public:
     /// Giga Sketch: square size, in screen pixels, of the "Background only" grid.
     int gigaBackgroundGridSize(bool defaultValue = false) const;
     void setGigaBackgroundGridSize(int value);
+
     /// Giga Sketch: brush outline look. True = two-tone (soft dark line under a
     /// thin light line, readable on any colour); false = Krita's inverting outline.
     bool gigaTwoToneCursor(bool defaultValue = false) const;

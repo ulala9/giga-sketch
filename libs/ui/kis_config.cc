@@ -2353,6 +2353,16 @@ void KisConfig::setShowCanvasMessages(bool show)
     m_cfg.writeEntry("showOnCanvasMessages", show);
 }
 
+bool KisConfig::gigaShowBrushSwitchMessage(bool defaultValue) const
+{
+    return (defaultValue ? false : m_cfg.readEntry("gigaShowBrushSwitchMessage", false));
+}
+
+void KisConfig::setGigaShowBrushSwitchMessage(bool show)
+{
+    m_cfg.writeEntry("gigaShowBrushSwitchMessage", show);
+}
+
 bool KisConfig::gigaTwoToneCursor(bool defaultValue) const
 {
     return (defaultValue ? true : m_cfg.readEntry("gigaTwoToneCursor", true));
@@ -2381,16 +2391,6 @@ bool KisConfig::gigaShowBrushSizeReadout(bool defaultValue) const
 void KisConfig::setGigaShowBrushSizeReadout(bool value)
 {
     m_cfg.writeEntry("gigaShowBrushSizeReadout", value);
-}
-
-bool KisConfig::gigaShowBrushSwitchMessage(bool defaultValue) const
-{
-    return (defaultValue ? false : m_cfg.readEntry("gigaShowBrushSwitchMessage", false));
-}
-
-void KisConfig::setGigaShowBrushSwitchMessage(bool show)
-{
-    m_cfg.writeEntry("gigaShowBrushSwitchMessage", show);
 }
 
 KisConfig::GigaGridArea KisConfig::gigaGridArea(bool defaultValue) const
