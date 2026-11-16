@@ -39,6 +39,8 @@
 #include "kis_config_notifier.h"
 #include <kis_tool_paint.h>
 #include <GigaBranding.h>
+#include "GigaAccent.h"
+#include "kis_config_notifier.h"
 #include <kundo2stack.h>
 #include <KoCanvasResourceProvider.h>
 #include <KoColor.h>
@@ -1013,6 +1015,27 @@ void testCanvasLook(KisMainWindow *w)
 }
 
 /// Layers panel bottom row: New, Duplicate, Delete side by side on the left.
+// Accent colour: the palette's Highlight follows gigaAccentColor and goes back
+// to the theme's colour when it is cleared (feature/accent-color).
+void testAccentColor(KisMainWindow *w)
+{
+    Q_UNUSED(w);
+    const QColor themeHighlight = qApp->palette().color(QPalette::Active, QPalette::Highlight);
+    const QColor teal(32, 150, 140);
+    KisConfig(false).writeEntry<QString>(GigaAccent::configKey(), teal.name());
+    KisConfigNotifier::instance()->notifyConfigChanged();
+    pump(5);
+    const QColor now = qApp->palette().color(QPalette::Active, QPalette::Highlight);
+    report(now == teal, "accent-applied", now.name());
+    report(qApp->palette().color(QPalette::Active, QPalette::HighlightedText) == QColor(255, 255, 255),
+           "accent-text-readable", qApp->palette().color(QPalette::Active, QPalette::HighlightedText).name());
+    KisConfig(false).writeEntry<QString>(GigaAccent::configKey(), QString());
+    KisConfigNotifier::instance()->notifyConfigChanged();
+    pump(5);
+    const QColor back = qApp->palette().color(QPalette::Active, QPalette::Highlight);
+    report(back == themeHighlight, "accent-theme-default", back.name() + QStringLiteral(" vs ") + themeHighlight.name());
+}
+
 void testLayerButtons(KisMainWindow *w)
 {
     openTestDocument(w);
@@ -1286,6 +1309,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("modeswitch"), testModeSwitchRestore},
         {QStringLiteral("modefloat"), testModeFloating},
         {QStringLiteral("autosave"), testAutosaveName},
+        {QStringLiteral("accent"), testAccentColor},
         {QStringLiteral("refboard"), testReferenceBoard},
         {QStringLiteral("canvaslook"), testCanvasLook},
         {QStringLiteral("layerbuttons"), testLayerButtons},
