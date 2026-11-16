@@ -4,36 +4,13 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Reference Board image search built, waiting for hand test)
+Last updated: 2026-11-16 (Transform Last Stroke + Points + Proportional and Board image search merged)
 
 ## Resume here
-- **Next up:** the user's hand test of Transform Last Stroke + its Points mode and of Reference Board image search
-  (below), then icon batches 2–4 (user OK'd the batch 1 style).
-- Waiting for a hand test (in `giga-test`):
-  - `feature/refboard-image-search` — Board header Search button splits the panel into a small browser (Google
-    Images / Bing / Pinterest) + the Board. Drag an image over, right-click ▸ Add to Board, or Pick mode → "Add
-    selected (N)" (one Ctrl+Z). Tries the full-size image first. Own logins (Look ▸ Clear Browsing Data…, Close
-    Browser). Needs `qt6-qtwebengine-devel` to build (installed). Self-test `refsearch` (13 checks).
-    Hand-test: real searches on all three sites, full size vs preview, Pinterest login, drag from Firefox too,
-    painting while the browser is open (no lag), wide vs tall panel.
-  - `feature/transform-last-stroke` — Edit ▸ Transform Last Stroke (Ctrl+Shift+Alt+T): Transform tool (Warp by
-    default, remembers the last mode) on only the last stroke; what it covered reappears; Esc puts it back; one
-    Ctrl+Z = stroke as drawn. Self-test `laststroke` (15 checks).
-  - `feature/stroke-points` (built on `feature/transform-last-stroke`; merging it merges both) — Points mode: dots
-    along the stroke, drag to bend, the brush repaints it crisp. Shift+click = more dots, double-click line = add
-    a dot, Point spacing slider, Enter/Esc, Ctrl+Z steps dot moves; same shortcut again = Pixels ↔ Points; mode
-    remembered (default Pixels: switch once with the top-bar buttons or the shortcut). Self-test `strokepoints`.
-    Hand-test: long strokes (lag on release?), textured/jittery brushes look the same after bending, pressure
-    taper kept, multi-brush tool, mirror mode, Esc, Ctrl+Z, switching modes both ways.
-  - `feature/stroke-points-proportional` (built on `feature/stroke-points`; merging it merges all three) —
-    Proportional editing in Points mode: top-bar Proportional toggle, Radius, Falloff (Smooth/Sphere/Root/Sharp/
-    Linear/Constant); wheel while dragging = radius; the reach is tinted. Radius is measured along the line.
-    Also on this branch: smooth dragging (user: "snaps in place after", then "choppy"): while a dot is held the
-    last repaint is bent on screen at full frame rate, one real repaint on release; strokes that can't be bent
-    (multi-brush, canvas mirror, wide scatter) repaint live. Influence circle + "120 px" label for Proportional.
-    `GIGA_POINTS_TRACE=1` prints timings. Option B (repaint only the moving part) kept in reserve.
-    Self-test `strokepoints` (20 checks).
-- Repo state: everything else merged and pushed (the ten look/hand-test branches on 2026-11-15).
+- **Next up:** icon batches 2–4 (user OK'd the batch 1 style): batch 2 select/move/crop/sample.
+- Waiting for a hand test (in `giga-test`): nothing.
+- Repo state: everything merged and pushed (2026-11-16: transform-last-stroke, stroke-points,
+  stroke-points-proportional, refboard-image-search, all hand-tested by the user).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -42,8 +19,7 @@ Last updated: 2026-11-16 (Reference Board image search built, waiting for hand t
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/transform-last-stroke`, `feature/stroke-points`,
-  `feature/stroke-points-proportional`, `feature/refboard-image-search`.
+  Pending in `giga-test` now: none (giga-test = giga-main).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -113,7 +89,8 @@ Last updated: 2026-11-16 (Reference Board image search built, waiting for hand t
   order, shape, spacing), Board panel with own camera, Send to Board / Canvas, click-to-focus, ←/→, Ctrl+click colour,
   drop/paste, look options, Resample to Current Size + shrink-on-save. Self-test `refboard`.
 - [x] Board rotate/zoom/flip with the canvas (`feature/refboard-rotate-zoom`, `feature/refboard-flip`, merged 2026-11-15)
-- [ ] Board image search: small browser panel (`feature/refboard-image-search`, built 2026-11-16, waiting for hand test)
+- [x] Board image search: small browser panel, Google Images / Bing / Pinterest (`feature/refboard-image-search`,
+  merged 2026-11-16, hand-tested). Self-test `refsearch`.
 - [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
 - [ ] **Blender Viewport Layer** (replaces the "3D Model Layer" blueprint; scoped 2026-11-16, not started).
   A basic capture of Blender's viewport onto a GigaSketch layer, instead of importing models.
@@ -136,9 +113,10 @@ Last updated: 2026-11-16 (Reference Board image search built, waiting for hand t
   - Branch when started: `feature/blender-bridge`.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
-- [ ] Transform Last Stroke (`feature/transform-last-stroke`, built, waiting for the user's hand test).
-- [ ] Points mode: bend the stroke by dots, brush repaints it (`feature/stroke-points`, built, waiting for hand test).
-- [ ] Proportional editing in Points mode (`feature/stroke-points-proportional`, built, waiting for hand test).
+- [x] Transform Last Stroke (`feature/transform-last-stroke`, merged 2026-11-16, hand-tested). Self-test `laststroke`.
+- [x] Points mode: bend the stroke by dots, brush repaints it (`feature/stroke-points`, merged 2026-11-16).
+- [x] Proportional editing in Points mode + smooth dragging (`feature/stroke-points-proportional`, merged 2026-11-16).
+  Self-test `strokepoints`.
 - Later, if wanted: Alt+drag a dot = thicker/thinner there (per-dot pressure, like Grease Pencil thickness);
   a top-bar button right after a stroke; editing strokes other than the last one (would need a vector stroke layer —
   much bigger, out of scope so far).
