@@ -4,12 +4,14 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Blender layers saved in the .kra, waiting for a hand test)
+Last updated: 2026-11-16 (Blender bridge faster + progress bar, waiting for a hand test)
 
 ## Resume here
 - **Next up:** user hand-tests the Blender bridge (`feature/blender-bridge`, steps 1+2 not hand-tested yet):
   Send adds/updates a "Blender: <camera>" layer, switching to Giga Sketch refreshes it, the picture is saved in the
-  .kra, Layer > Refresh Blender Layers. Then merge `--no-ff` into giga-main and push.
+  .kra, Layer > Refresh Blender Layers. User said it "works pretty well" but tab-back took 1.5-2 s at 7020x3120;
+  step 3 (raw pixels via /dev/shm, no GUI freeze, progress bar) brings a Send to ~0.5 s — user to re-test.
+  Then merge `--no-ff` into giga-main and push.
   New tool icons are **extreme low priority** (user, 2026-11-16): don't suggest batches 3–4.
   Batch 2 stays in giga-test as-is; merge it only if the user OKs the look.
 - Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
@@ -125,7 +127,10 @@ Last updated: 2026-11-16 (Blender layers saved in the .kra, waiting for a hand t
     PNG. Self-tests: `blender` + Blender-side scripts (NOTES).
     **Step 2 done 2026-11-16**: Blender layers = flagged File Layers whose picture is saved in the .kra
     (`giga-blender="1"`), no missing-file dialog/error, Layer > Refresh Blender Layers; Freeze = existing Convert to
-    Paint Layer. Krita's kra loader/saver tests pass. Waiting for the user's hand test.
+    Paint Layer. Krita's kra loader/saver tests pass.
+    **Step 3 done 2026-11-16** (speed): raw pixels via shared memory, decoded off the GUI thread, Blender layers no
+    longer watch their PNG (no double load), canvas progress bar, Blender "Resolution: Full / Half". Waiting for the
+    user's hand test.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
 - [x] Transform Last Stroke (`feature/transform-last-stroke`, merged 2026-11-16, hand-tested). Self-test `laststroke`.
@@ -152,6 +157,8 @@ Last updated: 2026-11-16 (Blender layers saved in the .kra, waiting for a hand t
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-16: Blender bridge transport = raw RGBA in /dev/shm + PNG written afterwards in the background
+  (the PNG stays the File Layer's file); progress shown as a small bar on the canvas.
 - 2026-11-16: Blender bridge: Send creates the layer itself (above the active layer), refresh when switching
   to Giga Sketch (on by default) instead of live streaming; one layer per camera.
 - 2026-11-16: new tool icons (batches 3–4) → extreme low priority; don't suggest them.
