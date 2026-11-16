@@ -109,6 +109,8 @@ public:
     bool pixelGridEnabled;
     QColor gridColor;
     QColor cursorColor;
+    bool gigaTwoToneCursor = true;
+    QColor gigaCursorLightColor = Qt::white;
 
     bool lodSwitchInProgress = false;
 
@@ -391,6 +393,156 @@ void KisOpenGLCanvasRenderer::paintCanvasOnly(const QRect &canvasImageDirtyRect,
         }
         renderCanvasGL(fullUpdateRect);
     }
+}
+
+void KisOpenGLCanvasRenderer::paintToolOutline(const KisOptimizedBrushOutline &path, const QRect &viewportUpdateRect, const int thickness, qreal opacity)
+{
+    if (d->gigaTwoToneCursor) {
+        gigaPaintTwoToneOutline(path, viewportUpdateRect, thickness, opacity);
+    } else if (opacity > 0.0) {
+        // Krita's inverting outline can't be partly transparent; it stays solid
+        // until the fade ends.
+        paintToolOutline(path, viewportUpdateRect, thickness);
+    }
+}
+
+/**
+ * Giga Sketch: two-tone brush outline.
+ *
+ * Krita draws the outline with a "subtract" blend so it inverts what is under it.
+ * That vanishes over mid-grey. Here we draw two normal (alpha-blended) passes
+ * instead: a 3 px soft dark line, then a thin light line on top. One of the two
+ * always contrasts with the paint under it.
+ *
+ * Each polygon of the outline is turned into a triangle strip: for every point we
+ * push two vertices, one on each side of the line, along the "miter" direction
+ * (the average of the two neighbouring segment normals). That gives clean joins
+ * without overlapping triangles, which matters because overlaps would show as
+ * darker dots in a semi-transparent line.
+ */
+void KisOpenGLCanvasRenderer::gigaPaintTwoToneOutline(const KisOptimizedBrushOutline &path, const QRect &viewportUpdateRect, int thickness, qreal opacity)
+{
+    if (opacity <= 0.0) return;
+    if (!d->solidColorShader->bind()) {
+        return;
+    }
+
+    const QSizeF &widgetSize = d->pixelAlignedWidgetSize;
+    QMatrix4x4 projectionMatrix;
+    projectionMatrix.setToIdentity();
+    projectionMatrix.ortho(0, widgetSize.width(), widgetSize.height(), 0, NEAR_VAL, FAR_VAL);
+
+    // The outline points are in "flake" coordinates and the model matrix scales
+    // them to the widget. Line widths are wanted in screen pixels, so build the
+    // strip in widget space: map each point first, then use an identity model.
+    const QTransform flakeToWidget = coordinatesConverter()->flakeToWidgetTransform();
+    d->solidColorShader->setUniformValue(d->solidColorShader->location(Uniform::ModelViewProjection), projectionMatrix);
+
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    if (!viewportUpdateRect.isEmpty()) {
+        const QRect deviceUpdateRect = widgetToSurface(viewportUpdateRect).toAlignedRect();
+        glScissor(deviceUpdateRect.x(), deviceUpdateRect.y(), deviceUpdateRect.width(), deviceUpdateRect.height());
+        glEnable(GL_SCISSOR_TEST);
+    }
+
+    if (KisOpenGL::supportsVAO()) {
+        d->outlineVAO.bind();
+        d->lineVertexBuffer.bind();
+    }
+
+    const qreal dpr = devicePixelRatioF();
+    const qreal light = qMax(1, thickness) / dpr;      // inner line width, widget px
+    const qreal dark = light + 2.0 / dpr;               // outer line: one device px wider each side
+
+    // Prepared polygons in widget coordinates, without repeated points.
+    QVector<QPolygonF> polys;
+    for (auto it = path.begin(); it != path.end(); ++it) {
+        const QPolygonF src = flakeToWidget.map(*it);
+        QPolygonF clean;
+        clean.reserve(src.size());
+        for (const QPointF &p : src) {
+            if (clean.isEmpty() || KisAlgebra2D::norm(p - clean.last()) > 0.01) clean << p;
+        }
+        if (clean.size() >= 2 && KisAlgebra2D::maxDimension(clean.boundingRect()) >= 0.5) polys << clean;
+    }
+
+    auto drawPass = [&](qreal width, const QColor &c, qreal alpha) {
+        d->solidColorShader->setUniformValue(
+                    d->solidColorShader->location(Uniform::FragmentColor),
+                    QVector4D(c.redF(), c.greenF(), c.blueF(), alpha));
+        const qreal hw = 0.5 * width;
+        for (const QPolygonF &poly : polys) {
+            const int n = poly.size();
+            const bool closed = n > 2 && KisAlgebra2D::norm(poly.first() - poly.last()) < 0.01;
+            // For a closed loop the last point equals the first; work on n-1 unique ones.
+            const int count = closed ? n - 1 : n;
+            if (count < 2) continue;
+
+            d->lineVerticesStagingBuffer.clear();
+            d->lineVerticesStagingBuffer.reserve(2 * (count + 1));
+
+            auto normalOf = [](const QPointF &a, const QPointF &b) {
+                const QPointF t = KisAlgebra2D::normalize(b - a);
+                return QPointF(-t.y(), t.x());
+            };
+
+            for (int i = 0; i <= count; i++) {
+                if (!closed && i == count) break;
+                const int idx = i % count;
+                const QPointF p = poly.at(idx);
+                QPointF offset;
+                const bool hasPrev = closed || idx > 0;
+                const bool hasNext = closed || idx < count - 1;
+                const QPointF nPrev = hasPrev ? normalOf(poly.at((idx - 1 + count) % count), p) : QPointF();
+                const QPointF nNext = hasNext ? normalOf(p, poly.at((idx + 1) % count)) : QPointF();
+                if (hasPrev && hasNext) {
+                    QPointF m = nPrev + nNext;
+                    const qreal len = KisAlgebra2D::norm(m);
+                    if (len < 1e-3) {
+                        offset = nNext * hw;   // the line turns back on itself
+                    } else {
+                        m /= len;
+                        const qreal dot = KisAlgebra2D::dotProduct(m, nNext);
+                        // Cap long spikes at sharp corners (2x the half width).
+                        const qreal scale = qMin(hw / qMax(dot, 0.05), 2.0 * hw);
+                        offset = m * scale;
+                    }
+                } else {
+                    offset = (hasPrev ? nPrev : nNext) * hw;
+                }
+                d->lineVerticesStagingBuffer.append(QVector3D(p + offset));
+                d->lineVerticesStagingBuffer.append(QVector3D(p - offset));
+            }
+
+            const int verticesCount = d->lineVerticesStagingBuffer.size();
+            if (KisOpenGL::supportsVAO()) {
+                d->lineVertexBuffer.bind();
+                d->lineVertexBuffer.allocate(d->lineVerticesStagingBuffer.constData(), 3 * verticesCount * sizeof(float));
+            } else {
+                d->solidColorShader->enableAttributeArray(PROGRAM_VERTEX_ATTRIBUTE);
+                d->solidColorShader->setAttributeArray(PROGRAM_VERTEX_ATTRIBUTE, d->lineVerticesStagingBuffer.constData());
+            }
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, verticesCount);
+        }
+    };
+
+    drawPass(dark, QColor(0, 0, 0), 0.55 * opacity);
+    drawPass(light, d->gigaCursorLightColor, 0.95 * opacity);
+
+    if (KisOpenGL::supportsVAO()) {
+        d->lineVertexBuffer.release();
+        d->outlineVAO.release();
+    }
+    if (!viewportUpdateRect.isEmpty()) {
+        glDisable(GL_SCISSOR_TEST);
+    }
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_ONE, GL_ZERO);
+    glDisable(GL_BLEND);
+    d->solidColorShader->release();
 }
 
 void KisOpenGLCanvasRenderer::paintToolOutline(const KisOptimizedBrushOutline &path, const QRect &viewportUpdateRect, const int thickness)
@@ -1019,6 +1171,13 @@ void KisOpenGLCanvasRenderer::updateCursorColor()
             canvas()->resourceManager()->resource(KoCanvasResource::CurrentEffectiveCompositeOp).toString() == COMPOSITE_ERASE;
 
     d->cursorColor = (!useSeparateEraserCursor) ? cfg.getCursorMainColor() : cfg.getEraserCursorMainColor();
+
+    // Giga Sketch: the two-tone outline draws its light line in white for the
+    // brush. Krita's default cursor colour (magenta) only makes sense for its
+    // inverting blend, so it is ignored here; the eraser keeps its own colour so
+    // a separate eraser cursor still looks different.
+    d->gigaTwoToneCursor = cfg.gigaTwoToneCursor();
+    d->gigaCursorLightColor = useSeparateEraserCursor ? cfg.getEraserCursorMainColor() : QColor(Qt::white);
 }
 
 void KisOpenGLCanvasRenderer::updatePixelGridMode()

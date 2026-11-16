@@ -673,6 +673,19 @@ public:
     /// Giga Sketch: square size, in screen pixels, of the "Background only" grid.
     int gigaBackgroundGridSize(bool defaultValue = false) const;
     void setGigaBackgroundGridSize(int value);
+    /// Giga Sketch: brush outline look. True = two-tone (soft dark line under a
+    /// thin light line, readable on any colour); false = Krita's inverting outline.
+    bool gigaTwoToneCursor(bool defaultValue = false) const;
+    void setGigaTwoToneCursor(bool value);
+
+    /// Giga Sketch: when the outline is hidden while painting, fade it out/in
+    /// (about 150 ms) instead of switching it off at once.
+    bool gigaFadeOutlineWhilePainting(bool defaultValue = false) const;
+    void setGigaFadeOutlineWhilePainting(bool value);
+
+    /// Giga Sketch: show the brush size ("24 px") while resizing with Shift+drag.
+    bool gigaShowBrushSizeReadout(bool defaultValue = false) const;
+    void setGigaShowBrushSizeReadout(bool value);
 
     bool compressKra(bool defaultValue = false) const;
     void setCompressKra(bool compress);

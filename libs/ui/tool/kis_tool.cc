@@ -588,6 +588,13 @@ QWidget* KisTool::createOptionWidget()
 
 void KisTool::paintToolOutline(QPainter* painter, const KisOptimizedBrushOutline &path)
 {
+    // Giga Sketch: route through the opacity version so every tool gets the
+    // two-tone outline when that preference is on.
+    if (KisConfig(true).gigaTwoToneCursor()) {
+        paintToolOutline(painter, path, 1.0);
+        return;
+    }
+
     KisOpenGLCanvas2 *canvasWidget = dynamic_cast<KisOpenGLCanvas2 *>(canvas()->canvasWidget());
     if (canvasWidget)  {
         painter->beginNativePainting();
@@ -608,6 +615,45 @@ void KisTool::paintToolOutline(QPainter* painter, const KisOptimizedBrushOutline
 
         painter->restore();
     }
+}
+
+void KisTool::paintToolOutline(QPainter* painter, const KisOptimizedBrushOutline &path, qreal opacity)
+{
+    if (opacity <= 0.0) return;
+
+    KisOpenGLCanvas2 *canvasWidget = dynamic_cast<KisOpenGLCanvas2 *>(canvas()->canvasWidget());
+    if (canvasWidget)  {
+        painter->beginNativePainting();
+        canvasWidget->paintToolOutline(path, decorationThickness(), opacity);
+        painter->endNativePainting();
+        return;
+    }
+
+    KisConfig cfg(true);
+    if (!cfg.gigaTwoToneCursor()) {
+        // Krita's XOR outline can't fade; draw it solid while it is visible.
+        paintToolOutline(painter, path);
+        return;
+    }
+
+    // QPainter canvas (no OpenGL): the same two passes as the OpenGL version,
+    // a soft dark line under a thin light one.
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    const int w = qMax(1, decorationThickness());
+    QPen dark(QColor(0, 0, 0, qRound(140 * opacity)));
+    dark.setCosmetic(true);
+    dark.setWidthF(w + 2);
+    QPen light(QColor(255, 255, 255, qRound(242 * opacity)));
+    light.setCosmetic(true);
+    light.setWidthF(w);
+    for (const QPen &pen : {dark, light}) {
+        painter->setPen(pen);
+        for (auto it = path.begin(); it != path.end(); ++it) {
+            painter->drawPolyline(*it);
+        }
+    }
+    painter->restore();
 }
 
 void KisTool::resetCursorStyle()

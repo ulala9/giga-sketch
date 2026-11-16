@@ -269,6 +269,27 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
     m_showOutlinePainting->setChecked(cfg.showOutlineWhilePainting());
     m_changeBrushOutline->setChecked(!cfg.forceAlwaysFullSizedOutline());
 
+    // Giga Sketch: outline look options. Two-tone goes right under the outline
+    // shape combo; the fade sits in the "While painting..." box next to "Show outline".
+    m_chkGigaTwoToneCursor = new QCheckBox(i18n("Two-tone outline (readable on any colour)"), this);
+    m_chkGigaTwoToneCursor->setToolTip(i18n("Draw the brush outline as a thin light line over a soft dark one. "
+                                            "Off: Krita's inverting outline in the cursor colour."));
+    m_chkGigaTwoToneCursor->setChecked(cfg.gigaTwoToneCursor());
+    verticalLayout_8->insertWidget(verticalLayout_8->indexOf(m_cmbOutlineShape) + 1, m_chkGigaTwoToneCursor);
+    m_chkGigaSizeReadout = new QCheckBox(i18n("Show size while resizing the brush"), this);
+    m_chkGigaSizeReadout->setChecked(cfg.gigaShowBrushSizeReadout());
+    verticalLayout_8->insertWidget(verticalLayout_8->indexOf(m_chkGigaTwoToneCursor) + 1, m_chkGigaSizeReadout);
+    m_chkGigaFadeOutline = new QCheckBox(i18n("Fade outline out and in"), this);
+    m_chkGigaFadeOutline->setToolTip(i18n("When the outline hides while painting, fade it instead of switching it off at once (two-tone outline only)."));
+    m_chkGigaFadeOutline->setChecked(cfg.gigaFadeOutlineWhilePainting());
+    verticalLayout_2->insertWidget(verticalLayout_2->indexOf(m_showOutlinePainting) + 1, m_chkGigaFadeOutline);
+    auto syncFade = [this]() {
+        m_chkGigaFadeOutline->setEnabled(m_chkGigaTwoToneCursor->isChecked() && !m_showOutlinePainting->isChecked());
+    };
+    connect(m_chkGigaTwoToneCursor, &QCheckBox::toggled, this, syncFade);
+    connect(m_showOutlinePainting, &QCheckBox::toggled, this, syncFade);
+    syncFade();
+
     KoColor cursorColor(KoColorSpaceRegistry::instance()->rgb8());
     cursorColor.fromQColor(cfg.getCursorMainColor());
     cursorColorButton->setColor(cursorColor);
@@ -818,6 +839,9 @@ void GeneralTab::setDefault()
 
     m_showOutlinePainting->setChecked(cfg.showOutlineWhilePainting(true));
     m_changeBrushOutline->setChecked(!cfg.forceAlwaysFullSizedOutline(true));
+    if (m_chkGigaTwoToneCursor) m_chkGigaTwoToneCursor->setChecked(cfg.gigaTwoToneCursor(true));
+    if (m_chkGigaFadeOutline) m_chkGigaFadeOutline->setChecked(cfg.gigaFadeOutlineWhilePainting(true));
+    if (m_chkGigaSizeReadout) m_chkGigaSizeReadout->setChecked(cfg.gigaShowBrushSizeReadout(true));
     m_showEraserOutlinePainting->setChecked(cfg.showEraserOutlineWhilePainting(true));
     m_changeEraserBrushOutline->setChecked(!cfg.forceAlwaysFullSizedEraserOutline(true));
 
@@ -2918,6 +2942,9 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
 
         cfg.setShowRootLayer(m_general->showRootLayer());
         cfg.setShowOutlineWhilePainting(m_general->showOutlineWhilePainting());
+        cfg.setGigaTwoToneCursor(m_general->m_chkGigaTwoToneCursor->isChecked());
+        cfg.setGigaFadeOutlineWhilePainting(m_general->m_chkGigaFadeOutline->isChecked());
+        cfg.setGigaShowBrushSizeReadout(m_general->m_chkGigaSizeReadout->isChecked());
         cfg.setForceAlwaysFullSizedOutline(!m_general->m_changeBrushOutline->isChecked());
         cfg.setShowEraserOutlineWhilePainting(m_general->showEraserOutlineWhilePainting());
         cfg.setForceAlwaysFullSizedEraserOutline(!m_general->m_changeEraserBrushOutline->isChecked());

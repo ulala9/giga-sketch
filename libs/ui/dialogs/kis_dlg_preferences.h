@@ -138,6 +138,12 @@ private:
     // Giga Sketch: added in code (not in the .ui) under "Show on-canvas popup messages"
     QCheckBox *m_chkGigaBrushSwitchMessage {nullptr};
     QCheckBox *m_chkGigaInWindowPanels {nullptr};
+public:
+    // Giga Sketch: brush outline look, added in code under "Brush Outline Shape"
+    QCheckBox *m_chkGigaTwoToneCursor {nullptr};
+    QCheckBox *m_chkGigaFadeOutline {nullptr};
+    QCheckBox *m_chkGigaSizeReadout {nullptr};
+private:
 };
 
 

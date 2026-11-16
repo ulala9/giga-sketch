@@ -66,9 +66,13 @@ public:
 
 private:
     void renderCanvasGL(const QRect &updateRect);
+    void gigaPaintTwoToneOutline(const KisOptimizedBrushOutline &path, const QRect &viewportUpdateRect, int thickness, qreal opacity);
 
 public:
     void paintToolOutline(const KisOptimizedBrushOutline &path, const QRect &viewportUpdateRect, const int thickness = 1);
+    /// Giga Sketch: same, with an overall opacity (0..1, used by the fade while painting).
+    /// Draws the two-tone outline when that preference is on, else Krita's outline.
+    void paintToolOutline(const KisOptimizedBrushOutline &path, const QRect &viewportUpdateRect, const int thickness, qreal opacity);
 
     void setDisplayFilter(QSharedPointer<KisDisplayFilter> displayFilter);
     void notifyImageColorSpaceChanged(const KoColorSpace *cs);
