@@ -4,10 +4,10 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (G'MIC filters installed)
+Last updated: 2026-11-16 (icon batch 2 waiting for a look)
 
 ## Resume here
-- **Next up:** icon batches 2–4 (user OK'd the batch 1 style): batch 2 select/move/crop/sample.
+- **Next up:** icon batch 2 is in giga-test, waiting for the user's look; then batch 3 (vector/text/shapes), 4 (hand/zoom + panel strip).
 - Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
 - Repo state: everything merged and pushed (2026-11-16: transform-last-stroke, stroke-points,
   stroke-points-proportional, refboard-image-search, refboard-delete-key, all hand-tested by the user).
@@ -19,7 +19,7 @@ Last updated: 2026-11-16 (G'MIC filters installed)
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: none (giga-test = giga-main).
+  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -82,7 +82,7 @@ Last updated: 2026-11-16 (G'MIC filters installed)
   - [x] Softer slider look, Preferences > General "Softer sliders" (`feature/slider-look`)
   - [x] Soft shadow around the canvas, Preferences > Display (`feature/canvas-shadow`)
   - [x] Interface motion: panel/flyout/tool-menu fades, mode-switch cross-fade, "Interface animations" (`feature/ui-motion`). Self-test `motion`.
-  - [ ] Original line-art tool icons (`feature/giga-tool-icons`): **batch 1 (paint/fill) merged, style OK'd**; next batch 2 (select/move/crop/sample), 3 (vector/text/shapes), 4 (hand/zoom + panel strip). Self-test `icons`.
+  - [ ] Original line-art tool icons (`feature/giga-tool-icons`): **batch 1 (paint/fill) merged, style OK'd**; batch 2 (8 selection tools, move, transform, crop, sampler, measure) in giga-test, waiting for a look; 3 (vector/text/shapes), 4 (hand/zoom + panel strip). Self-test `icons`.
 
 ## Phase 5 — Feature blueprints (doc "Giga Sketch Feature Blueprints")
 - [x] Reference Board (`feature/reference-board`, merged 2026-11-14, hand-tested): Normalize, Arrange (5 styles,
