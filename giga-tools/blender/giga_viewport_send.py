@@ -9,8 +9,9 @@ active camera, into a PNG. In GigaSketch, add that PNG as a File Layer
 
 Install: Blender > Edit > Preferences > Add-ons > (top-right menu) Install from
 Disk... > pick this file, then tick it. The panel is in the 3D viewport's
-side bar (N) under the "GigaSketch" tab. Right-click the Send button >
-Assign Shortcut to give it a key.
+side bar (N) under the "GigaSketch" tab; "Send to GigaSketch" is also in the
+viewport's right-click menu and its View menu. To give it a key: right-click
+the Send button in the side bar > Assign Shortcut.
 
 How it works, in short:
   1. GPUOffScreen + draw_view3d draws the viewport again, offscreen, at the
@@ -25,9 +26,9 @@ How it works, in short:
 bl_info = {
     "name": "Send to GigaSketch",
     "author": "The Giga Sketch contributors",
-    "version": (0, 1, 0),
+    "version": (0, 1, 1),
     "blender": (4, 2, 0),
-    "location": "3D Viewport > Sidebar (N) > GigaSketch",
+    "location": "3D Viewport > Sidebar (N) > GigaSketch; right-click menu; View menu",
     "description": "Render the viewport from the camera into a PNG that a GigaSketch File Layer shows",
     "category": "3D View",
 }
@@ -247,14 +248,32 @@ class VIEW3D_PT_giga_send(bpy.types.Panel):
 
 CLASSES = (GigaSendSettings, VIEW3D_OT_giga_send, VIEW3D_OT_giga_copy_path, VIEW3D_PT_giga_send)
 
+# Menus that get a "Send to GigaSketch" entry: the right-click menus of the
+# viewport (object mode and the edit modes) and the viewport's View menu.
+MENUS = ("VIEW3D_MT_object_context_menu", "VIEW3D_MT_edit_mesh_context_menu",
+         "VIEW3D_MT_pose_context_menu", "VIEW3D_MT_view")
+
+
+def draw_menu_entry(self, context):
+    self.layout.separator()
+    self.layout.operator(VIEW3D_OT_giga_send.bl_idname, icon='EXPORT')
+
 
 def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     bpy.types.Scene.giga_send = bpy.props.PointerProperty(type=GigaSendSettings)
+    for name in MENUS:
+        menu = getattr(bpy.types, name, None)
+        if menu is not None:
+            menu.append(draw_menu_entry)
 
 
 def unregister():
+    for name in MENUS:
+        menu = getattr(bpy.types, name, None)
+        if menu is not None:
+            menu.remove(draw_menu_entry)
     del bpy.types.Scene.giga_send
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)
