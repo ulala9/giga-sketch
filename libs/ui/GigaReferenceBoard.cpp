@@ -107,6 +107,17 @@ QVector<QRectF> rearranged(const QVector<KisReferenceImage *> &images, const QVe
     for (int k = 0; k < order.size(); ++k) out[order[k]] = result.rects[k].translated(origin);
     return out;
 }
+// Sticky notes (GigaNote) keep their own size: their width is the user's
+// and their height follows the text.
+QVector<KisReferenceImage *> withoutNotes(const QVector<KisReferenceImage *> &images)
+{
+    QVector<KisReferenceImage *> pictures;
+    for (KisReferenceImage *image : images) {
+        if (!image->isNote()) pictures.append(image);
+    }
+    return pictures;
+}
+
 } // namespace
 
 // ---- Settings ---------------------------------------------------------------
@@ -129,6 +140,7 @@ Settings Settings::load()
     s.rotateWithCanvas = cfg.readEntry<bool>("gigaRefBoardRotateWithCanvas", true);
     s.dimOthers = cfg.readEntry<bool>("gigaRefBoardDim", true);
     s.shrinkOnSave = cfg.readEntry<bool>("gigaRefBoardShrinkOnSave", false);
+    s.keepNotesInPlace = cfg.readEntry<bool>("gigaRefBoardKeepNotes", true);
     s_shrinkOnSave = s.shrinkOnSave ? 1 : 0;
     return s;
 }
@@ -147,6 +159,7 @@ void Settings::save() const
     cfg.writeEntry<bool>("gigaRefBoardCaptions", captions);
     cfg.writeEntry<bool>("gigaRefBoardFlipWithCanvas", flipWithCanvas);
     cfg.writeEntry<bool>("gigaRefBoardRotateWithCanvas", rotateWithCanvas);
+    cfg.writeEntry<bool>("gigaRefBoardKeepNotes", keepNotesInPlace);
     cfg.writeEntry<bool>("gigaRefBoardDim", dimOthers);
     cfg.writeEntry<bool>("gigaRefBoardShrinkOnSave", shrinkOnSave);
     s_shrinkOnSave = shrinkOnSave ? 1 : 0;
@@ -325,9 +338,11 @@ qreal aspectFor(TargetShape shape, KoCanvasBase *canvas)
     return 1.0;
 }
 
-GeometryCommand *normalizeOnCanvas(const QVector<KisReferenceImage *> &images, GigaReferenceLayout::NormalizeMode mode,
+GeometryCommand *normalizeOnCanvas(const QVector<KisReferenceImage *> &allImages, GigaReferenceLayout::NormalizeMode mode,
                                    KisReferenceImage *matchTo)
 {
+    const QVector<KisReferenceImage *> images = withoutNotes(allImages);
+    if (matchTo && matchTo->isNote()) matchTo = nullptr;
     if (images.size() < 2 && mode != GigaReferenceLayout::NormalizeMode::MatchSelected) return nullptr;
     QVector<QSizeF> sizes;
     for (KisReferenceImage *image : images) sizes.append(displayedSize(image));
@@ -346,9 +361,10 @@ GeometryCommand *normalizeOnCanvas(const QVector<KisReferenceImage *> &images, G
     return makeCommand(kundo2_i18n("Normalize Reference Sizes"), images, before, after);
 }
 
-GeometryCommand *arrangeOnCanvas(const QVector<KisReferenceImage *> &images, const Settings &settings,
+GeometryCommand *arrangeOnCanvas(const QVector<KisReferenceImage *> &allImages, const Settings &settings,
                                  KoCanvasBase *canvas, KisReferenceImagesLayer *layer)
 {
+    const QVector<KisReferenceImage *> images = settings.keepNotesInPlace ? withoutNotes(allImages) : allImages;
     if (images.isEmpty()) return nullptr;
     QVector<QRectF> current;
     for (KisReferenceImage *image : images) current.append(image->boundingRect());
@@ -420,9 +436,11 @@ GeometryCommand *sendToCanvas(const QVector<KisReferenceImage *> &images)
     return makeCommand(kundo2_i18n("Send to Canvas"), toSend, before, after);
 }
 
-GeometryCommand *normalizeOnBoard(const QVector<KisReferenceImage *> &images, GigaReferenceLayout::NormalizeMode mode,
+GeometryCommand *normalizeOnBoard(const QVector<KisReferenceImage *> &allImages, GigaReferenceLayout::NormalizeMode mode,
                                   KisReferenceImage *matchTo)
 {
+    const QVector<KisReferenceImage *> images = withoutNotes(allImages);
+    if (matchTo && matchTo->isNote()) matchTo = nullptr;
     if (images.size() < 2 && mode != GigaReferenceLayout::NormalizeMode::MatchSelected) return nullptr;
     QVector<QSizeF> sizes;
     for (KisReferenceImage *image : images) sizes.append(image->boardRect().size());
@@ -437,9 +455,10 @@ GeometryCommand *normalizeOnBoard(const QVector<KisReferenceImage *> &images, Gi
     return makeCommand(kundo2_i18n("Normalize Reference Sizes"), images, before, after);
 }
 
-GeometryCommand *arrangeOnBoard(const QVector<KisReferenceImage *> &images, const Settings &settings,
+GeometryCommand *arrangeOnBoard(const QVector<KisReferenceImage *> &allImages, const Settings &settings,
                                 KoCanvasBase *canvas, KisReferenceImagesLayer *layer)
 {
+    const QVector<KisReferenceImage *> images = settings.keepNotesInPlace ? withoutNotes(allImages) : allImages;
     if (images.isEmpty()) return nullptr;
     const QVector<QRectF> current = boardRectsOf(images);
     const QVector<QRectF> wanted = rearranged(images, current, settings, aspectFor(settings.targetShape, canvas), layer);

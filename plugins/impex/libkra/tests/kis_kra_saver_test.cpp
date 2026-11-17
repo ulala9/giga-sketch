@@ -571,4 +571,85 @@ void KisKraSaverTest::testExportToReadonly()
     TestUtil::testExportToReadonly(KraMimetype);
 }
 
+// --- Giga Sketch: sticky notes ------------------------------------------------
+
+#include <KisReferenceImagesLayer.h>
+#include <KisReferenceImage.h>
+#include <GigaNote.h>
+
+void KisKraSaverTest::testRoundTripGigaNotes()
+{
+    QRect refRect(0, 0, 64, 64);
+    QScopedPointer<KisDocument> doc(KisPart::instance()->createDocument());
+    TestUtil::MaskParent p(refRect);
+    doc->setCurrentImage(p.image);
+
+    QImage pixels(8, 8, QImage::Format_ARGB32);
+    pixels.fill(Qt::red);
+    KisReferenceImage *picture = new KisReferenceImage();
+    picture->setImage(pixels);
+    picture->setSize(QSizeF(8, 8));
+
+    GigaNote *note = GigaNote::create(QPointF(20, 30), 0.5, "Hello note");
+    GigaNote::State state = note->state();
+    state.color = QColor(168, 212, 255);
+    state.textSize = GigaNote::Large;
+    state.collapsed = true;
+    state.style = GigaNote::Outline;
+    note->setState(state);
+    const QSizeF noteSize = note->size();
+
+    GigaNote *boardNote = GigaNote::create(QPointF(0, 0), 0.5, "On the board");
+    boardNote->setBoardRect(QRectF(5, 6, 70, 30));
+    boardNote->setOnBoard(true);
+
+    KisSharedPtr<KisReferenceImagesLayer> layer = new KisReferenceImagesLayer(doc->shapeController(), p.image);
+    doc->setReferenceImagesLayer(layer, true);
+    layer->addShape(picture);
+    layer->addShape(note);
+    layer->addShape(boardNote);
+
+    qApp->processEvents();
+    p.image->waitForDone();
+    QVERIFY(doc->exportDocumentSync("roundtrip_giga_notes_test.kra", doc->mimeType()));
+
+    QScopedPointer<KisDocument> doc2(KisPart::instance()->createDocument());
+    QVERIFY(doc2->loadNativeFormat("roundtrip_giga_notes_test.kra"));
+    qApp->processEvents();
+    doc2->image()->waitForDone();
+
+    KisSharedPtr<KisReferenceImagesLayer> layer2 = doc2->referenceImagesLayer();
+    QVERIFY(layer2);
+    QCOMPARE(layer2->referenceImages().size(), 3);
+    const QVector<GigaNote *> notes = GigaNote::notesOf(layer2.data());
+    QCOMPARE(notes.size(), 2);
+
+    GigaNote *loaded = notes[0]->plainText() == "Hello note" ? notes[0] : notes[1];
+    GigaNote *loadedBoard = loaded == notes[0] ? notes[1] : notes[0];
+    QCOMPARE(loaded->plainText(), QString("Hello note"));
+    QCOMPARE(loaded->color(), QColor(168, 212, 255));
+    QCOMPARE(loaded->textSize(), int(GigaNote::Large));
+    QVERIFY(loaded->isCollapsed());
+    QCOMPARE(loaded->style(), int(GigaNote::Outline));
+    QCOMPARE(loaded->contentScale(), 0.5);
+    QCOMPARE(loaded->position(), QPointF(20, 30));
+    QVERIFY(qAbs(loaded->size().width() - noteSize.width()) < 1e-6);
+    QVERIFY(qAbs(loaded->size().height() - noteSize.height()) < 1e-6);
+    QVERIFY(!loaded->isOnBoard());
+
+    QCOMPARE(loadedBoard->plainText(), QString("On the board"));
+    QVERIFY(loadedBoard->isOnBoard());
+    QCOMPARE(loadedBoard->boardRect(), QRectF(5, 6, 70, 30));
+
+    // The picture still loads next to the notes.
+    int pictures = 0;
+    Q_FOREACH (KisReferenceImage *image, layer2->referenceImages()) {
+        if (!image->isNote()) {
+            ++pictures;
+            QCOMPARE(image->imagePixelSize(), QSize(8, 8));
+        }
+    }
+    QCOMPARE(pictures, 1);
+}
+
 KISTEST_MAIN(KisKraSaverTest)

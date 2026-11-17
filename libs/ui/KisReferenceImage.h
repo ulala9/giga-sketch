@@ -76,11 +76,12 @@ public:
 
     QColor getPixel(QPointF position);
 
-    void saveXml(QDomDocument &document, QDomElement &parentElement, int id);
-    bool saveImage(KoStore *store) const;
+    // Giga Sketch: virtual so a sticky note (GigaNote) can save itself.
+    virtual void saveXml(QDomDocument &document, QDomElement &parentElement, int id);
+    virtual bool saveImage(KoStore *store) const;
 
     static KisReferenceImage * fromXml(const QDomElement &elem);
-    bool loadImage(KoStore *store);
+    virtual bool loadImage(KoStore *store);
 
     QImage getImage();
 
@@ -103,11 +104,18 @@ public:
 
     /// Draws the image (with its saturation) stretched into target, using
     /// the same mipmaps as the canvas. Used by the Board.
-    void paintInRect(QPainter &gc, const QRectF &target) const;
+    virtual void paintInRect(QPainter &gc, const QRectF &target) const;
     /// Colour at uv (0..1 across the image), for Ctrl+click on the Board.
     QColor pixelAtNormalized(const QPointF &uv);
     /// Cheap average colour (cached), for "sort by colour".
     QColor averageColor() const;
+
+    // --- Giga Sketch: sticky notes (GigaNote derives from this class) -------
+    /// True for a GigaNote (text box), false for a picture.
+    virtual bool isNote() const { return false; }
+    /// True when the shape should stay hidden on the canvas even though it
+    /// is not on the Board (View > Show Annotations off).
+    virtual bool hiddenOnCanvas() const { return false; }
 
 private:
     struct Private;

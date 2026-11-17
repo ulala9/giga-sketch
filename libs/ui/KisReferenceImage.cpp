@@ -311,6 +311,7 @@ void KisReferenceImage::setFilename(const QString &filename)
 QColor KisReferenceImage::getPixel(QPointF position)
 {
     if (transparency() == 1.0) return Qt::transparent;
+    if (isNote()) return QColor(); // Giga Sketch: sticky notes are not sampled
 
     const QSizeF shapeSize = size();
     const QTransform scale = QTransform::fromScale(d->image.width() / shapeSize.width(), d->image.height() / shapeSize.height());
@@ -471,7 +472,7 @@ void KisReferenceImage::setOnBoard(bool onBoard)
     d->onBoard = onBoard;
     // Hidden shapes are skipped by the canvas painting, hit-testing and
     // selection, which is exactly "not on the canvas".
-    setVisible(!onBoard);
+    setVisible(!onBoard && !hiddenOnCanvas());
 }
 
 QRectF KisReferenceImage::boardRect() const

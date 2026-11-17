@@ -97,6 +97,10 @@ set(kritaui_LIB_SRCS
     GigaPanelTitleBar.cpp
     GigaReferenceLayout.cpp
     GigaReferenceBoard.cpp
+    GigaNote.cpp
+    GigaNoteActions.cpp
+    GigaNoteEditor.cpp
+    GigaNotesDecoration.cpp
 
     flake/kis_node_dummies_graph.cpp
     flake/kis_dummies_facade_base.cpp

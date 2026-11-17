@@ -817,3 +817,63 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Blender-side tests: `blender --factory-startup --python test.py` with a `bpy.app.timers` callback calling the
   operator under `context.temp_override(window, area, region, space_data)`, then `wm.quit_blender()` (opens a
   window; `-b` has no viewport). A fake Giga server in Python on a short socket path covers refresh/ack.
+
+## Sticky notes / Annotations (feature/annotations, 2026-11-16)
+- A note is a **subclass of KisReferenceImage**: `libs/ui/GigaNote.{h,cpp}`. It lives in the reference layer, so
+  select/move/stack/undo/Board/Send to Board all work unchanged. `KisReferenceImage` got virtual `saveXml`,
+  `saveImage`, `loadImage`, `paintInRect` and `isNote()` / `hiddenOnCanvas()` (additions only).
+- Saved as `<giga-note>` inside the reference layer's XML (stock Krita reads only `referenceimage`, so it skips
+  notes); no picture file. Loaders: `kis_kra_loader.cpp` (loadReferenceImagesLayer), `KisReferenceImageCollection`
+  (.krf). Tests: `kis_kra_saver_test` testRoundTripGigaNotes, `TestGigaNoteCollection` (plugins/tools/defaulttool/tests).
+- Units: text laid out in "note units" (≈ 1 screen px at the zoom the note was made); `contentScale()` = document
+  points per unit. Width is the user's (setSize keeps it, min 80 units); height always follows the text (relayout()).
+  `State::width` is in **note units** so undo survives Keep readable rescaling.
+- Drawing: `paint()` draws a rounded box, darker top strip (`stripRect()`), QTextDocument text (font = app font,
+  no hinting, design metrics, list indent 18 units). Text colour auto (luminance). `normalizeFonts()` strips explicit
+  sizes/families/colours from html (pasted text, editor's toHtml).
+- Shared actions: `libs/ui/GigaNoteActions.{h,cpp}` (addNote, changeNotes = one StateCommand, right-click items,
+  duplicate, Edit > Add Note, Keep readable follow-zoom, Show Annotations). `pointsPerScreenPixel()` = 1/√|det|
+  of documentToWidget.
+- Editor: `libs/ui/GigaNoteEditor.{h,cpp}`, a QTextEdit child of the canvas widget, upright, font scaled to screen.
+  Takes every ShortcutOverride except Save/SaveAs (B/E type letters). Live: each change → note->setHtml (box grows).
+  Finish = Esc / Ctrl+Enter / **app-wide mouse/tablet press outside** (event filter on qApp; middle button ignored
+  for panning). Not on focus-out: menus and window activation move focus (made the editor close at once in tests).
+  The outside-click filter is installed one event-loop turn after opening, plus 250 ms grace: the placing click
+  still travels up to the canvas's parents (Viewport, KisView…) and would close the box at once (seen 2026-11-16).
+  Commit = StateCommand "Edit Note" with setSkipFirstRedo. New note left empty → a normal remove command, unless
+  the closing click was on the note itself or within 14 screen px of it (handles): that is "move/resize it", the note
+  stays (user report 2026-11-16: Edit > Add Note, then move/scale → note vanished).
+  Edit > Add Note only switches tool if needed: re-requesting the active tool restarts it (deactivate → editor closes).
+  Self-test gotcha: a ShortcutOverride the editor doesn't take goes on to the canvas → KisShortcutMatcher thinks the
+  key is held (S+click = temporary tool in gigasketch.profile → tool restart). Send the KeyRelease.
+  **Never call `undoStack()->undo()` from here:** KisDocument's undo loops processEvents (ignoring input) until the
+  image is idle; the user's app froze on Edit > Add Note in a big file (first note creates the reference layer).
+- Diagnostic self-test `notesfreeze` (by name only): big 8-layer document, timings; `GIGA_NOTES_FILE=<kra>`,
+  `GIGA_NOTES_NO_TYPING=1`, `GIGA_NOTE_TRACE=1` (editor close reasons). Synthetic clicks need an Enter event first,
+  else KisInputManager drops them.
+- Tool (`ToolReferenceImages`): Add Note button (placement mode, crosshair, Esc cancels), double-click note = edit,
+  double-click strip = collapse, right-click menu (Add Note at the click, Note Colour/Text Size/Collapse/Keep
+  Readable/Duplicate/Delete), paste text (no image/urls on the clipboard) = new note, copy note = html + text.
+  Options: Notes section (colour swatches, text size, keep readable); picture-only options hide when only notes are
+  selected. Right-click in this tool shows the tool menu, not the popup palette (KisPopupWidgetAction asks the tool).
+- Edit > Add Note (`giga_add_note`, no shortcut), View > Show Annotations (`giga_show_annotations`, KisConfig
+  `gigaShowAnnotations`), both in gigasketch.action, menu items added in code (`gigaAddEditMenuItems`/`gigaAddViewMenuItems`).
+  Adding a note while hidden turns notes back on.
+- Drawing order (2026-11-16, user: "it's behind the grid"): notes are drawn by `GigaNotesDecoration` (priority 100,
+  above grid 0, guides 90, assistants 95; added in KisView ctor), in widget coords, z-order sorted. Once it exists
+  `GigaNote::paint()` is a no-op (`setDrawnOnTop`), so the reference layer's own pass (under the grid) skips notes;
+  pictures stay where Krita draws them. Use `paintOnTop()` to draw a note directly (Board uses paintInRect).
+- Keep readable: per note, `applyKeepReadable(canvas)` sets contentScale to the view's zoom on sigCanvasStateChanged
+  (not an undo step). Hooked per canvas on the first paint of KisReferenceImagesDecoration (deferred, singleShot).
+- Board: Normalize skips notes (`withoutNotes()`), Arrange skips them when Settings::keepNotesInPlace (default on,
+  key `gigaRefBoardKeepNotes`, checkbox in the tool options). Resample skips them (no pixels). Ctrl+click colour
+  on a note does nothing (pixelAtNormalized invalid).
+- Styles (2026-11-16): `GigaNote::Style` Sticky / Card / Bubble / Outline, per note in State (undo) and saved as
+  `style="n"` (missing = Sticky). All square, no shadow (user, 2026-11-16). `insets()` gives text margins (Sticky: strip,
+  Card: left bar, Bubble: tail under the body); `fillColor()`/`textColor()` are style-aware (Outline = dark glass
+  α≈0.45 with the colour lightened for text and border). `stripRect()` = Sticky strip or the top inset (double-click
+  collapse). New notes take `defaultStyle()` (KisConfig `gigaNoteStyle`, set by `GigaNoteActions::applyStyle`).
+  Self-test renders all four to `GIGA_NOTES_RENDER=<png>` if set.
+- Self-test `notes` (41 checks).
+- Known limits: resizing several shapes at once uses post-scaling (text scales with it); notes can't be edited on
+  the Board panel; rotated canvas → editor upright at the note's text corner.

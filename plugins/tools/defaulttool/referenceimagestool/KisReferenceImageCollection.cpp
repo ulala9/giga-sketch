@@ -10,6 +10,7 @@
 
 #include <libs/store/KoStore.h>
 #include <KisReferenceImage.h>
+#include <GigaNote.h>
 #include <libs/store/KoStoreDevice.h>
 
 const QString METADATA_FILE = "reference_images.xml";
@@ -76,9 +77,18 @@ bool KisReferenceImageCollection::load(QIODevice *io)
 
     QStringList failures;
 
-    QDomElement element = root.firstChildElement("referenceimage");
+    // Giga Sketch: walk all children so sticky notes (<giga-note>) load too.
+    QDomElement element = root.firstChildElement();
     while (!element.isNull()) {
-        KisReferenceImage *reference = KisReferenceImage::fromXml(element);
+        KisReferenceImage *reference = nullptr;
+        if (element.tagName() == "referenceimage") {
+            reference = KisReferenceImage::fromXml(element);
+        } else if (element.tagName() == GigaNote::xmlTagName()) {
+            reference = GigaNote::fromXml(element);
+        } else {
+            element = element.nextSiblingElement();
+            continue;
+        }
 
         if (reference->loadImage(store.data())) {
             references.append(reference);
@@ -86,7 +96,7 @@ bool KisReferenceImageCollection::load(QIODevice *io)
             failures << (reference->embed() ? reference->internalFile() : reference->filename());
             delete reference;
         }
-        element = element.nextSiblingElement("referenceimage");
+        element = element.nextSiblingElement();
     }
 
     if (!failures.isEmpty()) {

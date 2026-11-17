@@ -67,6 +67,9 @@ struct KRITAUI_EXPORT Settings {
     /// Shrink oversized references in the saved file (open document untouched).
     bool shrinkOnSave = false;
 
+    /// Arrange leaves sticky notes (GigaNote) where they are.
+    bool keepNotesInPlace = true;
+
     static Settings load();
     void save() const;
 };

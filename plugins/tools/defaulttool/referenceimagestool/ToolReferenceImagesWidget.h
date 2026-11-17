@@ -40,6 +40,8 @@ private:
     void gigaSetupBoardSection(); // Giga Sketch: Normalize / Arrange / Board
     void gigaLoadSettings();
     void gigaSaveSettings();
+    void gigaSetupNotesSection(); // Giga Sketch: sticky notes
+    void gigaUpdateNotesSection(KoSelection *selection);
     struct Private;
     const QScopedPointer<Private> d;
     void updateVisibility(bool hasSelection);

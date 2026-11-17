@@ -1,5 +1,7 @@
 project( defaulttools )
 
+add_subdirectory(tests) # Giga Sketch: sticky notes in .krf sets
+
 set ( defaulttools_SRCS
     Plugin.cpp
     defaulttool/DefaultTool.cpp
