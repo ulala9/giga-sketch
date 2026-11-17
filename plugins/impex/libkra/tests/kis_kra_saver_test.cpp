@@ -595,6 +595,7 @@ void KisKraSaverTest::testRoundTripGigaNotes()
     state.color = QColor(168, 212, 255);
     state.textSize = GigaNote::Large;
     state.collapsed = true;
+    state.style = GigaNote::Outline;
     note->setState(state);
     const QSizeF noteSize = note->size();
 
@@ -629,6 +630,7 @@ void KisKraSaverTest::testRoundTripGigaNotes()
     QCOMPARE(loaded->color(), QColor(168, 212, 255));
     QCOMPARE(loaded->textSize(), int(GigaNote::Large));
     QVERIFY(loaded->isCollapsed());
+    QCOMPARE(loaded->style(), int(GigaNote::Outline));
     QCOMPARE(loaded->contentScale(), 0.5);
     QCOMPARE(loaded->position(), QPointF(20, 30));
     QVERIFY(qAbs(loaded->size().width() - noteSize.width()) < 1e-6);

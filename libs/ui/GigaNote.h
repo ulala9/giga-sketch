@@ -7,6 +7,7 @@
 #define GIGA_NOTE_H
 
 #include <QColor>
+#include <QMarginsF>
 #include <QScopedPointer>
 #include <QString>
 #include <QVector>
@@ -41,6 +42,8 @@ class KRITAUI_EXPORT GigaNote : public KisReferenceImage
 {
 public:
     enum TextSize { Small = 0, Medium = 1, Large = 2 };
+    /// Overall look; the note's colour applies in every style.
+    enum Style { Sticky = 0, Card = 1, Bubble = 2, Outline = 3 };
 
     /// Everything about a note that the property commands change.
     struct KRITAUI_EXPORT State {
@@ -49,10 +52,11 @@ public:
         int textSize = Medium;
         bool collapsed = false;
         bool keepReadable = false;
+        int style = Sticky;
         qreal width = 0.0; ///< note units (so it survives Keep readable rescaling)
         bool operator==(const State &o) const {
             return html == o.html && color == o.color && textSize == o.textSize
-                && collapsed == o.collapsed && keepReadable == o.keepReadable
+                && collapsed == o.collapsed && keepReadable == o.keepReadable && style == o.style
                 && qFuzzyCompare(width + 1.0, o.width + 1.0);
         }
     };
@@ -98,8 +102,17 @@ public:
 
     QColor color() const;
     void setColor(const QColor &color);
-    /// Readable text colour on color(): near-black or near-white.
+    /// Readable text colour on fillColor() (Outline: the note colour, lightened if dark).
     QColor textColor() const;
+    /// What the box is filled with in this style (Outline: see-through dark).
+    QColor fillColor() const;
+
+    int style() const;
+    void setStyle(int style);
+    static QStringList styleNames();
+    /// Style for new notes: the one picked last (KisConfig gigaNoteStyle).
+    static int defaultStyle();
+    static void setDefaultStyle(int style);
 
     int textSize() const;
     void setTextSize(int size);
@@ -167,6 +180,8 @@ private:
     void relayout();
     QTextDocument *layoutDocument() const;
     void paintNote(QPainter &gc, qreal scale) const;
+    /// Space around the text in note units, for the style: left, top, right, bottom.
+    QMarginsF insets() const;
 
     struct Private;
     QScopedPointer<Private> m_d;

@@ -36,6 +36,10 @@ constexpr qreal STRIP = 14.0;      ///< height of the darker top band
 constexpr qreal PAD = 10.0;        ///< left/right/bottom padding
 constexpr qreal PAD_TOP = 7.0;     ///< gap between the band and the text
 constexpr qreal RADIUS = 7.0;      ///< corner rounding
+constexpr qreal SHADOW = 3.0;      ///< Sticky: shadow offset (kept inside the shape)
+constexpr qreal CARD_BAR = 5.0;    ///< Card: coloured bar on the left
+constexpr qreal TAIL = 12.0;       ///< Bubble: height of the tail under the body
+const char *CONFIG_STYLE = "gigaNoteStyle";
 constexpr qreal MIN_WIDTH = 80.0;
 constexpr qreal DEFAULT_WIDTH = 220.0;
 constexpr qreal INDENT = 18.0;     ///< list indent (Qt's default is 40)
@@ -61,6 +65,7 @@ struct GigaNote::Private {
     int textSize = GigaNote::Medium;
     bool collapsed = false;
     bool keepReadable = false;
+    int style = GigaNote::Sticky;
     qreal scale = 1.0; ///< document points per note unit
     bool editing = false;
 
@@ -116,6 +121,7 @@ GigaNote::GigaNote(const GigaNote &rhs)
     m_d->textSize = rhs.m_d->textSize;
     m_d->collapsed = rhs.m_d->collapsed;
     m_d->keepReadable = rhs.m_d->keepReadable;
+    m_d->style = rhs.m_d->style;
     m_d->scale = rhs.m_d->scale;
     // editing is a per-shape interface state, not copied
 }
@@ -133,6 +139,7 @@ GigaNote *GigaNote::create(const QPointF &documentPos, qreal pointsPerScreenPixe
 {
     GigaNote *note = new GigaNote();
     note->m_d->scale = pointsPerScreenPixel > 0.0 ? pointsPerScreenPixel : 1.0;
+    note->m_d->style = defaultStyle();
     if (!plainText.isEmpty()) {
         QTextDocument doc;
         doc.setPlainText(plainText);
@@ -178,11 +185,86 @@ void GigaNote::setColor(const QColor &color)
     if (color.isValid()) m_d->color = color;
 }
 
+namespace
+{
+qreal luminance(const QColor &c)
+{
+    return 0.2126 * c.redF() + 0.7152 * c.greenF() + 0.0722 * c.blueF();
+}
+} // namespace
+
+QColor GigaNote::fillColor() const
+{
+    switch (m_d->style) {
+    case Card: {
+        // A light card tinted by the note colour (the colour itself is the bar).
+        const QColor c = m_d->color;
+        return QColor((c.red() + 3 * 252) / 4, (c.green() + 3 * 252) / 4, (c.blue() + 3 * 250) / 4);
+    }
+    case Outline:
+        return QColor(0, 0, 0, 115); // smoked glass: the art shows through, the text stays readable
+    default:
+        return m_d->color;
+    }
+}
+
 QColor GigaNote::textColor() const
 {
+    if (m_d->style == Outline) {
+        // The text is drawn in the note colour, lightened until it reads on the dark glass.
+        QColor c = m_d->color;
+        for (int i = 0; i < 6 && luminance(c) < 0.55; ++i) c = c.lighter(135);
+        return c;
+    }
     // Relative luminance (sRGB weights) decides dark or light text.
-    const qreal l = 0.2126 * m_d->color.redF() + 0.7152 * m_d->color.greenF() + 0.0722 * m_d->color.blueF();
-    return l > 0.5 ? QColor(32, 32, 32) : QColor(244, 244, 244);
+    return luminance(fillColor()) > 0.5 ? QColor(32, 32, 32) : QColor(244, 244, 244);
+}
+
+int GigaNote::style() const
+{
+    return m_d->style;
+}
+
+void GigaNote::setStyle(int style)
+{
+    style = qBound<int>(Sticky, style, Outline);
+    if (m_d->style == style) return;
+    update();
+    m_d->style = style;
+    relayout();
+    update();
+}
+
+QStringList GigaNote::styleNames()
+{
+    return {i18nc("note style", "Sticky"), i18nc("note style", "Card"), i18nc("note style", "Speech Bubble"),
+            i18nc("note style", "Outline")};
+}
+
+int GigaNote::defaultStyle()
+{
+    KisConfig cfg(true);
+    return qBound<int>(Sticky, cfg.readEntry<int>(CONFIG_STYLE, Sticky), Outline);
+}
+
+void GigaNote::setDefaultStyle(int style)
+{
+    KisConfig cfg(false);
+    cfg.writeEntry<int>(CONFIG_STYLE, qBound<int>(Sticky, style, Outline));
+}
+
+QMarginsF GigaNote::insets() const
+{
+    switch (m_d->style) {
+    case Sticky:
+        return QMarginsF(PAD, STRIP + PAD_TOP, PAD + SHADOW, PAD + SHADOW);
+    case Card:
+        return QMarginsF(PAD + CARD_BAR, PAD, PAD, PAD);
+    case Bubble:
+        return QMarginsF(PAD + 2.0, PAD, PAD + 2.0, PAD + TAIL);
+    default:
+        return QMarginsF(PAD, PAD, PAD, PAD);
+    }
 }
 
 int GigaNote::textSize() const
@@ -243,6 +325,7 @@ GigaNote::State GigaNote::state() const
     s.textSize = m_d->textSize;
     s.collapsed = m_d->collapsed;
     s.keepReadable = m_d->keepReadable;
+    s.style = m_d->style;
     s.width = size().width() / m_d->scale;
     return s;
 }
@@ -255,6 +338,7 @@ void GigaNote::setState(const State &s)
     m_d->textSize = qBound<int>(Small, s.textSize, Large);
     m_d->collapsed = s.collapsed;
     m_d->keepReadable = s.keepReadable;
+    m_d->style = qBound<int>(Sticky, s.style, Outline);
     m_d->docDirty = true;
     if (s.width > 0.0) KoShape::setSize(QSizeF(s.width * m_d->scale, size().height()));
     relayout();
@@ -290,15 +374,18 @@ qreal GigaNote::textPixelSize() const
 
 QRectF GigaNote::stripRect() const
 {
-    return QRectF(0.0, 0.0, size().width(), STRIP * m_d->scale);
+    // The band you double-click to collapse: the top inset (Sticky: its strip).
+    const qreal band = m_d->style == Sticky ? STRIP : insets().top();
+    return QRectF(0.0, 0.0, size().width(), band * m_d->scale);
 }
 
 QRectF GigaNote::textRect() const
 {
     const qreal s = m_d->scale;
-    return QRectF(PAD * s, (STRIP + PAD_TOP) * s,
-                  qMax<qreal>(1.0, size().width() - 2.0 * PAD * s),
-                  qMax<qreal>(1.0, size().height() - (STRIP + PAD_TOP + PAD) * s));
+    const QMarginsF m = insets();
+    return QRectF(m.left() * s, m.top() * s,
+                  qMax<qreal>(1.0, size().width() - (m.left() + m.right()) * s),
+                  qMax<qreal>(1.0, size().height() - (m.top() + m.bottom()) * s));
 }
 
 void GigaNote::setupDocument(QTextDocument *doc, int textSize, qreal textWidthUnits)
@@ -359,7 +446,8 @@ void GigaNote::normalizeFonts(QTextDocument *doc)
 
 QTextDocument *GigaNote::layoutDocument() const
 {
-    const qreal textWidth = size().width() / m_d->scale - 2.0 * PAD;
+    const QMarginsF m = insets();
+    const qreal textWidth = size().width() / m_d->scale - m.left() - m.right();
     if (!m_d->doc) {
         m_d->doc.reset(new QTextDocument());
         m_d->docDirty = true;
@@ -392,7 +480,8 @@ void GigaNote::relayout()
         }
     }
     textHeight = qMax(textHeight, lineHeight);
-    const qreal heightUnits = STRIP + PAD_TOP + textHeight + PAD;
+    const QMarginsF m = insets();
+    const qreal heightUnits = m.top() + textHeight + m.bottom();
     KoShape::setSize(QSizeF(size().width(), heightUnits * m_d->scale));
 }
 
@@ -405,25 +494,84 @@ void GigaNote::paintNote(QPainter &gc, qreal pointsPerUnit) const
     gc.scale(pointsPerUnit, pointsPerUnit);
     const QRectF box(0.0, 0.0, size().width() / m_d->scale, size().height() / m_d->scale);
 
-    QPainterPath shape;
-    shape.addRoundedRect(box, RADIUS, RADIUS);
-    gc.fillPath(shape, m_d->color);
-
-    // Darker band at the top (drag handle, collapse by double-click).
-    gc.save();
-    gc.setClipPath(shape);
-    gc.fillRect(QRectF(box.left(), box.top(), box.width(), STRIP), m_d->color.darker(112));
-    gc.restore();
-
-    QPen border(m_d->color.darker(135));
+    const QColor color = m_d->color;
+    QPen border(color.darker(135));
     border.setWidthF(1.0);
     border.setCosmetic(true);
-    gc.setPen(border);
-    gc.setBrush(Qt::NoBrush);
-    gc.drawPath(shape);
+
+    switch (m_d->style) {
+    case Sticky: {
+        // Soft shadow (inside the shape's area), box, darker top strip.
+        const QRectF body = box.adjusted(0.0, 0.0, -SHADOW, -SHADOW);
+        QPainterPath shadow;
+        shadow.addRoundedRect(body.translated(SHADOW, SHADOW), RADIUS, RADIUS);
+        gc.fillPath(shadow, QColor(0, 0, 0, 45));
+        QPainterPath shape;
+        shape.addRoundedRect(body, RADIUS, RADIUS);
+        gc.fillPath(shape, color);
+        gc.save();
+        gc.setClipPath(shape);
+        gc.fillRect(QRectF(body.left(), body.top(), body.width(), STRIP), color.darker(112));
+        gc.restore();
+        gc.setPen(border);
+        gc.setBrush(Qt::NoBrush);
+        gc.drawPath(shape);
+        break;
+    }
+    case Card: {
+        // Flat light card with the colour as a bar down the left edge.
+        QPainterPath shape;
+        shape.addRoundedRect(box, 3.0, 3.0);
+        gc.fillPath(shape, fillColor());
+        gc.save();
+        gc.setClipPath(shape);
+        gc.fillRect(QRectF(box.left(), box.top(), CARD_BAR, box.height()), color);
+        gc.restore();
+        QPen thin(QColor(0, 0, 0, 60));
+        thin.setWidthF(1.0);
+        thin.setCosmetic(true);
+        gc.setPen(thin);
+        gc.setBrush(Qt::NoBrush);
+        gc.drawPath(shape);
+        break;
+    }
+    case Bubble: {
+        // Rounded body with a tail at the bottom-left.
+        const QRectF body = box.adjusted(0.0, 0.0, 0.0, -TAIL);
+        const qreal r = qMin<qreal>(12.0, qMin(body.width(), body.height()) / 2.0);
+        QPainterPath shape;
+        shape.addRoundedRect(body, r, r);
+        QPainterPath tail;
+        const qreal x = body.left() + qMin<qreal>(22.0, body.width() * 0.25);
+        tail.moveTo(x, body.bottom() - 1.0);
+        tail.lineTo(x - 6.0, box.bottom());
+        tail.lineTo(x + 12.0, body.bottom() - 1.0);
+        tail.closeSubpath();
+        shape = shape.united(tail);
+        gc.fillPath(shape, color);
+        gc.setPen(border);
+        gc.setBrush(Qt::NoBrush);
+        gc.drawPath(shape);
+        break;
+    }
+    default: {
+        // Outline: see-through dark glass with a coloured border.
+        QPainterPath shape;
+        shape.addRoundedRect(box.adjusted(1.0, 1.0, -1.0, -1.0), RADIUS, RADIUS);
+        gc.fillPath(shape, fillColor());
+        QPen line(textColor());
+        line.setWidthF(1.6);
+        line.setCosmetic(true);
+        gc.setPen(line);
+        gc.setBrush(Qt::NoBrush);
+        gc.drawPath(shape);
+        break;
+    }
+    }
 
     if (!m_d->editing) {
-        const QRectF text(PAD, STRIP + PAD_TOP, box.width() - 2.0 * PAD, box.height() - STRIP - PAD_TOP - PAD);
+        const QMarginsF m = insets();
+        const QRectF text(m.left(), m.top(), box.width() - m.left() - m.right(), box.height() - m.top() - m.bottom());
         gc.translate(text.topLeft());
         const QRectF clip(QPointF(0.0, 0.0), text.size() + QSizeF(0.0, 1.0));
         gc.setClipRect(clip, Qt::IntersectClip);
@@ -483,6 +631,7 @@ void GigaNote::saveXml(QDomDocument &document, QDomElement &parentElement, int i
     element.setAttribute("color", m_d->color.name(QColor::HexArgb));
     element.setAttribute("textSize", QString::number(m_d->textSize));
     element.setAttribute("collapsed", m_d->collapsed ? "true" : "false");
+    element.setAttribute("style", QString::number(m_d->style));
     if (m_d->keepReadable) element.setAttribute("keepReadable", "true");
     element.setAttribute("scale", KisDomUtils::toString(m_d->scale));
 
@@ -525,6 +674,7 @@ GigaNote *GigaNote::fromXml(const QDomElement &elem)
     note->m_d->textSize = qBound<int>(Small, elem.attribute("textSize", "1").toInt(), Large);
     note->m_d->collapsed = elem.attribute("collapsed").toLower() == "true";
     note->m_d->keepReadable = elem.attribute("keepReadable").toLower() == "true";
+    note->m_d->style = qBound<int>(Sticky, elem.attribute("style", "0").toInt(), Outline);
     note->m_d->html = elem.firstChildElement("html").text();
     note->m_d->docDirty = true;
 

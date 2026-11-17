@@ -59,6 +59,7 @@ struct ToolReferenceImagesWidget::Private {
     // Giga Sketch: sticky notes section
     QWidget *noteOptions {nullptr};
     QComboBox *noteSize {nullptr};
+    QComboBox *noteStyle {nullptr};
     QCheckBox *noteReadable {nullptr};
 };
 
@@ -281,6 +282,15 @@ void ToolReferenceImagesWidget::gigaSetupNotesSection()
     form->setContentsMargins(0, 0, 0, 0);
     form->setSpacing(4);
 
+    d->noteStyle = new QComboBox(d->noteOptions);
+    d->noteStyle->addItems(GigaNote::styleNames());
+    d->noteStyle->setToolTip(i18n("The look of the selected notes; new notes use the style picked last"));
+    form->addRow(i18n("Note style:"), d->noteStyle);
+    connect(d->noteStyle, qOverload<int>(&QComboBox::activated), this, [this](int style) {
+        GigaNoteActions::applyStyle(dynamic_cast<KisCanvas2*>(d->tool->canvas()),
+                                    GigaNoteActions::selectedNotes(d->tool->koSelection()), style);
+    });
+
     QWidget *swatches = new QWidget(d->noteOptions);
     QHBoxLayout *row = new QHBoxLayout(swatches);
     row->setContentsMargins(0, 0, 0, 0);
@@ -353,12 +363,15 @@ void ToolReferenceImagesWidget::gigaUpdateNotesSection(KoSelection *selection)
     bool anyImage = false;
     bool allReadable = true;
     int size = -1;
+    int style = -1;
     Q_FOREACH (KoShape *shape, shapes) {
         auto *reference = dynamic_cast<KisReferenceImage*>(shape);
         if (!reference) continue;
         if (reference->isNote()) {
             anyNote = true;
             allReadable &= static_cast<GigaNote*>(reference)->keepReadable();
+            const int noteStyle = static_cast<GigaNote*>(reference)->style();
+            style = (style == -1 || style == noteStyle) ? noteStyle : -2;
             const int noteSize = static_cast<GigaNote*>(reference)->textSize();
             size = (size == -1 || size == noteSize) ? noteSize : -2; // -2 = mixed
         } else {
@@ -369,6 +382,10 @@ void ToolReferenceImagesWidget::gigaUpdateNotesSection(KoSelection *selection)
     {
         KisSignalsBlocker blocker(d->noteSize);
         d->noteSize->setCurrentIndex(size >= 0 ? size : -1);
+    }
+    {
+        KisSignalsBlocker blocker(d->noteStyle);
+        d->noteStyle->setCurrentIndex(style >= 0 ? style : -1);
     }
     {
         KisSignalsBlocker blocker(d->noteReadable);

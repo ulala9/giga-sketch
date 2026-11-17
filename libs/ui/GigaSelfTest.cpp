@@ -2767,6 +2767,57 @@ void testNotes(KisMainWindow *w)
     report(note->size().height() > narrowHeight * 1.2, "notes-text-size",
            QStringLiteral("%1 -> %2").arg(narrowHeight).arg(note->size().height()));
 
+    // Styles: one undo step each, remembered for new notes, each draws its look.
+    {
+        GigaNoteActions::applyStyle(canvas, {note}, GigaNote::Card);
+        pump(3);
+        const bool card = note->style() == GigaNote::Card && GigaNote::defaultStyle() == GigaNote::Card;
+        doc->undoStack()->undo();
+        pump(3);
+        const bool undone = note->style() == GigaNote::Sticky;
+        doc->undoStack()->redo();
+        pump(3);
+        report(card && undone && note->style() == GigaNote::Card, "notes-style-undo", QString::number(note->style()));
+        GigaNote *fresh = GigaNote::create(QPointF(), 1.0, QStringLiteral("x"));
+        report(fresh->style() == GigaNote::Card, "notes-style-default-remembered", QString::number(fresh->style()));
+        delete fresh;
+
+        // Render all four on a mid-grey background.
+        const QStringList names = GigaNote::styleNames();
+        QImage sheet(4 * 240 + 20, 200, QImage::Format_ARGB32);
+        sheet.fill(QColor(110, 110, 110));
+        QPainter gc(&sheet);
+        bool looks = true;
+        QString detail;
+        for (int st = GigaNote::Sticky; st <= GigaNote::Outline; ++st) {
+            GigaNote *n = GigaNote::create(QPointF(), 1.0, QStringLiteral("%1 note: a few words that wrap onto two lines").arg(names[st]));
+            n->setStyle(st);
+            n->setColor(GigaNote::presetColors().at(st));
+            gc.save();
+            gc.translate(10 + st * 240, 10);
+            n->paint(gc);
+            gc.restore();
+            // Pixel just inside the left edge, halfway down the text area.
+            const QPointF probe(10 + st * 240 + 2.5, 10 + n->textRect().center().y());
+            const QColor got = sheet.pixelColor(probe.toPoint());
+            bool ok = true;
+            if (st == GigaNote::Card) ok = qAbs(got.red() - n->color().red()) < 12; // the bar
+            else if (st == GigaNote::Outline) ok = qAbs(got.red() - 110) < 20 || got != n->color(); // see-through
+            else ok = qAbs(got.red() - n->color().red()) < 12;
+            if (st == GigaNote::Outline) {
+                const QColor inside = sheet.pixelColor(QPoint(10 + st * 240 + 120, 10 + int(n->size().height()) - 4));
+                ok = inside.red() < 100 && inside.red() > 40; // darkened, but the background shows through
+            }
+            looks &= ok;
+            detail += QStringLiteral("%1:%2 ").arg(st).arg(got.name());
+            delete n;
+        }
+        gc.end();
+        const QString out = qEnvironmentVariable("GIGA_NOTES_RENDER");
+        if (!out.isEmpty()) sheet.save(out);
+        report(looks, "notes-styles-draw", detail);
+    }
+
     // Collapse shows one line.
     GigaNoteActions::changeNotes(canvas, {note}, kundo2_noi18n("collapse"), [](GigaNote::State &st) { st.collapsed = true; });
     const qreal collapsed = note->size().height();

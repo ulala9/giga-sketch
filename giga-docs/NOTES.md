@@ -859,6 +859,12 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Board: Normalize skips notes (`withoutNotes()`), Arrange skips them when Settings::keepNotesInPlace (default on,
   key `gigaRefBoardKeepNotes`, checkbox in the tool options). Resample skips them (no pixels). Ctrl+click colour
   on a note does nothing (pixelAtNormalized invalid).
-- Self-test `notes` (38 checks).
+- Styles (2026-11-16): `GigaNote::Style` Sticky / Card / Bubble / Outline, per note in State (undo) and saved as
+  `style="n"` (missing = Sticky). `insets()` gives the text margins per style (Sticky: strip + shadow inside the shape,
+  Card: left bar, Bubble: tail under the body); `fillColor()`/`textColor()` are style-aware (Outline = dark glass
+  α≈0.45 with the colour lightened for text and border). `stripRect()` = Sticky strip or the top inset (double-click
+  collapse). New notes take `defaultStyle()` (KisConfig `gigaNoteStyle`, set by `GigaNoteActions::applyStyle`).
+  Self-test renders all four to `GIGA_NOTES_RENDER=<png>` if set.
+- Self-test `notes` (41 checks).
 - Known limits: resizing several shapes at once uses post-scaling (text scales with it); notes can't be edited on
   the Board panel; rotated canvas → editor upright at the note's text corner.

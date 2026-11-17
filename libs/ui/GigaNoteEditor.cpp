@@ -144,7 +144,13 @@ void GigaNoteEditor::applyLook()
     document()->setUseDesignMetrics(true);
     document()->setIndentWidth(GigaNote::indentUnits() * z);
 
-    const QColor background = m_note->color();
+    // The box's own fill; a see-through one (Outline) is shown over dark grey while typing.
+    QColor background = m_note->fillColor();
+    if (background.alpha() < 255) {
+        const qreal a = background.alphaF();
+        background = QColor(qRound(45 * (1 - a) + background.red() * a), qRound(45 * (1 - a) + background.green() * a),
+                            qRound(45 * (1 - a) + background.blue() * a));
+    }
     const QColor text = m_note->textColor();
     QPalette p = palette();
     p.setColor(QPalette::Base, background);

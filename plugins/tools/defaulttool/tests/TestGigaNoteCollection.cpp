@@ -38,6 +38,7 @@ void TestGigaNoteCollection::testRoundTrip()
     state.color = QColor(189, 232, 165);
     state.textSize = GigaNote::Small;
     state.keepReadable = true;
+    state.style = GigaNote::Bubble;
     note->setState(state);
 
     QBuffer buffer;
@@ -61,6 +62,7 @@ void TestGigaNoteCollection::testRoundTrip()
     QCOMPARE(loadedNote->color(), QColor(189, 232, 165));
     QCOMPARE(loadedNote->textSize(), int(GigaNote::Small));
     QVERIFY(loadedNote->keepReadable());
+    QCOMPARE(loadedNote->style(), int(GigaNote::Bubble));
     QVERIFY(qAbs(loadedNote->position().x() - 20.0) < 1e-6);
 
     qDeleteAll(loaded.referenceImages());

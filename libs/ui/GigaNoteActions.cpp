@@ -129,6 +129,12 @@ void changeNotes(KisCanvas2 *canvas, const QVector<GigaNote *> &notes, const KUn
     canvas->addCommand(new GigaNote::StateCommand(undoText, notes, before, after));
 }
 
+void applyStyle(KisCanvas2 *canvas, const QVector<GigaNote *> &notes, int style)
+{
+    GigaNote::setDefaultStyle(style); // new notes use the style picked last
+    changeNotes(canvas, notes, kundo2_i18n("Change Note Style"), [style](GigaNote::State &s) { s.style = style; });
+}
+
 QColor askColor(const QColor &start)
 {
     return QColorDialog::getColor(start, nullptr, i18n("Note Colour"));
@@ -157,6 +163,19 @@ void addNoteMenuItems(QMenu *menu, KisCanvas2 *canvas, const QVector<GigaNote *>
         changeNotes(canvas, notes, kundo2_i18n("Change Note Colour"),
                     [color](GigaNote::State &s) { s.color = color; });
     });
+
+    QMenu *styleMenu = menu->addMenu(i18n("Note Style"));
+    QActionGroup *styleGroup = new QActionGroup(styleMenu);
+    const QStringList styleNames = GigaNote::styleNames();
+    for (int style = GigaNote::Sticky; style <= GigaNote::Outline; ++style) {
+        QAction *action = styleMenu->addAction(styleNames.value(style));
+        action->setCheckable(true);
+        action->setActionGroup(styleGroup);
+        bool all = true;
+        for (GigaNote *note : notes) all &= note->style() == style;
+        action->setChecked(all);
+        QObject::connect(action, &QAction::triggered, canvas, [canvas, notes, style]() { applyStyle(canvas, notes, style); });
+    }
 
     QMenu *sizeMenu = menu->addMenu(i18n("Note Text Size"));
     QActionGroup *group = new QActionGroup(sizeMenu);

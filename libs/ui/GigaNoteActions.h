@@ -51,7 +51,10 @@ KRITAUI_EXPORT void changeNotes(KisCanvas2 *canvas, const QVector<GigaNote *> &n
                                 const KUndo2MagicString &undoText,
                                 const std::function<void(GigaNote::State &)> &edit);
 
-/// Colour, Text Size and Collapse items for notes (used by the tool's
+/// Sets the style of the notes (one undo step) and makes it the style for new notes.
+KRITAUI_EXPORT void applyStyle(KisCanvas2 *canvas, const QVector<GigaNote *> &notes, int style);
+
+/// Style, Colour, Text Size and Collapse items for notes (used by the tool's
 /// right-click menu).
 KRITAUI_EXPORT void addNoteMenuItems(QMenu *menu, KisCanvas2 *canvas, const QVector<GigaNote *> &notes);
 
