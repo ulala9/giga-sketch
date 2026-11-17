@@ -383,6 +383,11 @@ QMenu* KisSelectionToolHelper::getSelectionContextMenu(KisCanvas2* canvas)
 
         m_contextMenu->addAction(actionCollection->action("convert_selection_to_shape"));
 
+        // Giga Sketch: Photoshop-style Fill entries at the top level.
+        if (QAction *fill = actionCollection->action("fill_selection_foreground_color")) m_contextMenu->addAction(fill);
+        if (QAction *fill = actionCollection->action("fill_selection_background_color")) m_contextMenu->addAction(fill);
+        if (QAction *stroke = actionCollection->action("stroke_selection")) m_contextMenu->addAction(stroke);
+
         QMenu *transformMenu = m_contextMenu->addMenu(i18n("Transform"));
         transformMenu->addAction(actionCollection->action("KisToolTransform"));
         transformMenu->addAction(actionCollection->action("selectionscale"));

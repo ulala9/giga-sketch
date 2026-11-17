@@ -10,6 +10,8 @@
 #ifndef KIS_TOOL_COLOR_SAMPLER_H_
 #define KIS_TOOL_COLOR_SAMPLER_H_
 
+#include <QMenu>
+#include <QScopedPointer>
 #include "KoToolFactoryBase.h"
 #include "ui_wdgcolorsampler.h"
 #include "kis_tool.h"
@@ -72,6 +74,9 @@ public:
 
     void paint(QPainter &gc, const KoViewConverter &converter) override;
 
+    /// Giga Sketch: right-click menu: sample size, sample source, copy colour as hex.
+    QMenu *popupActionsMenu() override;
+
 protected:
     void activate(const QSet<KoShape*> &) override;
     void deactivate() override;
@@ -114,6 +119,7 @@ private:
 
     ColorSamplerOptionsWidget *m_optionsWidget {0};
     KisTagFilterResourceProxyModel *m_tagFilterProxyModel {0};
+    QScopedPointer<QMenu> m_gigaMenu;
 };
 
 class KisToolColorSamplerFactory : public KoToolFactoryBase

@@ -9,6 +9,8 @@
  */
 
 #include "kis_tool_move.h"
+#include <QMenu>
+#include <klocalizedstring.h>
 
 #include <QPoint>
 
@@ -538,6 +540,40 @@ void KisToolMove::mouseMoveEvent(KoPointerEvent *event)
 
         m_updateCursorCompressor.start();
     }
+}
+
+QMenu *KisToolMove::popupActionsMenu()
+{
+    // Giga Sketch: Photoshop-style layer picker. Uses the same "is there paint
+    // here" test as Krita's Select Layer action, on the GUI thread; it only reads
+    // one pixel per layer, so it is safe while the image is busy.
+    KisCanvas2 *kisCanvas = dynamic_cast<KisCanvas2 *>(canvas());
+    KisImageSP img = image();
+    if (!kisCanvas || !img || !kisCanvas->viewManager()) return nullptr;
+
+    if (!m_gigaLayerMenu) m_gigaLayerMenu.reset(new QMenu());
+    QMenu *menu = m_gigaLayerMenu.data();
+    menu->clear();
+    menu->addSection(i18n("Layers Here"));
+
+    const KisNodeList found = KisToolUtils::findNodes(img->root(), m_lastCursorPos, false, false);
+    KisNodeSP active = currentNode();
+    for (int i = found.size() - 1; i >= 0; --i) { // findNodes lists bottom to top
+        KisNodeSP node = found[i];
+        QAction *item = menu->addAction(node->name());
+        item->setCheckable(true);
+        item->setChecked(node == active);
+        connect(item, &QAction::triggered, this, [this, kisCanvas, node]() {
+            // Finish a move that is still open on the old layer first, the same
+            // as switching tools does.
+            if (m_strokeId) requestStrokeEnd();
+            kisCanvas->viewManager()->nodeManager()->slotNonUiActivatedNode(node);
+        });
+    }
+    if (found.isEmpty()) {
+        menu->addAction(i18n("No layer has paint under the pointer"))->setEnabled(false);
+    }
+    return menu;
 }
 
 void KisToolMove::startAction(KoPointerEvent *event, MoveToolMode mode)

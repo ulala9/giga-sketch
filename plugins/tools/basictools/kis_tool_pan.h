@@ -9,6 +9,8 @@
 
 #include <kis_tool.h>
 #include <KoToolFactoryBase.h>
+#include <QMenu>
+#include <QScopedPointer>
 
 class KisToolPan : public KisTool
 {
@@ -27,8 +29,12 @@ public:
 
     bool wantsAutoScroll() const override;
 
+    /// Giga Sketch: right-click menu (Fit on Screen, 100%, Zoom In/Out).
+    QMenu *popupActionsMenu() override;
+
 private:
     QPoint m_lastPosition;
+    QScopedPointer<QMenu> m_gigaMenu;
 };
 
 

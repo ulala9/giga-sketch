@@ -12,6 +12,8 @@
 #include "KoInteractionTool.h"
 
 #include <QCursor>
+#include <QMenu>
+#include <QScopedPointer>
 
 class KoCanvasBase;
 class KoCanvasController;
@@ -38,6 +40,9 @@ public:
 
     void setZoomInMode(bool zoomIn);
 
+    /// Giga Sketch: right-click menu (Fit on Screen, 100%, Zoom In/Out).
+    QMenu *popupActionsMenu() override;
+
 protected:
     QWidget *createOptionWidget() override;
 
@@ -50,6 +55,7 @@ private:
     QCursor m_inCursor;
     QCursor m_outCursor;
     bool m_zoomInMode;
+    QScopedPointer<QMenu> m_gigaMenu;
 };
 
 #endif
