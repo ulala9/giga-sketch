@@ -4,12 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-17 (Layers panel Delete button moved to the far right, merged)
+Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
 
 ## Resume here
 - **Next up:** ask the user what to do next. Candidates: a Phase 5 blueprint (Bubble Guess, Blob Brush,
   Harmony Wheel), Phase 6 extras, or Blender bridge extras.
-- Repo state: everything merged and pushed (2026-11-17: layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
+- Repo state: everything merged and pushed (2026-11-17: brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
   transform-last-stroke, stroke-points(-proportional), refboard-image-search, refboard-delete-key; all hand-tested).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
@@ -19,7 +19,8 @@ Last updated: 2026-11-17 (Layers panel Delete button moved to the far right, mer
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2, unreviewed, extreme low priority).
+  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2, unreviewed, extreme low priority),
+  `feature/refboard-multi-select`, `feature/refboard-scale` (not yet reported on by the user).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -63,6 +64,14 @@ Last updated: 2026-11-17 (Layers panel Delete button moved to the far right, mer
 - [x] Layers panel: Duplicate button between New and Delete (`feature/layers-duplicate-button`, merged 2026-11-14)
 - [x] Layers panel: Delete button at the far right, after Group (`feature/layers-delete-right`, merged 2026-11-17).
   Self-test `layerbuttons`.
+- [x] Right-click like Photoshop (merged 2026-11-17, user OK'd):
+  - Paint tools: brush popup at the pointer (Size, Hardness, recent brushes, preset list with tags/search) instead of
+    the popup palette (`feature/brush-popup`). Preferences > General > Tools > "Right-click on canvas" switches back to
+    the palette; action "Show Popup Palette" (no default key) opens it anyway. Self-test `brushpopup`.
+  - Move = layer picker (layers with paint under the pointer), Hand/Zoom = fit/100%/zoom, Colour Sampler = sample
+    size/source + copy hex, selection menu + Fill/Stroke (`feature/tool-context-menus`). Self-test `rightclick`.
+  - Not done (ask first): Gradient tool gradient picker on right-click; Fill/Gradient/shape tools still get the brush
+    popup (they are paint tools in Krita).
 - [x] Colour panel, menus wording, New Document dialog (`feature/ui-color-panel`, `feature/ui-menus-wording`, …)
 - [x] Space-saving mode, panel flyouts (`feature/ui-space-saving`)
 - [x] Interface modes Studio / Photoshop / Procreate, F9 (`feature/interface-modes`, `feature/procreate-*`, `feature/studio-*`)
@@ -163,6 +172,9 @@ Last updated: 2026-11-17 (Layers panel Delete button moved to the far right, mer
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-17: Right-click = Photoshop-style per-tool popups/menus; Krita's popup palette kept as a preference
+  (default: brush popup) + "Show Popup Palette" action. Brush popup: click picks and stays open, double-click/Enter/
+  Esc/click outside closes (like Photoshop's brush picker).
 - 2026-11-17: Layers panel Delete button at the far right of the bottom row (no gap before it); New + Duplicate stay left.
 - 2026-11-16: Blender layer scaling = a transform mask added automatically by Ctrl+T (not a transform stored on the
   layer): reuses Krita's mask (undo, .kra, sharp redraw of each refresh); the mask shows in the Layers panel.

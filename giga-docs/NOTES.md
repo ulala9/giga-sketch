@@ -885,3 +885,26 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Self-test `notes` (41 checks).
 - Known limits: resizing several shapes at once uses post-scaling (text scales with it); notes can't be edited on
   the Board panel; rotated canvas → editor upright at the note's text corner.
+
+## Right-click popups and menus (feature/brush-popup, feature/tool-context-menus, 2026-11-17)
+- How right-click works: input profile action "Show Popup Widget" → `KisPopupWidgetAction::end()` asks the active tool
+  for `popupActionsMenu()` (a QMenu, exec'd then `clear()`ed) and, if null, `popupWidget()` (a
+  KisPopupWidgetInterface: popup/dismiss/onScreen + finished signal). `KisInputManager::registerPopupWidget` closes a
+  popup widget on the next canvas press and eats that press. Tools without either show nothing.
+- **Brush popup**: `libs/ui/GigaBrushPopup.{h,cpp}`, returned by `KisToolPaint::popupWidget()` unless KisConfig
+  `gigaRightClickMode` = 1 (palette). Child QFrame of the canvas widget, found again by object name (no KisCanvas2
+  member → no big rebuild). Size/Hardness write canvas resources `KoCanvasResource::Size` / `Fade` (derived resources,
+  Fade 1.0 = hard edge); Hardness only for presets whose `brush_definition` is an `auto_brush`. Preset list = a
+  second `KisPaintOpPresetsChooserPopup`; picks go to `KisPaintopBox::resourceSelected`. Recent row: names in KisConfig
+  `gigaRecentBrushes` (newest first, max 8), fed from `KisPaintopBox` preset-change handler
+  (`GigaBrushPopup::noteRecentPreset`). `WA_NoMousePropagation` + accepting keys keeps events off the canvas; a qApp
+  event filter closes it on presses elsewhere in the window (not on the canvas, not in other windows/menus).
+  `GigaBrushPopup::showPopupPalette()` = action `giga_show_popup_palette`. Preferences combo added in code after
+  `m_chkSwitchSelectionCtrlAlt` (Tools tab).
+- **Tool menus**: `KisToolMove::popupActionsMenu()` uses `KisToolUtils::findNodes(root, m_lastCursorPos)` (bottom→top,
+  reversed for the menu), picks via `nodeManager()->slotNonUiActivatedNode` after `requestStrokeEnd()`.
+  Hand (`KisToolPan`) and Zoom (`KoZoomTool`, flake) share header-only `libs/flake/tools/GigaZoomMenu.h` (actions by
+  name via `KoToolBase::action`). Colour Sampler menu edits `m_config` (radius r ≈ (2r−1) px disc) + `save()` +
+  `updateOptionWidget()`. Selection menu: Fill FG/BG + Stroke added in `KisSelectionToolHelper::getSelectionContextMenu`.
+- Self-tests `brushpopup`, `rightclick`. Headless gotcha: the node manager has no image view in test runs, so
+  activating a layer can't be checked there (the test says so in an INFO line).
