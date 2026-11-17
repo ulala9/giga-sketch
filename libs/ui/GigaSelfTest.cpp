@@ -4,6 +4,16 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "GigaSelfTest.h"
+#include "GigaBrushPopup.h"
+#include "kis_popup_palette.h"
+#include "kis_paintop_box.h"
+#include "KisResourceServerProvider.h"
+#include "widgets/kis_paintop_presets_chooser_popup.h"
+#include "kis_slider_spin_box.h"
+#include "input/kis_input_manager.h"
+#include <QKeyEvent>
+#include <QToolButton>
+#include <KoCanvasResourceProvider.h>
 
 #include "GigaFloatingPanel.h"
 #include "GigaFloatingPanelManager.h"
@@ -3286,6 +3296,137 @@ void testNotesFreeze(KisMainWindow *w)
     report(true, "notesfreeze-done", QString());
 }
 
+/// Right-click brush popup (feature/brush-popup): paint tools hand out the
+/// Giga brush popup (or the popup palette when Preferences says so); Size and
+/// Hardness drive the canvas resources both ways; picking a brush switches the
+/// preset and lands in the recent row; Esc and a click elsewhere close it.
+void testBrushPopup(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
+    w->setActiveView(view);
+    view->viewManager()->setCurrentView(view);
+    pump(10);
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    pump(20);
+    KoToolBase *brush = KoToolManager::instance()->toolById(canvas, QStringLiteral("KritaShape/KisToolBrush"));
+    if (!brush) { report(false, "setup", QStringLiteral("no brush tool")); return; }
+    KoCanvasResourceProvider *res = canvas->resourceManager();
+
+    GigaBrushPopup::setRightClickMode(GigaBrushPopup::BrushPopup);
+    KisPopupWidgetInterface *popupIf = brush->popupWidget();
+    GigaBrushPopup *popup = dynamic_cast<GigaBrushPopup *>(popupIf);
+    report(popup != nullptr, "brushpopup-default", popup ? QStringLiteral("brush popup") : QStringLiteral("something else"));
+    if (!popup) return;
+    report(GigaBrushPopup::forCanvas(canvas) == popup, "brushpopup-one-per-canvas", QString());
+
+    // Open it the way the right-click action does.
+    view->viewManager()->inputManager()->registerPopupWidget(popup);
+    const QPoint at = canvas->canvasWidget()->rect().center();
+    popup->popup(at);
+    pump(10);
+    report(popup->onScreen(), "brushpopup-opens", QStringLiteral("at %1,%2 size %3x%4")
+           .arg(popup->x()).arg(popup->y()).arg(popup->width()).arg(popup->height()));
+    report(canvas->canvasWidget()->rect().contains(popup->geometry()), "brushpopup-inside-canvas", QString());
+
+    const double sizeNow = res->resource(KoCanvasResource::Size).toDouble();
+    report(qAbs(popup->sizeSlider()->value() - sizeNow) < 0.02, "brushpopup-size-synced",
+           QStringLiteral("slider %1, brush %2").arg(popup->sizeSlider()->value()).arg(sizeNow));
+    popup->sizeSlider()->setValue(42.0);
+    pump(5);
+    report(qAbs(res->resource(KoCanvasResource::Size).toDouble() - 42.0) < 0.02, "brushpopup-size-sets-brush",
+           QString::number(res->resource(KoCanvasResource::Size).toDouble()));
+    res->setResource(KoCanvasResource::Size, 17.0); // e.g. the [ key while open
+    pump(5);
+    report(qAbs(popup->sizeSlider()->value() - 17.0) < 0.02, "brushpopup-size-follows-brush",
+           QString::number(popup->sizeSlider()->value()));
+
+    info(QStringLiteral("preset %1, hardness enabled %2").arg(
+        res->resource(KoCanvasResource::CurrentPaintOpPreset).value<KisPaintOpPresetSP>()
+            ? res->resource(KoCanvasResource::CurrentPaintOpPreset).value<KisPaintOpPresetSP>()->name() : QStringLiteral("none"))
+        .arg(popup->hardnessSlider()->isEnabled()));
+    if (popup->hardnessSlider()->isEnabled()) {
+        popup->hardnessSlider()->setValue(40);
+        pump(5);
+        const double fade = res->resource(KoCanvasResource::Fade).toDouble();
+        report(qAbs(fade - 0.40) < 0.011, "brushpopup-hardness-sets-fade", QString::number(fade));
+        popup->hardnessSlider()->setValue(100);
+        pump(5);
+    }
+
+    // Pick another brush through the popup's preset list.
+    KisPaintOpPresetResourceServer *server = KisResourceServerProvider::instance()->paintOpPresetServer();
+    KisPaintOpPresetSP before = res->resource(KoCanvasResource::CurrentPaintOpPreset).value<KisPaintOpPresetSP>();
+    KisPaintOpPresetSP other;
+    for (const QString &name : {QStringLiteral("b) Basic-5 Size Opacity"), QStringLiteral("c) Pencil-2"),
+                                QStringLiteral("a) Eraser Soft"), QStringLiteral("b) Basic-2 Opacity")}) {
+        KisPaintOpPresetSP p = server->resource(QString(), QString(), name);
+        if (p && (!before || p->name() != before->name())) { other = p; break; }
+    }
+    if (other) {
+        KisPaintOpPresetsChooserPopup *list = popup->findChild<KisPaintOpPresetsChooserPopup *>();
+        if (list) Q_EMIT list->resourceSelected(other);
+        pump(10);
+        KisPaintOpPresetSP now = res->resource(KoCanvasResource::CurrentPaintOpPreset).value<KisPaintOpPresetSP>();
+        report(list && now && now->name() == other->name(), "brushpopup-pick-brush", now ? now->name() : QStringLiteral("none"));
+        report(popup->onScreen(), "brushpopup-stays-open-after-pick", QString());
+        const QStringList recent = GigaBrushPopup::recentPresetNames();
+        report(!recent.isEmpty() && recent.first() == other->name(), "brushpopup-recent",
+               recent.mid(0, 3).join(QStringLiteral(" | ")));
+        // Back to the first brush.
+        if (before) view->viewManager()->paintOpBox()->resourceSelected(before);
+        pump(5);
+    } else {
+        info(QStringLiteral("no second bundled brush found; pick test skipped"));
+    }
+
+    // Esc closes it.
+    popup->setFocus();
+    QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(popup, &esc);
+    pump(5);
+    report(!popup->onScreen(), "brushpopup-esc-closes", QString());
+
+    // A click on another part of the window closes it too.
+    view->viewManager()->inputManager()->registerPopupWidget(popup);
+    popup->popup(at);
+    pump(5);
+    QWidget *elsewhere = nullptr;
+    for (QToolButton *b : w->findChildren<QToolButton *>()) {
+        if (b->isVisible() && !canvas->canvasWidget()->isAncestorOf(b) && b->window() == w) { elsewhere = b; break; }
+    }
+    if (elsewhere) {
+        const QPoint c = elsewhere->rect().center();
+        QMouseEvent press(QEvent::MouseButtonPress, c, elsewhere->mapToGlobal(c), Qt::RightButton, Qt::RightButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(elsewhere, &press);
+        QMouseEvent release(QEvent::MouseButtonRelease, c, elsewhere->mapToGlobal(c), Qt::RightButton, Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(elsewhere, &release);
+        pump(5);
+        report(!popup->onScreen(), "brushpopup-click-outside-closes", elsewhere->objectName());
+    }
+
+    // Preference: Krita's popup palette instead.
+    GigaBrushPopup::setRightClickMode(GigaBrushPopup::PopupPalette);
+    KisPopupWidgetInterface *paletteIf = brush->popupWidget();
+    report(paletteIf && paletteIf == static_cast<KisPopupWidgetInterface *>(canvas->popupPalette()), "brushpopup-pref-palette", QString());
+    GigaBrushPopup::setRightClickMode(GigaBrushPopup::BrushPopup);
+    report(dynamic_cast<GigaBrushPopup *>(brush->popupWidget()) == popup, "brushpopup-pref-back", QString());
+
+    // The "Show Popup Palette" action opens the palette whatever the preference.
+    KisAction *showPalette = view->viewManager()->actionManager()->actionByName(QStringLiteral("giga_show_popup_palette"));
+    report(showPalette != nullptr, "brushpopup-palette-action", QString());
+    if (showPalette && canvas->popupPalette()) {
+        showPalette->trigger();
+        pump(10);
+        report(canvas->popupPalette()->onScreen(), "brushpopup-palette-action-opens", QString());
+        showPalette->trigger();
+        pump(5);
+        report(!canvas->popupPalette()->onScreen(), "brushpopup-palette-action-toggles", QString());
+    }
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -3313,6 +3454,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("strokepoints"), testStrokePoints},
         {QStringLiteral("notes"), testNotes},
         {QStringLiteral("notesfreeze"), testNotesFreeze},
+        {QStringLiteral("brushpopup"), testBrushPopup},
     };
     bool found = false;
     for (const auto &test : tests) {

@@ -12,6 +12,7 @@
  */
 
 #include "kis_paintop_box.h"
+#include "GigaBrushPopup.h"
 
 #include <QHBoxLayout>
 #include <QToolButton>
@@ -1038,6 +1039,7 @@ void KisPaintopBox::slotCanvasResourceChanged(int key, const QVariant &value)
              */
             m_presetsChooserPopup->canvasResourceChanged(preset);
             m_presetsEditor->currentPresetChanged(preset);
+            GigaBrushPopup::noteRecentPreset(preset); // Giga Sketch: right-click popup's recent row
         }
 
         if (key == KoCanvasResource::CurrentCompositeOp) {

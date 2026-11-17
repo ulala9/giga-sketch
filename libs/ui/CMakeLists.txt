@@ -100,6 +100,7 @@ set(kritaui_LIB_SRCS
     GigaNote.cpp
     GigaNoteActions.cpp
     GigaNoteEditor.cpp
+    GigaBrushPopup.cpp
     GigaNotesDecoration.cpp
 
     flake/kis_node_dummies_graph.cpp

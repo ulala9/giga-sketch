@@ -72,6 +72,7 @@
 #include "GigaLastStrokeTransform.h"
 #include "GigaBlenderBridge.h"
 #include "GigaNoteActions.h"
+#include "GigaBrushPopup.h"
 #include "GigaNote.h"
 #include "GigaZoomOption.h"
 #include <kis_action_registry.h>
@@ -3970,6 +3971,11 @@ void KisMainWindow::createActions()
     if (KisAction *showNotes = actionManager->createAction("giga_show_annotations")) {
         showNotes->setChecked(GigaNote::notesShown());
         connect(showNotes, &QAction::toggled, this, [this](bool shown) { GigaNoteActions::setNotesShown(viewManager(), shown); });
+    }
+
+    // Giga Sketch: Krita's popup palette on a shortcut (right-click opens the brush popup by default).
+    if (KisAction *showPalette = actionManager->createAction("giga_show_popup_palette")) {
+        connect(showPalette, &QAction::triggered, this, [this]() { GigaBrushPopup::showPopupPalette(viewManager()); });
     }
 
     // Giga Sketch: Layer > Refresh Blender Layers (gigasketch.action, no default shortcut).
