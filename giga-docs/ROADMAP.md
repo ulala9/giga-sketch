@@ -4,10 +4,11 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Annotations built, waiting for hand test)
+Last updated: 2026-11-16 (Annotations + Blender layer transform built, waiting for hand test)
 
 ## Resume here
-- **Next up:** the user's hand test of **Annotations** (`feature/annotations`, in giga-test). After that, candidates:
+- **Next up:** the user's hand test of **Annotations** (`feature/annotations`) and **Blender layer transform**
+  (`feature/blender-layer-transform`), both in giga-test. After that, candidates:
   a Phase 5 blueprint (Bubble Guess, Blob Brush, Harmony Wheel), Phase 6 extras, or Blender bridge extras.
 - Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
 - Repo state: everything merged and pushed (2026-11-16: transform-last-stroke, stroke-points,
@@ -20,7 +21,8 @@ Last updated: 2026-11-16 (Annotations built, waiting for hand test)
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/annotations` (waiting for hand test), `feature/giga-tool-icons` (batch 2,
+  Pending in `giga-test` now: `feature/annotations` (waiting for hand test), `feature/blender-layer-transform`
+  (waiting for hand test), `feature/giga-tool-icons` (batch 2,
   unreviewed, extreme low priority).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
@@ -135,6 +137,10 @@ Last updated: 2026-11-16 (Annotations built, waiting for hand test)
     **Step 3 done 2026-11-16** (speed): raw pixels via shared memory, decoded off the GUI thread, Blender layers no
     longer watch their PNG (no double load), canvas progress bar, Blender "Resolution: Full / Half". Hand-tested,
     merged 2026-11-16.
+  - [ ] **Scale/move a Blender layer** (user request 2026-11-16, `feature/blender-layer-transform`, built, **waiting for
+    hand test**): Ctrl+T on a Blender layer works through a transform mask under it (added on first use, reused
+    after), so every refresh keeps the transform. Self-test `blendertransform`. Try by hand: scale, refresh from
+    Blender, rotate/warp, save + reopen, Esc (= Krita's Reset), delete the mask.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
 - [x] Transform Last Stroke (`feature/transform-last-stroke`, merged 2026-11-16, hand-tested). Self-test `laststroke`.
@@ -161,6 +167,8 @@ Last updated: 2026-11-16 (Annotations built, waiting for hand test)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-16: Blender layer scaling = a transform mask added automatically by Ctrl+T (not a transform stored on the
+  layer): reuses Krita's mask (undo, .kra, sharp redraw of each refresh); the mask shows in the Layers panel.
 - 2026-11-16: Annotations: a note is a subclass of KisReferenceImage (not a separate object), saved as `<giga-note>`;
   created from the Reference Images tool + Edit > Add Note (right-click from any tool would clash with the popup
   palette). Editor finishes on a click outside, not on focus loss. An empty new note disappears on finish.
