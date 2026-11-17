@@ -8,6 +8,10 @@
  */
 
 #include "kis_tool_colorsampler.h"
+#include <QActionGroup>
+#include <QApplication>
+#include <QClipboard>
+#include <QMenu>
 
 #include <kis_cursor.h>
 #include <kis_canvas2.h>
@@ -401,4 +405,66 @@ void KisToolColorSampler::slotChangePalette(int)
     QString paletteName = m_optionsWidget->cmbPalette->currentData(Qt::UserRole + KisAbstractResourceModel::Name).toString();
     KConfigGroup config =  KSharedConfig::openConfig()->group(toolId());
     config.writeEntry("ColorSamplerPalette", paletteName);
+}
+
+QMenu *KisToolColorSampler::popupActionsMenu()
+{
+    // Giga Sketch: Photoshop-style sampler menu. Changes the same settings as the
+    // Tool Options panel (and updates it).
+    if (!m_gigaMenu) m_gigaMenu.reset(new QMenu());
+    QMenu *menu = m_gigaMenu.data();
+    menu->clear();
+
+    menu->addSection(i18n("Sample Size"));
+    // Krita's radius counts the centre pixel: radius r averages a disc about
+    // 2r-1 pixels wide, so these give roughly the square sizes in the labels.
+    const QList<QPair<QString, int>> sizes = {
+        {i18n("Point Sample"), 1},
+        {i18n("3 by 3 Average"), 3},
+        {i18n("5 by 5 Average"), 4},
+        {i18n("11 by 11 Average"), 7},
+        {i18n("31 by 31 Average"), 17},
+        {i18n("51 by 51 Average"), 27},
+        {i18n("101 by 101 Average"), 52},
+    };
+    QActionGroup *sizeGroup = new QActionGroup(menu);
+    for (const auto &size : sizes) {
+        QAction *item = menu->addAction(size.first);
+        item->setCheckable(true);
+        item->setChecked(m_config->radius == size.second);
+        item->setActionGroup(sizeGroup);
+        const int radius = size.second;
+        connect(item, &QAction::triggered, this, [this, radius]() {
+            m_config->radius = radius;
+            m_config->save();
+            updateOptionWidget();
+        });
+    }
+
+    menu->addSection(i18n("Sample"));
+    QActionGroup *sourceGroup = new QActionGroup(menu);
+    const QList<QPair<QString, bool>> sources = {
+        {i18n("Current Layer"), false},
+        {i18n("All Layers"), true},
+    };
+    for (const auto &source : sources) {
+        QAction *item = menu->addAction(source.first);
+        item->setCheckable(true);
+        item->setChecked(m_config->sampleMerged == source.second);
+        item->setActionGroup(sourceGroup);
+        const bool merged = source.second;
+        connect(item, &QAction::triggered, this, [this, merged]() {
+            m_config->sampleMerged = merged;
+            m_config->save();
+            updateOptionWidget();
+        });
+    }
+
+    menu->addSeparator();
+    connect(menu->addAction(i18n("Copy Color as Hex")), &QAction::triggered, this, [this]() {
+        if (!canvas()) return;
+        const QColor color = canvas()->resourceManager()->foregroundColor().toQColor();
+        QApplication::clipboard()->setText(color.name(QColor::HexRgb).toUpper());
+    });
+    return menu;
 }

@@ -4,6 +4,8 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "GigaSelfTest.h"
+#include <kis_paint_layer.h>
+#include "kis_tool_utils.h"
 #include "GigaBrushPopup.h"
 #include "kis_popup_palette.h"
 #include "kis_paintop_box.h"
@@ -3427,6 +3429,143 @@ void testBrushPopup(KisMainWindow *w)
     }
 }
 
+/// Right-click menus for the tools that had none (feature/tool-context-menus):
+/// Move = layers with paint under the pointer (top first, pick = active layer),
+/// Hand/Zoom = Krita's view zoom actions, Colour Sampler = sample size/source +
+/// copy hex, selection menu = Fill entries.
+void testRightClickMenus(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
+    w->setActiveView(view);
+    view->viewManager()->setCurrentView(view);
+    pump(10);
+    KisImageSP image = doc->image();
+    const KoColorSpace *cs = image->colorSpace();
+
+    // Two overlapping layers: A (lower) and B (upper).
+    KisPaintLayerSP a = new KisPaintLayer(image, QStringLiteral("Layer A"), OPACITY_OPAQUE_U8, cs);
+    KisPaintLayerSP b = new KisPaintLayer(image, QStringLiteral("Layer B"), OPACITY_OPAQUE_U8, cs);
+    a->paintDevice()->fill(QRect(100, 100, 500, 500), KoColor(Qt::red, cs));
+    b->paintDevice()->fill(QRect(400, 400, 500, 500), KoColor(Qt::blue, cs));
+    image->addNode(a, image->root());
+    image->addNode(b, image->root());
+    a->setDirty();
+    b->setDirty();
+    image->waitForDone();
+    pump(10);
+
+    auto menuNames = [](QMenu *menu) {
+        QStringList names;
+        if (!menu) return names;
+        for (QAction *act : menu->actions()) {
+            if (!act->isSeparator() && !act->text().isEmpty()) names << act->text().remove(QLatin1Char('&'));
+        }
+        return names;
+    };
+    auto hover = [&](KoToolBase *tool, const QPoint &imagePoint) {
+        QWidget *cw = canvas->canvasWidget();
+        const QPoint p = canvas->coordinatesConverter()->imageToWidget(QPointF(imagePoint)).toPoint();
+        QMouseEvent e(QEvent::MouseMove, p, cw->mapToGlobal(p), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        KoPointerEvent ev(&e, canvas->coordinatesConverter()->widgetToDocument(QPointF(p)));
+        tool->mouseMoveEvent(&ev);
+    };
+
+    // --- Move tool: layer picker
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaTransform/KisToolMove"));
+    pump(20);
+    KoToolBase *move = KoToolManager::instance()->toolById(canvas, QStringLiteral("KritaTransform/KisToolMove"));
+    if (move) {
+        hover(move, QPoint(500, 500)); // both layers have paint here
+        QMenu *menu = move->popupActionsMenu();
+        const QStringList names = menuNames(menu);
+        const int ib = names.indexOf(QStringLiteral("Layer B")), ia = names.indexOf(QStringLiteral("Layer A"));
+        report(menu && ib >= 0 && ia > ib, "move-layer-picker", names.join(QStringLiteral(" | ")));
+        view->viewManager()->nodeManager()->slotNonUiActivatedNode(b);
+        pump(5);
+        const bool canActivate = view->viewManager()->nodeManager()->activeNode() == KisNodeSP(b);
+        if (!canActivate) info(QStringLiteral("headless: the node manager has no view here, so picking a layer can't be checked"));
+        if (menu && ia >= 0 && canActivate) {
+            for (QAction *act : menu->actions()) {
+                if (act->text().remove(QLatin1Char('&')) == QLatin1String("Layer A")) { act->trigger(); break; }
+            }
+            pump(10);
+            // Headless, the view manager may not track the active node (see
+            // lassofill); the node manager / view do.
+            KisNodeSP picked = view->viewManager()->nodeManager()->activeNode();
+            if (!picked) picked = view->currentNode();
+            report(picked == KisNodeSP(a), "move-pick-layer", picked ? picked->name() : QStringLiteral("none"));
+        }
+        hover(move, QPoint(800, 800)); // only B
+        const QStringList onlyB = menuNames(move->popupActionsMenu());
+        report(onlyB.contains(QStringLiteral("Layer B")) && !onlyB.contains(QStringLiteral("Layer A")), "move-picker-only-under-pointer",
+               onlyB.join(QStringLiteral(" | ")));
+    } else {
+        report(false, "move-layer-picker", QStringLiteral("no move tool"));
+    }
+
+    // --- Hand and Zoom tools: view menu
+    for (const QString &id : {QStringLiteral("PanTool"), QStringLiteral("ZoomTool")}) {
+        KoToolManager::instance()->switchToolRequested(id);
+        pump(10);
+        KoToolBase *tool = KoToolManager::instance()->toolById(canvas, id);
+        QMenu *menu = tool ? tool->popupActionsMenu() : nullptr;
+        QAction *hundred = nullptr;
+        if (menu) {
+            for (QAction *act : menu->actions()) if (act->objectName() == QLatin1String("zoom_to_100pct")) hundred = act;
+        }
+        report(menu && hundred, QStringLiteral("zoom-menu-%1").arg(id).toLatin1().constData(), menuNames(menu).join(QStringLiteral(" | ")));
+        if (hundred) {
+            hundred->trigger();
+            pump(10);
+            report(qAbs(canvas->coordinatesConverter()->zoom() - 1.0) < 0.01,
+                   QStringLiteral("zoom-menu-100-%1").arg(id).toLatin1().constData(), QString::number(canvas->coordinatesConverter()->zoom()));
+        }
+    }
+
+    // --- Colour sampler
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaSelected/KisToolColorSampler"));
+    pump(10);
+    KoToolBase *sampler = KoToolManager::instance()->toolById(canvas, QStringLiteral("KritaSelected/KisToolColorSampler"));
+    QMenu *sampleMenu = sampler ? sampler->popupActionsMenu() : nullptr;
+    report(sampleMenu != nullptr, "sampler-menu", menuNames(sampleMenu).join(QStringLiteral(" | ")));
+    if (sampleMenu) {
+        for (QAction *act : sampleMenu->actions()) {
+            if (act->text().contains(QLatin1String("11 by 11"))) act->trigger();
+        }
+        pump(5);
+        KisToolUtils::ColorSamplerConfig cfg;
+        cfg.load();
+        report(cfg.radius == 7, "sampler-size-sets-radius", QString::number(cfg.radius));
+        bool checked = false;
+        for (QAction *act : sampler->popupActionsMenu()->actions()) {
+            if (act->text().contains(QLatin1String("11 by 11"))) checked = act->isChecked();
+        }
+        report(checked, "sampler-size-checked-next-time", QString());
+        canvas->resourceManager()->setForegroundColor(KoColor(QColor(0x12, 0x34, 0x56), cs));
+        for (QAction *act : sampler->popupActionsMenu()->actions()) {
+            if (act->text().contains(QLatin1String("Hex"))) act->trigger();
+        }
+        report(QApplication::clipboard()->text() == QLatin1String("#123456"), "sampler-copy-hex", QApplication::clipboard()->text());
+    }
+
+    // --- Selection menu: Fill entries when there is a selection
+    if (KisAction *all = view->viewManager()->actionManager()->actionByName(QStringLiteral("select_all"))) all->trigger();
+    image->waitForDone();
+    pump(10);
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KisToolSelectRectangular"));
+    pump(10);
+    KoToolBase *rect = KoToolManager::instance()->toolById(canvas, QStringLiteral("KisToolSelectRectangular"));
+    QMenu *selMenu = rect ? rect->popupActionsMenu() : nullptr;
+    bool hasFill = false;
+    if (selMenu) {
+        for (QAction *act : selMenu->actions()) if (act->objectName() == QLatin1String("fill_selection_foreground_color")) hasFill = true;
+    }
+    report(hasFill, "selection-menu-fill", menuNames(selMenu).join(QStringLiteral(" | ")));
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -3455,6 +3594,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("notes"), testNotes},
         {QStringLiteral("notesfreeze"), testNotesFreeze},
         {QStringLiteral("brushpopup"), testBrushPopup},
+        {QStringLiteral("rightclick"), testRightClickMenus},
     };
     bool found = false;
     for (const auto &test : tests) {

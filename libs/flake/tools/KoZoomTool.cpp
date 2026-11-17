@@ -7,6 +7,7 @@
  */
 
 #include "KoZoomTool.h"
+#include "GigaZoomMenu.h"
 
 #include <QKeyEvent>
 
@@ -108,4 +109,10 @@ void KoZoomTool::updateCursor(bool swap)
     } else {
         useCursor(m_outCursor);
     }
+}
+
+QMenu *KoZoomTool::popupActionsMenu()
+{
+    if (!m_gigaMenu) m_gigaMenu.reset(new QMenu());
+    return gigaFillZoomMenu(m_gigaMenu.data(), this);
 }

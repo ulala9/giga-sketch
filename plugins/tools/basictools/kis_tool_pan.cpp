@@ -7,6 +7,7 @@
 #include <QKeyEvent>
 
 #include "kis_tool_pan.h"
+#include <tools/GigaZoomMenu.h>
 #include "kis_cursor.h"
 #include "kis_canvas2.h"
 
@@ -92,4 +93,10 @@ KisToolPanFactory::~KisToolPanFactory()
 KoToolBase* KisToolPanFactory::createTool(KoCanvasBase *canvas)
 {
     return new KisToolPan(canvas);
+}
+
+QMenu *KisToolPan::popupActionsMenu()
+{
+    if (!m_gigaMenu) m_gigaMenu.reset(new QMenu());
+    return gigaFillZoomMenu(m_gigaMenu.data(), this);
 }

@@ -9,6 +9,8 @@
 #ifndef KIS_TOOL_MOVE_H_
 #define KIS_TOOL_MOVE_H_
 
+#include <QMenu>
+#include <QScopedPointer>
 #include <KisToolPaintFactoryBase.h>
 #include <kis_types.h>
 #include <kis_tool.h>
@@ -86,6 +88,10 @@ public:
     void endAlternateAction(KoPointerEvent *event, AlternateAction action) override;
 
     void mouseMoveEvent(KoPointerEvent *event) override;
+
+    /// Giga Sketch: right-click = list of the layers with paint under the pointer
+    /// (top first); pick one to make it the active layer.
+    QMenu *popupActionsMenu() override;
 
     void startAction(KoPointerEvent *event, MoveToolMode mode);
     void continueAction(KoPointerEvent *event);
@@ -166,6 +172,7 @@ private:
     KisToolChangesTracker m_changesTracker;
 
     QPoint m_lastCursorPos;
+    QScopedPointer<QMenu> m_gigaLayerMenu; // Giga Sketch: right-click layer picker
     KisSignalCompressor m_updateCursorCompressor;
     KisSignalAutoConnectionsStore m_actionConnections;
     KisSignalAutoConnectionsStore m_canvasConnections;
