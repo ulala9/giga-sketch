@@ -107,7 +107,7 @@ GigaReferenceBoardView::GigaReferenceBoardView(QWidget *parent)
     m_cameraAnimation->setEndValue(1.0);
     m_cameraAnimation->setEasingCurve(QEasingCurve::OutCubic);
     connect(m_cameraAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant &v) {
-        // Zoom moves geometrically, the board point at the centre linearly:
+        // Zoom moves geometrically, the board point at the center linearly:
         // feels like one smooth fly-to.
         const qreal t = v.toReal();
         const QPointF c(width() / 2.0, height() / 2.0);
@@ -121,7 +121,7 @@ GigaReferenceBoardView::GigaReferenceBoardView(QWidget *parent)
         update();
     });
 
-    // F1 (reset rotation): turn back to upright around the widget centre.
+    // F1 (reset rotation): turn back to upright around the widget center.
     m_rotationAnimation = new QVariantAnimation(this);
     m_rotationAnimation->setDuration(200);
     m_rotationAnimation->setStartValue(0.0);
@@ -340,7 +340,7 @@ QPointF GigaReferenceBoardView::toBoard(const QPointF &widgetPos) const
 
 QTransform GigaReferenceBoardView::rotationTransform() const
 {
-    // Qt applies the last call first: move the centre to 0, rotate, move back.
+    // Qt applies the last call first: move the center to 0, rotate, move back.
     const QPointF c(width() / 2.0, height() / 2.0);
     QTransform t;
     // Like the canvas: flip first, then rotate on screen.
@@ -716,7 +716,7 @@ void GigaReferenceBoardView::pressAt(const QPointF &pos, Qt::MouseButton button,
 
     KisReferenceImage *image = imageAt(pos);
     if (image && (modifiers & Qt::ControlModifier)) {
-        pickColor(image, pos); // Krita's Ctrl+click colour sampling
+        pickColor(image, pos); // Krita's Ctrl+click color sampling
         m_drag = Drag::None;
         return;
     }
@@ -773,7 +773,7 @@ void GigaReferenceBoardView::moveAt(const QPointF &pos)
         break;
     }
     case Drag::Rotate: {
-        // Angle swept around the widget centre since the press (canvas maths).
+        // Angle swept around the widget center since the press (canvas maths).
         const QPointF c(width() / 2.0, height() / 2.0);
         const QPointF a = m_pressPos - c, b = pos - c;
         // (Rotation is applied after the flip, so the screen turn = the angle
@@ -1224,7 +1224,7 @@ void GigaReferenceBoardView::addImages(const QList<QImage> &images, const QStrin
 
     QVector<QRectF> rects;
     if (dropBoardPos) {
-        // In a row, centred on the drop point.
+        // In a row, centered on the drop point.
         qreal total = 0.0;
         for (const QSizeF &s : sizes) total += s.width() + m_settings.spacing;
         qreal x = dropBoardPos->x() - total / 2.0;

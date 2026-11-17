@@ -54,7 +54,7 @@
 #endif
 
 // Giga Sketch: the calm, dark canvas look used in every interface mode.
-// One place for the colours so the defaults and the one-time update agree.
+// One place for the colors so the defaults and the one-time update agree.
 namespace GigaCanvasLook {
 QColor canvasBorderColor()    { return QColor(30, 30, 30); }
 QColor checkersColor1()       { return QColor(235, 235, 235); }
@@ -1333,7 +1333,7 @@ void KisConfig::setScrollbarZoomEnabled(bool enabled) const
 
 QColor KisConfig::checkersColor1(bool defaultValue) const
 {
-    // Giga Sketch: softer checker grey (Krita: 220,220,220)
+    // Giga Sketch: softer checker gray (Krita: 220,220,220)
     QColor col = GigaCanvasLook::checkersColor1();
     return (defaultValue ? col : m_cfg.readEntry("checkerscolor", col));
 }
@@ -2418,7 +2418,7 @@ void KisConfig::setGigaBackgroundGridSize(int value)
 void KisConfig::gigaMigrateCanvasLook()
 {
     // Runs once. Krita's Preferences dialog writes every value to the config
-    // file, so older Giga Sketch configs hold Krita's old canvas colours
+    // file, so older Giga Sketch configs hold Krita's old canvas colors
     // explicitly and would never see the new defaults. Replace a value only
     // when it is still exactly Krita's old default; anything the user picked
     // themselves is kept.

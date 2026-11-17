@@ -68,7 +68,7 @@ void KisGridConfig::loadStaticData()
 
     // Giga Sketch fix: the pens are what actually draws the grid. Without
     // this, new documents drew the grid with a default black pen until the
-    // colour was edited in the Grid panel.
+    // color was edited in the Grid panel.
     updatePenStyle(&m_penMain, m_colorMain, m_lineTypeMain);
     updatePenStyle(&m_penSubdivision, m_colorSubdivision, m_lineTypeSubdivision);
     updatePenStyle(&m_penVertical, m_colorIsoVertical, m_lineTypeIsoVertical);

@@ -13,8 +13,8 @@ class QDoubleSpinBox;
 class GigaTextPropertyAccess;
 
 /**
- * Giga Sketch: Photoshop-style Paragraph panel: alignment (left, centre,
- * right) and justification (last line left, centre, right, or all), left /
+ * Giga Sketch: Photoshop-style Paragraph panel: alignment (left, center,
+ * right) and justification (last line left, center, right, or all), left /
  * right / first-line indents, and space before / after paragraphs. Applies
  * to the whole text as undoable steps.
  */

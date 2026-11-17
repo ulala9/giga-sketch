@@ -80,13 +80,13 @@ Running notes on how the Krita codebase works, kept so they carry over between s
   NO_SMOOTHING=0, SIMPLE_SMOOTHING=1 ("Basic"), WEIGHTED_SMOOTHING=2, STABILIZER=3, PIXEL_PERFECT=4.
   Stored as an int in the main rc (`LineSmoothingType`); the combobox index == enum value (kis_tool_brush.cc).
   - Basic/Weighted: Gaussian-weighted average over recent points (Weighted only), then Bézier between points with tangents
-    from neighbours (`paintBezierSegment`). Painting runs one segment behind the pen; `finishStroke()` paints the last segment.
+    from neighbors (`paintBezierSegment`). Painting runs one segment behind the pen; `finishStroke()` paints the last segment.
     A 100 ms `strokeTimeoutTimer` also calls `finishStroke()` when the pen pauses.
   - Stabilizer: timer-driven (`stabilizerPollTimer`, interval = `stabilizerSampleSize` ms). Keeps a queue of N samples and
     paints their uniform average → lags behind the pen. `delayDistance` = "dead zone" radius. On pen-up, "Finish line"
     (`finishStabilizedCurve`) replays the last event N times so the line reaches the pen — all at once, no easing.
     `KisStabilizerDelayedPaintHelper` optionally spreads painting over time (20 ms timer).
-  - Pixel: snaps to pixel centres and drops L-shaped jags.
+  - Pixel: snaps to pixel centers and drops L-shaped jags.
 - Smoothing UI: `plugins/tools/basictools/kis_tool_brush.cc` (`createOptionWidget`, `slotSetSmoothingType` shows/hides
   widgets per type). Shortcut actions via `addSmoothingAction(type, "action_id")`.
 
@@ -150,7 +150,7 @@ Storage: text is an SVG <text> shape inside a vector layer (KisShapeLayer); `Kra
 | Baseline shift | ✅ | |
 | Case / small caps / super-sub | ✅ text-transform, font-variant-caps/position, font-synthesis | |
 | Faux bold / italic | ✅ FontSynthesisBold/Italic | |
-| Underline / strike | ✅ text-decoration (style, colour, position) | |
+| Underline / strike | ✅ text-decoration (style, color, position) | |
 | Horizontal / vertical scale | ❌ | only font-stretch (needs a wide-axis font) |
 | Alignment / justify | ✅ text-align-all + text-align-last | |
 | First-line indent | ✅ text-indent | |
@@ -189,15 +189,15 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   (found by objectName "GigaTextOptionsBar"), shown in SvgTextTool::activate, hidden in deactivate.
   Reads/writes `KisCanvasResourceProvider::textPropertyData()` / `characterTextPropertyData()` — same data as the docker;
   KisTextPropertiesManager turns changes into undoable edits on the selection. Range selected → character data; otherwise
-  paragraph data (whole text, or next-new-text defaults when nothing is selected). Colour = canvas foreground colour
-  (SvgTextCursor::canvasResourceChanged applies FG colour to the selected text). Fonts from ResourceType::FontFamilies.
+  paragraph data (whole text, or next-new-text defaults when nothing is selected). Color = canvas foreground color
+  (SvgTextCursor::canvasResourceChanged applies FG color to the selected text). Fonts from ResourceType::FontFamilies.
 - Text tool click logic: `SvgTextTool::mousePressEvent` picks a strategy from `m_highlightItem`, computed on hover in
   `mouseMoveEvent`. Move zone was a thin ring (2x grab sensitivity) outside `outlineRect()`; now max(that, 24 screen px).
   Ctrl+drag → SvgMoveTextStrategy from anywhere when a text is selected.
 - Move tool (`kis_tool_move.cc`) already moves vector/text layers via node offset (MoveSelectedLayer / MoveFirstLayer modes).
 
 ## Photoshop-style UI (branches feature/ui-* → merged into giga-main)
-- Theme: `krita/data/themes/GigaDark.colors` (generated from KritaDarker, neutral greys). Defaults in `GigaBranding.h`:
+- Theme: `krita/data/themes/GigaDark.colors` (generated from KritaDarker, neutral grays). Defaults in `GigaBranding.h`:
   `defaultTheme()`, `defaultShortcutScheme()` = "photoshop_compatible" (file basename), `defaultInputProfile()` =
   "Photoshop Compatible". Used in KisApplication.cpp / thememanager.cpp / kis_action_registry.cpp /
   kshortcutschemeseditor.cpp / kis_input_profile_manager.cpp.
@@ -224,7 +224,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   properties + warnings when config `gigaCleanLayerRows` (default true). `LayerBox::gigaSetupPanel()` adds the Lock row
   (toggle_layer_alpha_lock / toggle_layer_inherit_alpha / toggle_layer_lock actions) into `verticalLayout` index 2 and
   rebuilds `hbox1`: new + duplicate (Krita's own bnDuplicate, `feature/layers-duplicate-button`) inserted at the front (left, before the .ui spacer), fx/mask/fill-adjust/group + delete appended (right; delete far right since `feature/layers-delete-right`). Eye column was already on the left (VISIBILITY_COL → 0).
-- Colour: `WGConfig::defaultColorSelectorConfiguration` = Square + Slider (SV + H); commonColors off. Layout colour group
+- Color: `WGConfig::defaultColorSelectorConfiguration` = Square + Slider (SV + H); commonColors off. Layout color group
   = WideGamutColorSelector + SpecificColorSelector + PaletteDocker.
 - Menus: `krita/gigasketch.xmlgui` (generated from krita5.xmlgui; version `GIGA_XMLGUI_VERSION` in krita/CMakeLists.txt,
   added to krita.qrc). Loaded in KisMainWindow ctor instead of krita5.xmlgui. Keep `<Menu name="tools">` (Python uses
@@ -251,7 +251,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - `libs/ui/tool/KisQuickShapeRecognizer.{h,cpp}`: line → closed (polygon/rectangle via RDP corners, else PCA ellipse) →
   open (polyline via corners, else Kasa circle-fit arc). Thresholds at top of the .cpp. Tests: KisQuickShapeRecognizerTest.
 - Helper: `initPaint` records args + starts recording; `paint()` appends raw points and restarts `quickShapeTimer` when
-  the pen moves > 3 screen px; `quickShapeTimeout()` recognises, stops smoothing timers, `cancelStroke` (rolls back paint),
+  the pen moves > 3 screen px; `quickShapeTimeout()` recognizes, stops smoothing timers, `cancelStroke` (rolls back paint),
   `initPaintImpl` (with `quickShapeRepainting` so smoothing doesn't restart) and paints the QPainterPath elements via
   paintLine / paintBezierCurve at the median pressure. After a snap, `paint()` ignores input until endPaint.
 - Config: `gigaQuickShape` (bool), `gigaQuickShapeDelay` (ms). Shift at snap time = perfect.
@@ -309,7 +309,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   (`gigaBoxText`, SvgTextToolOptionsData/Model/QML); off = Krita's inline-size (width-only) text.
 - `plugins/tools/svgtexttool/GigaTextBoxResizeStrategy.{h,cpp}`: `GigaTextBox::boxOf()` (one inside shape, a KoPathShape,
   translate-only transform, ≤6 path elements), handle math, `createBoxShape()`, resize strategy (Shift = keep ratio,
-  Alt = from centre, min size ≈ font size), ResizeCommand (undo), RemoveBoxCommand (Convert to Point Text; owns the box).
+  Alt = from center, min size ≈ font size), ResizeCommand (undo), RemoveBoxCommand (Convert to Point Text; owns the box).
 - SvgTextTool: HighlightItem::BoxHandle / DragMode::BoxResize; handles painted after the selected-shape block (separate
   KisHandlePainterHelper scope); red ⊞ overflow marker at the bottom-right handle; decorationsRect grown for both.
   Right-click (`popupActionsMenu`) = Convert to Point Text / Convert to Paragraph Text (not for text on a path).
@@ -323,10 +323,10 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 ## Font picker (feature/font-picker → giga-main)
 - `plugins/tools/svgtexttool/GigaFontPicker.{h,cpp}`: `GigaFontComboBox` (QComboBox whose showPopup() emits
   pickerRequested) + `GigaFontPicker` popup (Qt::Popup QFrame): search field (contains, case-insensitive; top match
-  pre-selected and previewed), sections Favourites / Recent / All Fonts, rows = ☆/★ + name + preview.
+  pre-selected and previewed), sections Favorites / Recent / All Fonts, rows = ☆/★ + name + preview.
 - Previews = the KoFontFamily resource image (black "AaBbGg"-style sample on white 256x256), cropped and tinted to the
-  palette text colour (`tintPreview`), cached per family.
-- Settings: KConfig group `GigaFontPicker`, keys `recent` (max 8, newest first) and `favourites`.
+  palette text color (`tintPreview`), cached per family.
+- Settings: KConfig group `GigaFontPicker`, keys `recent` (max 8, newest first) and `favorites`.
 - Live preview: GigaTextOptionsBar applies the hovered family through the provider; consecutive edits merge into one
   undo step (SvgTextMergePropertiesRangeCommand::mergeWith). Disabled when the selection mixes fonts. Cancel (Esc /
   click away) re-applies the original family list → may leave one no-op undo entry.
@@ -338,7 +338,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   conversions: tracking (1/1000 em) <-> LetterSpacingId (AutoLengthPercentage, em), leading (pt, <0 = Auto) <->
   LineHeightId (LineHeightInfo), baseline shift (pt) <-> BaselineShiftMode/Value. GigaTextOptionsBar now delegates to it.
 - `GigaCharacterPanel`: family (GigaFontComboBox + picker), style, size, leading, kerning (Metrics=AutoValue auto,
-  0=AutoValue(0)), tracking, baseline, colour, toggles (weight 700, italic, TextTransform uppercase, FontVariantCaps
+  0=AutoValue(0)), tracking, baseline, color, toggles (weight 700, italic, TextTransform uppercase, FontVariantCaps
   small, FontVariantPosition super/sub, TextDecorationLine underline/line-through), anti-aliasing.
 - `GigaParagraphPanel`: 7 align buttons (justify variants = TextAlignAll justify + TextAlignLast), Giga indents/spaces,
   first line = TextIndentId (eachLine=true).
@@ -361,7 +361,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Test: libs/ui/tests/TestGigaSaveDated.
 
 ## Ctrl+Space zoom toward pointer (feature/zoom-toward-pointer → giga-main)
-- KisZoomAction modes: ZoomModeShortcut(0) zooms around the canvas centre; RelativeZoomModeShortcut(7) zooms toward the
+- KisZoomAction modes: ZoomModeShortcut(0) zooms around the canvas center; RelativeZoomModeShortcut(7) zooms toward the
   press point (like the wheel); Discrete(1) / RelativeDiscrete(8) the same for stepped zoom.
 - Default gigasketch.profile now uses 7 for Ctrl+Space drag and 8 for Ctrl+Alt+Space drag (Krita default did too).
 - `libs/ui/GigaZoomOption.{h,cpp}`: View > "Ctrl+Space Zooms Toward Pointer" flips the Space-key zoom bindings of the
@@ -438,7 +438,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 ### In-window panels: buried by tab changes (fix/floating-panel-tabs)
 - Bug: clicking a tab in a docked panel group hid every floating panel (they came back when painting created a child
   widget → m_raiseTimer). Cause is in Qt: `QMainWindowLayout::tabChanged()` calls `centralWidget()->raise()`.
-  The panels were still "visible", just under the canvas — tests must check `childAt(panel centre)`, not isVisible().
+  The panels were still "visible", just under the canvas — tests must check `childAt(panel center)`, not isVisible().
 - Fix: the manager watches the central widget (installed on first float) and on `QEvent::ZOrderChange` calls
   raiseAllFrames() synchronously. Raising siblings doesn't send ZOrderChange to the canvas, so no loop.
 - Photoshop header (`GigaPanelTitleBar`): the ≡ menu is gone; Float/Dock (docker_float icon) and Close (docker_close,
@@ -491,7 +491,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   "Shrink oversized references when saving" (Board ▸ Look) scales only the saved PNG in `saveImage()`.
 - Panel: `plugins/dockers/gigareferenceboard/` (docker id `GigaReferenceBoard`, DockMinimized, in GIGA_PANELS strip).
   `GigaReferenceBoardView`: camera widget = board × zoom + pan; auto-fit until the user moves the camera; focus fly-to
-  300 ms (zoom geometric, centre linear); board rects animate 200 ms on change; draws with
+  300 ms (zoom geometric, center linear); board rects animate 200 ms on change; draws with
   `KisReferenceImage::paintInRect` (same mipmaps as the canvas). Takes keyboard focus on hover (gives it back on leave,
   never from text fields); ShortcutOverride for Esc/Home/←/→/Space/Ctrl+V/delete keys. Touch: 1 finger = mouse, 2 = pinch/pan;
   touchpad: NativeGesture zoom, pixelDelta scroll pans.
@@ -505,7 +505,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Tool's Send to Board shows the Board dock if hidden.
 - Self-test `refboard` (14 checks, incl. `board-drop-no-rubberband`). Q_PROPERTY imageCount/focusedIndex + Q_INVOKABLE imageWidgetCenter exist for it.
 - Navigation like the canvas (`feature/refboard-rotate-zoom`): `m_rotation` (degrees) is applied by the painter
-  around the widget centre on top of the camera: view = board × zoom + pan, widget = c + R(view − c). So camera
+  around the widget center on top of the camera: view = board × zoom + pan, widget = c + R(view − c). So camera
   fly-tos/fit code stays in view space; `toView()`/`viewDelta()` undo the rotation for hit tests, pans, image drags,
   touch. `cameraFitting` uses the rotated outline size. Rotation is not saved and fly-tos/Esc keep it.
   Bindings come from `libs/ui/GigaCanvasInputKeys` (exported reader of the current input profile: key+drag Zoom /
@@ -513,7 +513,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   press. Exact key-set match like the canvas; the Board tracks only non-modifier keys that a binding uses (Space),
   cleared on leave/focus-out (a stale Esc once blocked every match). Reset = the `reset_canvas_rotation` action's
   shortcut (F1 for the user) or the profile reset key (5), 200 ms animation. Zoom drag = canvas maths
-  (`zoomDragSteps`: 100 px per doubling, stepped = ×√2 per 50 px, honours zoomHorizontal/InvertMiddleClickZoom).
+  (`zoomDragSteps`: 100 px per doubling, stepped = ×√2 per 50 px, honors zoomHorizontal/InvertMiddleClickZoom).
   Test `TestGigaCanvasInputKeys`.
 - Flip with canvas (`feature/refboard-flip`): listens to `KoCanvasControllerProxyObject::documentMirrorStatusChanged`
   (initial state from `coordinatesConverter()->xAxisMirrored()`); `rotationTransform()` = c + M·R(view − c), M on screen
@@ -545,7 +545,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   (isolated from page scripts, same DOM). `gigaCandidates(img)` = addresses best first: Bing tile `m` JSON `murl`,
   link params `imgurl`/`mediaurl`/image-looking `url`, biggest `srcset`, Pinterest `/236x/` → `/originals/` (+ .png)
   → `/736x/`, `data-src`…, finally the shown `currentSrc`. Pick mode swallows pointer/mouse/click in capture phase,
-  outlines picked images in the accent colour. dragstart puts the best address in text/uri-list with the rest in
+  outlines picked images in the accent color. dragstart puts the best address in text/uri-list with the rest in
   `#giga-alt=<json>` (fragment never reaches servers). Messages to C++ via `console.log("giga:pick-count:N")` →
   `javaScriptConsoleMessage` (no QWebChannel). Pick state is re-sent after every loadFinished (new page = new script).
 - Right-click: own `contextMenuEvent` → `createStandardContextMenu()` + "Add to Board" first; widget pos / zoomFactor
@@ -596,7 +596,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 ## Aesthetic polish (2026-11-15; branches feature/brush-cursor-look … feature/giga-tool-icons)
 - **Brush cursor** (`feature/brush-cursor-look`): `KisOpenGLCanvasRenderer::gigaPaintTwoToneOutline()` draws each outline
   polygon as a mitered GL_TRIANGLE_STRIP in widget coordinates (points mapped with flakeToWidget, projection only),
-  alpha-blended: black 3 px α0.55, then white (eraser: eraser cursor colour) 1 px. `KisTool::paintToolOutline(painter,
+  alpha-blended: black 3 px α0.55, then white (eraser: eraser cursor color) 1 px. `KisTool::paintToolOutline(painter,
   path, opacity)` is the new entry; the old one forwards to it when `gigaTwoToneCursor`. Fade: `KisToolPaint::Private`
   holds `gigaOutlineOpacity` + a QVariantAnimation (GUI thread); `gigaUpdateOutlineFade()` is called from
   `requestUpdateOutline()` and keeps a hidden-by-painting outline visible while it fades. Size readout:
@@ -611,11 +611,11 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   `gigaDrawCanvasShadow()` between drawBackground and drawCheckers (re-binds quadVAO afterwards); QPainter canvas paints
   ring paths minus the image. Key gigaCanvasShadow (Display tab).
 - **Motion** (`feature/ui-motion`): `libs/ui/GigaMotion.{h,cpp}`: a cover child widget (mouse-transparent) that fades
-  out. reveal() = fill with palette window colour (GigaFloatingPanel::showEvent, panel flyout, toolbox group QMenu
+  out. reveal() = fill with palette window color (GigaFloatingPanel::showEvent, panel flyout, toolbox group QMenu
   aboutToShow); snapshot()+crossFade() in `GigaInterfaceModes::switchTo`. QWidget::grab() of the main window does
   include the OpenGL canvas (checked via GIGA_MOTION_DUMP). Key gigaUiAnimations.
 - **Tool icons** (`feature/giga-tool-icons`): edit `giga-tools/make_tool_icons.py` (ICONS dict: icon name → SVG parts on
-  a 16 px grid, `{c}` = colour) and run it; it writes `krita/pics/giga-icons/{light,dark}_<name>.svg` + qrc.
+  a 16 px grid, `{c}` = color) and run it; it writes `krita/pics/giga-icons/{light,dark}_<name>.svg` + qrc.
   `KisIconUtils::loadIcon()` tries `:/giga-icons/<variant>_<name>.svg` first (key gigaToolIcons, read once → restart).
   Preview: `magick -background '#2b2b2b' -density 600 x.svg -resize 64x64 x.png` + `montage`.
 - Preferences rows for all of these are added in code; each branch uses a different anchor line so they merge cleanly.
@@ -665,12 +665,12 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   requestImageRecalculation slot), history/undo/redo, Warp + tool switch, reopen, refuse after New Layer.
 
 ## Canvas look (feature/procreate-canvas-look, 2026-11-14)
-- Same in all interface modes. Colours live in `namespace GigaCanvasLook` at the top of `libs/ui/kis_config.cc`:
+- Same in all interface modes. Colors live in `namespace GigaCanvasLook` at the top of `libs/ui/kis_config.cc`:
   surround 30,30,30 (`canvasBorderColor`), checker 235/white at 16 px, grid main 110,200,255 α150 solid,
   subdivisions + iso vertical same blue α64, solid (style 0). Krita's old values noted in comments.
 - `KisConfig::gigaMigrateCanvasLook()` (static, called at top of `KisApplication::start`): once (flag `gigaCanvasLook=1`)
   rewrites those keys only if they still equal Krita's old default, because the Preferences dialog writes every value.
-- Grid colours of existing .kra files are stored in the document, so only new documents get the blue grid.
+- Grid colors of existing .kra files are stored in the document, so only new documents get the blue grid.
 - Backup of the user's config before this: `~/.config/gigasketchrc.before-canvas-look`.
 - **Grid "Draw on"** (Grid panel dropdown + Size box; global `KisConfig::gigaGridArea` 0 Canvas / 1 Canvas +
   background / 2 Background only, `gigaBackgroundGridSize` 8–600 screen px, default 48). Both panel controls just
@@ -678,13 +678,13 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   - Canvas + background: `KisGridDecoration::drawDecoration` uses the visible area instead of the image rect; isometric
     (new + legacy) lines go through `gigaDrawLineFamily()` (same line family/phase as Krita's loops, caps at 4000 lines).
   - Background only: `gigaDrawBackgroundGrid()` draws screen-fixed squares in widget coords, anchored to the image
-    origin (pans, doesn't zoom/rotate), clipped to visible area minus the image polygon. Uses the grid colours and
+    origin (pans, doesn't zoom/rotate), clipped to visible area minus the image polygon. Uses the grid colors and
     subdivision; snapping still uses the (hidden) image grid.
   - The OpenGL canvas (`KisOpenGLCanvas2::paintGL`) only gave decorations the image rect; it passes the whole widget when
     either background mode is on.
 - Grid panel limits raised to 10000 px (rect spacing starts at 500 in the .ui; iso cells were 1000).
 - Two upstream grid bugs fixed: `KisGridConfig::loadStaticData()` didn't refresh the pens (new docs drew the grid
-  black until edited in the panel); the constructor didn't fill the isometric trig cache (uninitialised → possible
+  black until edited in the panel); the constructor didn't fill the isometric trig cache (uninitialized → possible
   endless loop).
 - Self-test `canvaslook` paints the grid decoration into a QImage (grabbing the OpenGL widget doesn't include
   decorations). `GIGA_CANVASLOOK_DUMP=/path/prefix` saves the renders as PNGs.
@@ -717,7 +717,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Self-test `strokepoints` (15 checks). `selftest.sh all` takes ~2 min now (timeout raised to 180 s).
 - **Proportional editing** (`feature/stroke-points-proportional`, built on `feature/stroke-points`): `GigaStrokePath::Move`
   {centers s, radius (image px along the line), falloff, delta} is added on top of the dots' spline
-  (`OffsetEvaluator` = spline + Σ weight·delta, weight = Blender-style falloff of the distance to the nearest centre).
+  (`OffsetEvaluator` = spline + Σ weight·delta, weight = Blender-style falloff of the distance to the nearest center).
   A proportional drag adds one Move and only changes its delta (the dots' own offsets stay); `insertVertex` uses the
   spline only (else moves count twice); `placeVertices` folds moves into the new dots. Undo stack = `Shape` (dots + moves).
   Tool: wheel during a drag is caught by an **application** event filter (installed only during the drag; Krita's
@@ -766,7 +766,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   from the active camera (`calc_matrix_camera` with the output size), else the current view (`rv3d.window_matrix`,
   region aspect). Overlays off during the draw, restored after. `texture_color.read()` = uint8, bottom-up rows;
   `np.frombuffer` works on gpu.types.Buffer. Transparent output is premultiplied → un-premultiplied.
-  Own tiny PNG writer (no bpy image colour conversions), `<file>.tmp` + `os.replace`. One PNG per .blend+camera:
+  Own tiny PNG writer (no bpy image color conversions), `<file>.tmp` + `os.replace`. One PNG per .blend+camera:
   `~/Pictures/GigaSketch/blender/<blend>-<camera>.png`. Max 8192 on the long side. Cycles Rendered is refused.
   Measured: Solid ~7-12 ms at 800x600, first Material Preview ~0.9 s (shader compile).
 - Link: Unix socket `$XDG_RUNTIME_DIR/gigasketch-blender.sock` (override: env `GIGA_BLENDER_SOCKET`, used by
@@ -810,7 +810,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
     "Resolution: Full / Half (faster)" option. One fewer 88 MB copy (frombuffer without .copy()).
   - Result at 7020x3120: Send → ack 0.43-0.56 s (Blender op ~0.3 s), Giga raw decode+apply off the GUI thread.
   - Progress bar `GigaBlenderProgress` (+ `GigaBlenderProgressWidget`, objectName "GigaBlenderProgress"): child of
-    the canvas widget, top centre, mouse-transparent. "checking for changes…" (after 300 ms, so "unchanged" never
+    the canvas widget, top center, mouse-transparent. "checking for changes…" (after 300 ms, so "unchanged" never
     flashes), "rendering…" (busy slider), "updating layer…", "“name” updated" then fades (GigaMotion setting).
 - Self-test `blender` (fake client over the socket). Headless: `vm->activeNode()` stays null unless the view is set
   on the view manager and `setCurrentNode` + CurrentKritaNode resource are set by hand (same as lassofill).
@@ -837,8 +837,8 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   points per unit. Width is the user's (setSize keeps it, min 80 units); height always follows the text (relayout()).
   `State::width` is in **note units** so undo survives Keep readable rescaling.
 - Drawing: `paint()` draws a rounded box, darker top strip (`stripRect()`), QTextDocument text (font = app font,
-  no hinting, design metrics, list indent 18 units). Text colour auto (luminance). `normalizeFonts()` strips explicit
-  sizes/families/colours from html (pasted text, editor's toHtml).
+  no hinting, design metrics, list indent 18 units). Text color auto (luminance). `normalizeFonts()` strips explicit
+  sizes/families/colors from html (pasted text, editor's toHtml).
 - Shared actions: `libs/ui/GigaNoteActions.{h,cpp}` (addNote, changeNotes = one StateCommand, right-click items,
   duplicate, Edit > Add Note, Keep readable follow-zoom, Show Annotations). `pointsPerScreenPixel()` = 1/√|det|
   of documentToWidget.
@@ -860,9 +860,9 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   `GIGA_NOTES_NO_TYPING=1`, `GIGA_NOTE_TRACE=1` (editor close reasons). Synthetic clicks need an Enter event first,
   else KisInputManager drops them.
 - Tool (`ToolReferenceImages`): Add Note button (placement mode, crosshair, Esc cancels), double-click note = edit,
-  double-click strip = collapse, right-click menu (Add Note at the click, Note Colour/Text Size/Collapse/Keep
+  double-click strip = collapse, right-click menu (Add Note at the click, Note Color/Text Size/Collapse/Keep
   Readable/Duplicate/Delete), paste text (no image/urls on the clipboard) = new note, copy note = html + text.
-  Options: Notes section (colour swatches, text size, keep readable); picture-only options hide when only notes are
+  Options: Notes section (color swatches, text size, keep readable); picture-only options hide when only notes are
   selected. Right-click in this tool shows the tool menu, not the popup palette (KisPopupWidgetAction asks the tool).
 - Edit > Add Note (`giga_add_note`, no shortcut), View > Show Annotations (`giga_show_annotations`, KisConfig
   `gigaShowAnnotations`), both in gigasketch.action, menu items added in code (`gigaAddEditMenuItems`/`gigaAddViewMenuItems`).
@@ -874,12 +874,12 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Keep readable: per note, `applyKeepReadable(canvas)` sets contentScale to the view's zoom on sigCanvasStateChanged
   (not an undo step). Hooked per canvas on the first paint of KisReferenceImagesDecoration (deferred, singleShot).
 - Board: Normalize skips notes (`withoutNotes()`), Arrange skips them when Settings::keepNotesInPlace (default on,
-  key `gigaRefBoardKeepNotes`, checkbox in the tool options). Resample skips them (no pixels). Ctrl+click colour
+  key `gigaRefBoardKeepNotes`, checkbox in the tool options). Resample skips them (no pixels). Ctrl+click color
   on a note does nothing (pixelAtNormalized invalid).
 - Styles (2026-11-16): `GigaNote::Style` Sticky / Card / Bubble / Outline, per note in State (undo) and saved as
   `style="n"` (missing = Sticky). All square, no shadow (user, 2026-11-16). `insets()` gives text margins (Sticky: strip,
   Card: left bar, Bubble: tail under the body); `fillColor()`/`textColor()` are style-aware (Outline = dark glass
-  α≈0.45 with the colour lightened for text and border). `stripRect()` = Sticky strip or the top inset (double-click
+  α≈0.45 with the color lightened for text and border). `stripRect()` = Sticky strip or the top inset (double-click
   collapse). New notes take `defaultStyle()` (KisConfig `gigaNoteStyle`, set by `GigaNoteActions::applyStyle`).
   Self-test renders all four to `GIGA_NOTES_RENDER=<png>` if set.
 - Self-test `notes` (41 checks).
@@ -904,7 +904,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - **Tool menus**: `KisToolMove::popupActionsMenu()` uses `KisToolUtils::findNodes(root, m_lastCursorPos)` (bottom→top,
   reversed for the menu), picks via `nodeManager()->slotNonUiActivatedNode` after `requestStrokeEnd()`.
   Hand (`KisToolPan`) and Zoom (`KoZoomTool`, flake) share header-only `libs/flake/tools/GigaZoomMenu.h` (actions by
-  name via `KoToolBase::action`). Colour Sampler menu edits `m_config` (radius r ≈ (2r−1) px disc) + `save()` +
+  name via `KoToolBase::action`). Color Sampler menu edits `m_config` (radius r ≈ (2r−1) px disc) + `save()` +
   `updateOptionWidget()`. Selection menu: Fill FG/BG + Stroke added in `KisSelectionToolHelper::getSelectionContextMenu`.
 - Self-tests `brushpopup`, `rightclick`. Headless gotcha: the node manager has no image view in test runs, so
   activating a layer can't be checked there (the test says so in an INFO line).

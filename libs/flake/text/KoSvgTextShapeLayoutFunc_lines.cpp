@@ -474,7 +474,7 @@ QVector<LineBox> breakLines(const KoSvgTextProperties &properties,
 
     // Giga Sketch: Photoshop-style left/right (inline start/end) paragraph
     // indents. The text's x (or y) is the anchor of each line: its start
-    // edge, centre or end edge depending on text-anchor. Move that anchor
+    // edge, center or end edge depending on text-anchor. Move that anchor
     // inward and, for wrapped text, narrow the wrap width by both indents.
     {
         const qreal indentStart = properties.propertyOrDefault(KoSvgTextProperties::GigaIndentStartId).toReal();

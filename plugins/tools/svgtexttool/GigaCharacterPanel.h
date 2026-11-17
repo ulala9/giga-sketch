@@ -19,7 +19,7 @@ class GigaTextPropertyAccess;
  * Giga Sketch: Photoshop-style Character panel.
  *
  * One compact two-column panel: font family (with the font picker), style,
- * size, leading, kerning, tracking, baseline shift, colour, a row of style
+ * size, leading, kerning, tracking, baseline shift, color, a row of style
  * toggles (faux bold, italic, all caps, small caps, superscript, subscript,
  * underline, strikethrough) and anti-aliasing. Edits apply to the selected
  * characters, or the whole text when nothing is selected, as undoable steps.

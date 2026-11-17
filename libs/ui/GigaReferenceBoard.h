@@ -36,7 +36,7 @@ namespace GigaReferenceBoard
 
 enum class Order {
     Current = 0, ///< reading order of where the images are now
-    Colour,      ///< hue gradient (greys last, dark to light)
+    Color,      ///< hue gradient (grays last, dark to light)
     Shape,       ///< tall to wide
     DateAdded,   ///< the order they were added in
 };

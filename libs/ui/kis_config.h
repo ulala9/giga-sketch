@@ -650,18 +650,18 @@ public:
     void setShowCanvasMessages(bool show);
 
     /// Giga Sketch: show the "<brush> selected" popup when switching brushes
-    /// with shortcuts (next/previous favourite, previous brush). Off by default.
+    /// with shortcuts (next/previous favorite, previous brush). Off by default.
     bool gigaShowBrushSwitchMessage(bool defaultValue = false) const;
     void setGigaShowBrushSwitchMessage(bool show);
 
     /// Giga Sketch: one-time switch of the canvas surround, checkerboard and
-    /// grid colours to the dark "calm canvas" look, for configs that still hold
+    /// grid colors to the dark "calm canvas" look, for configs that still hold
     /// Krita's old defaults. Call once at startup before any canvas exists.
     static void gigaMigrateCanvasLook();
 
     /// Giga Sketch: where the grid is drawn. Global preference.
     enum GigaGridArea {
-        GigaGridOnCanvas = 0,          ///< Krita's behaviour: on the image only
+        GigaGridOnCanvas = 0,          ///< Krita's behavior: on the image only
         GigaGridCanvasAndBackground,   ///< one image-pixel grid, continued over the surround
         GigaGridBackgroundOnly         ///< screen-fixed squares on the surround only
     };
@@ -675,7 +675,7 @@ public:
     void setGigaBackgroundGridSize(int value);
 
     /// Giga Sketch: brush outline look. True = two-tone (soft dark line under a
-    /// thin light line, readable on any colour); false = Krita's inverting outline.
+    /// thin light line, readable on any color); false = Krita's inverting outline.
     bool gigaTwoToneCursor(bool defaultValue = false) const;
     void setGigaTwoToneCursor(bool value);
 

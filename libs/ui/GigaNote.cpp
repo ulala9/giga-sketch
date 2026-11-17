@@ -35,7 +35,7 @@ namespace
 constexpr qreal STRIP = 14.0;      ///< height of the darker top band
 constexpr qreal PAD = 10.0;        ///< left/right/bottom padding
 constexpr qreal PAD_TOP = 7.0;     ///< gap between the band and the text
-constexpr qreal CARD_BAR = 5.0;    ///< Card: coloured bar on the left
+constexpr qreal CARD_BAR = 5.0;    ///< Card: colored bar on the left
 constexpr qreal TAIL = 12.0;       ///< Bubble: height of the tail under the body
 const char *CONFIG_STYLE = "gigaNoteStyle";
 constexpr qreal MIN_WIDTH = 80.0;
@@ -195,7 +195,7 @@ QColor GigaNote::fillColor() const
 {
     switch (m_d->style) {
     case Card: {
-        // A light card tinted by the note colour (the colour itself is the bar).
+        // A light card tinted by the note color (the color itself is the bar).
         const QColor c = m_d->color;
         return QColor((c.red() + 3 * 252) / 4, (c.green() + 3 * 252) / 4, (c.blue() + 3 * 250) / 4);
     }
@@ -209,7 +209,7 @@ QColor GigaNote::fillColor() const
 QColor GigaNote::textColor() const
 {
     if (m_d->style == Outline) {
-        // The text is drawn in the note colour, lightened until it reads on the dark glass.
+        // The text is drawn in the note color, lightened until it reads on the dark glass.
         QColor c = m_d->color;
         for (int i = 0; i < 6 && luminance(c) < 0.55; ++i) c = c.lighter(135);
         return c;
@@ -514,7 +514,7 @@ void GigaNote::paintNote(QPainter &gc, qreal pointsPerUnit) const
         break;
     }
     case Card: {
-        // Flat light card with the colour as a bar down the left edge.
+        // Flat light card with the color as a bar down the left edge.
         QPainterPath shape;
         shape.addRect(box);
         gc.fillPath(shape, fillColor());
@@ -549,7 +549,7 @@ void GigaNote::paintNote(QPainter &gc, qreal pointsPerUnit) const
         break;
     }
     default: {
-        // Outline: see-through dark glass with a coloured border.
+        // Outline: see-through dark glass with a colored border.
         QPainterPath shape;
         shape.addRect(box.adjusted(1.0, 1.0, -1.0, -1.0));
         gc.fillPath(shape, fillColor());
@@ -716,8 +716,8 @@ QVector<QColor> GigaNote::presetColors()
 
 QStringList GigaNote::presetColorNames()
 {
-    return {i18nc("note colour", "Yellow"), i18nc("note colour", "Pink"), i18nc("note colour", "Green"),
-            i18nc("note colour", "Blue"), i18nc("note colour", "Purple"), i18nc("note colour", "Grey")};
+    return {i18nc("note color", "Yellow"), i18nc("note color", "Pink"), i18nc("note color", "Green"),
+            i18nc("note color", "Blue"), i18nc("note color", "Purple"), i18nc("note color", "Gray")};
 }
 
 QColor GigaNote::defaultColor()

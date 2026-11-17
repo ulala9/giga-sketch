@@ -173,7 +173,7 @@ GigaNewDocumentDialog::GigaNewDocumentDialog(QWidget *parent)
     create->setDefault(true);
     buttons->addButton(QDialogButtonBox::Cancel);
     QPushButton *more = buttons->addButton(i18nc("@action:button", "More Options..."), QDialogButtonBox::ActionRole);
-    more->setToolTip(i18nc("@info:tooltip", "Open the full New Document dialog (templates, colour profiles, layers)"));
+    more->setToolTip(i18nc("@info:tooltip", "Open the full New Document dialog (templates, color profiles, layers)"));
     connect(create, SIGNAL(clicked()), SLOT(slotCreate()));
     connect(more, SIGNAL(clicked()), SLOT(slotMoreOptions()));
     connect(buttons, SIGNAL(rejected()), SLOT(reject()));

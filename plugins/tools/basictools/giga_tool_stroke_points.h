@@ -99,7 +99,7 @@ private:
     void connectSession();
     void setWheelCatcher(bool on);
     void changeRadius(int wheelSteps);
-    /// Centres (s) the proportional preview is drawn around, or empty.
+    /// Centers (s) the proportional preview is drawn around, or empty.
     QVector<qreal> proportionalCenters() const;
     /// While dragging: the last repaint, bent piece by piece to the new shape.
     void paintWarp(QPainter &gc, GigaLastStrokeTransform *s);

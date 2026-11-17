@@ -159,7 +159,7 @@ qreal GigaStrokePath::falloffWeight(int falloff, qreal t)
 {
     if (t >= 1.0) return 0.0;
     if (t <= 0.0) return 1.0;
-    const qreal x = 1.0 - t; // 1 at the centre, 0 at the radius
+    const qreal x = 1.0 - t; // 1 at the center, 0 at the radius
     switch (falloff) {
     case Sphere:   return std::sqrt(qMax<qreal>(0.0, 2.0 * x - x * x));
     case Root:     return std::sqrt(x);

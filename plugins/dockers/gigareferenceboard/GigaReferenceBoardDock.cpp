@@ -242,7 +242,7 @@ void GigaReferenceBoardDock::buildArrangeMenu()
                    changeSettings([v](Settings &s) { s.style = GigaReferenceLayout::Style(v); });
                    m_view->arrange();
                });
-    addChoices(m_arrangeMenu, i18n("Order"), {i18n("Current"), i18n("Colour"), i18n("Shape"), i18n("Date added")},
+    addChoices(m_arrangeMenu, i18n("Order"), {i18n("Current"), i18n("Color"), i18n("Shape"), i18n("Date added")},
                int(s.order), [this](int v) {
                    changeSettings([v](Settings &s) { s.order = Order(v); });
                    m_view->arrange();
@@ -273,7 +273,7 @@ void GigaReferenceBoardDock::buildLookMenu()
     m_lookMenu->clear();
     const Settings s = Settings::load();
 
-    m_lookMenu->addAction(i18n("Background Colour..."), this, [this]() {
+    m_lookMenu->addAction(i18n("Background Color..."), this, [this]() {
         const QColor c = QColorDialog::getColor(Settings::load().background, this, i18n("Board Background"));
         if (c.isValid()) changeSettings([c](Settings &s) { s.background = c; });
     });
@@ -312,6 +312,6 @@ void GigaReferenceBoardDock::buildLookMenu()
     m_lookMenu->addSection(i18n("Controls"));
     QAction *help = m_lookMenu->addAction(
         i18n("Wheel: zoom · Middle/Space-drag: pan · Click: focus\n"
-             "←/→: next image · Esc/Home: overview · Ctrl+click: pick colour"));
+             "←/→: next image · Esc/Home: overview · Ctrl+click: pick color"));
     help->setEnabled(false);
 }

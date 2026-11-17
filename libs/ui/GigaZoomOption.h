@@ -17,8 +17,8 @@ class QObject;
 /**
  * Giga Sketch: View > "Ctrl+Space Zooms Toward Pointer".
  *
- * Krita's drag-zoom has two flavours: "Zoom Mode" (around the canvas
- * centre) and "Relative Zoom Mode" (toward where you pressed, like the mouse
+ * Krita's drag-zoom has two flavors: "Zoom Mode" (around the canvas
+ * center) and "Relative Zoom Mode" (toward where you pressed, like the mouse
  * wheel); the same for the stepped "Discrete" zoom. This switches the
  * Space-based zoom bindings of the current input profile between them and
  * saves the profile, exactly as Settings > Canvas Input Settings would.

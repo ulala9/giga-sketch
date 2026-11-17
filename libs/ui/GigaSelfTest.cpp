@@ -841,7 +841,7 @@ void testTabSwitch(KisMainWindow *w)
                 bool visible = frame && frame->isVisible() && !hist->isHidden();
                 QString cover;
                 if (visible) {
-                    // What is really on top at the panel's centre?
+                    // What is really on top at the panel's center?
                     QWidget *top = w->childAt(frame->geometry().center());
                     if (!top || !(top == frame || frame->isAncestorOf(top))) {
                         visible = false;
@@ -853,7 +853,7 @@ void testTabSwitch(KisMainWindow *w)
                                                topLevelChild ? topLevelChild->objectName() : QString(),
                                                topLevelChild ? rectText(topLevelChild->geometry()) : QString())
                                           .arg(topLevelChild && topLevelChild->isHidden())
-                                    : QStringLiteral(" nothing at centre");
+                                    : QStringLiteral(" nothing at center");
                     }
                 }
                 if (!visible && ok) {
@@ -1095,7 +1095,7 @@ void testReferenceBoard(KisMainWindow *w)
     }
     report(boardView->property("focusedIndex").toInt() == -1, "board-esc-overview", QString());
 
-    // Ctrl+click samples the colour (image 0 in z order is the green one).
+    // Ctrl+click samples the color (image 0 in z order is the green one).
     pump(20);
     QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, center), Q_ARG(int, 0));
     {
@@ -1107,7 +1107,7 @@ void testReferenceBoard(KisMainWindow *w)
         pump(5);
     }
     const QColor picked = canvas->resourceManager()->foregroundColor().toQColor();
-    report(picked == QColor(Qt::green), "board-ctrl-click-colour", picked.name());
+    report(picked == QColor(Qt::green), "board-ctrl-click-color", picked.name());
 
     // Drag an image on the Board and let go: it must stay where it was
     // dropped, with no glide from the old spot (user report: rubber-banding).
@@ -1163,7 +1163,7 @@ void testReferenceBoard(KisMainWindow *w)
         const QPointF mid(boardView->width() / 2.0, boardView->height() / 2.0);
         const qreal r = qMin(mid.x(), mid.y()) * 0.6;
 
-        // A quarter turn: from right of centre to below it = +90°.
+        // A quarter turn: from right of center to below it = +90°.
         navDrag(mid + QPointF(r, 0), mid + QPointF(0, r), Qt::ShiftModifier);
         const qreal turned = boardView->property("rotation").toReal();
         report(qAbs(turned - 90.0) < 1.0, "board-shift-space-rotate", QStringLiteral("%1°").arg(turned, 0, 'f', 1));
@@ -1613,7 +1613,7 @@ void testCanvasLook(KisMainWindow *w)
     }
     // Paint the grid decoration the way the canvas does (whole widget area,
     // as the OpenGL canvas passes it when the option is on), into an image
-    // filled with the surround colour. (Grabbing the OpenGL widget does not
+    // filled with the surround color. (Grabbing the OpenGL widget does not
     // include the decorations.)
     KisCanvasDecorationSP gridDeco = view->canvasBase()->decoration(QStringLiteral("grid"));
     const KisCoordinatesConverter *converter = view->canvasBase()->coordinatesConverter();
@@ -1727,8 +1727,8 @@ void testCanvasLook(KisMainWindow *w)
 }
 
 /// Layers panel bottom row: New, Duplicate, Delete side by side on the left.
-// Accent colour: the palette's Highlight follows gigaAccentColor and goes back
-// to the theme's colour when it is cleared (feature/accent-color).
+// Accent color: the palette's Highlight follows gigaAccentColor and goes back
+// to the theme's color when it is cleared (feature/accent-color).
 void testAccentColor(KisMainWindow *w)
 {
     Q_UNUSED(w);
@@ -1859,7 +1859,7 @@ void testLassoFill(KisMainWindow *w)
     lasso();
     const QColor filled = pixel();
     report(filled.red() > 200 && filled.green() < 50 && filled.alpha() == 255, "lassofill-fills",
-           QStringLiteral("centre before %1, after %2 (undo: %3)").arg(before.name(QColor::HexArgb), filled.name(QColor::HexArgb),
+           QStringLiteral("center before %1, after %2 (undo: %3)").arg(before.name(QColor::HexArgb), filled.name(QColor::HexArgb),
                                                           doc->undoStack()->undoText()));
 
     KisAction *erase = view->viewManager()->actionManager()->actionByName(QStringLiteral("erase_action"));
@@ -1869,7 +1869,7 @@ void testLassoFill(KisMainWindow *w)
     lasso();
     const QColor erased = pixel();
     report(erased.alpha() == 0, "lassofill-erases",
-           QStringLiteral("centre after erase %1 (undo: %2)").arg(erased.name(QColor::HexArgb), doc->undoStack()->undoText()));
+           QStringLiteral("center after erase %1 (undo: %2)").arg(erased.name(QColor::HexArgb), doc->undoStack()->undoText()));
     erase->trigger();
     pump(10);
 
@@ -1889,7 +1889,7 @@ void testLassoFill(KisMainWindow *w)
     lasso();
     const QColor erasedCustom = pixel();
     report(erasedCustom.alpha() == 0, "lassofill-custom-blending-erases",
-           QStringLiteral("centre %1 (undo: %2)").arg(erasedCustom.name(QColor::HexArgb), doc->undoStack()->undoText()));
+           QStringLiteral("center %1 (undo: %2)").arg(erasedCustom.name(QColor::HexArgb), doc->undoStack()->undoText()));
     erase->trigger();
     custom->setChecked(false);
     pump(10);
@@ -1944,7 +1944,7 @@ void testBlenderTransform(KisMainWindow *w)
         pump(5);
     }
 
-    const QPoint centre(image->width() / 2, image->height() / 2);
+    const QPoint center(image->width() / 2, image->height() / 2);
     const QPoint corner(20, 20);
     auto at = [&](const QPoint &p) {
         QColor q;
@@ -1956,7 +1956,7 @@ void testBlenderTransform(KisMainWindow *w)
     auto isWhite = [](const QColor &q) { return q.red() > 230 && q.green() > 230 && q.blue() > 230; };
     report(at(corner).red() > 200 && at(corner).green() < 50, "blendertf-picture", name(at(corner)));
 
-    // Ctrl+T: scale to 50 % around the centre and apply.
+    // Ctrl+T: scale to 50 % around the center and apply.
     KoToolManager::instance()->switchToolRequested(QStringLiteral("KisToolTransform"));
     pass(500);
     KoToolBase *transform = KoToolManager::instance()->toolById(canvas, QStringLiteral("KisToolTransform"));
@@ -1970,14 +1970,14 @@ void testBlenderTransform(KisMainWindow *w)
     pass(300);
     static_cast<KisTool *>(transform)->requestStrokeEnd();
     pass(1500);
-    report(isWhite(at(corner)) && at(centre).red() > 200, "blendertf-scaled",
-           QStringLiteral("corner %1, centre %2").arg(name(at(corner)), name(at(centre))));
+    report(isWhite(at(corner)) && at(center).red() > 200, "blendertf-scaled",
+           QStringLiteral("corner %1, center %2").arg(name(at(corner)), name(at(center))));
 
     // A new picture from Blender keeps the transform.
     layer->gigaSetPicture(picture(Qt::blue));
     pass(1500);
-    report(isWhite(at(corner)) && at(centre).blue() > 200 && at(centre).red() < 50, "blendertf-refresh-keeps-scale",
-           QStringLiteral("corner %1, centre %2").arg(name(at(corner)), name(at(centre))));
+    report(isWhite(at(corner)) && at(center).blue() > 200 && at(center).red() < 50, "blendertf-refresh-keeps-scale",
+           QStringLiteral("corner %1, center %2").arg(name(at(corner)), name(at(center))));
 
     // Saved in the .kra: the reopened Blender layer has its mask, still 50 %.
     {
@@ -2494,7 +2494,7 @@ void testStrokePoints(KisMainWindow *w)
     const QPoint beyond = (pfrom + QPointF(radiusImage * 1.3, 0)).toPoint();
     report(isRed(pixel((pfrom + QPointF(0, 60)).toPoint())) && isRed(pixel(half)) && isEmpty(pixel(halfOld)) && isRed(pixel(beyond)),
            "strokepoints-proportional-falloff",
-           QStringLiteral("centre %1, half-radius bent %2 (old place %3), beyond radius %4; radius %5 image px")
+           QStringLiteral("center %1, half-radius bent %2 (old place %3), beyond radius %4; radius %5 image px")
                .arg(name(pixel((pfrom + QPointF(0, 60)).toPoint())), name(pixel(half)), name(pixel(halfOld)), name(pixel(beyond)))
                .arg(radiusImage, 0, 'f', 1));
 
@@ -2765,7 +2765,7 @@ void testCursorLook(KisMainWindow *w)
     report(after > 0.99, "cursorlook-back-after-stroke", QString::number(after));
 }
 
-/// Sticky notes (feature/annotations): Edit > Add Note, look, colour/size
+/// Sticky notes (feature/annotations): Edit > Add Note, look, color/size
 /// undo, width resize re-wraps, paste text, copy, duplicate, right-click menu.
 void testNotes(KisMainWindow *w)
 {
@@ -2926,7 +2926,7 @@ void testNotes(KisMainWindow *w)
     const qreal screenWidth = canvas->coordinatesConverter()->documentToWidget(note->boundingRect()).width();
     report(qAbs(screenWidth - 220.0) < 3.0, "notes-screen-size", QString::number(screenWidth));
 
-    // It draws its colour.
+    // It draws its color.
     {
         QImage img(note->size().toSize() + QSize(2, 2), QImage::Format_ARGB32);
         img.fill(Qt::transparent);
@@ -2938,10 +2938,10 @@ void testNotes(KisMainWindow *w)
                mid.name(QColor::HexArgb) + QStringLiteral(" vs ") + note->color().name());
     }
 
-    // Colour change is one undo step.
+    // Color change is one undo step.
     const QColor before = note->color();
     const QColor blue = GigaNote::presetColors().at(3);
-    GigaNoteActions::changeNotes(canvas, {note}, kundo2_noi18n("colour"), [blue](GigaNote::State &st) { st.color = blue; });
+    GigaNoteActions::changeNotes(canvas, {note}, kundo2_noi18n("color"), [blue](GigaNote::State &st) { st.color = blue; });
     pump(3);
     const bool changed = note->color() == blue;
     doc->undoStack()->undo();
@@ -2949,7 +2949,7 @@ void testNotes(KisMainWindow *w)
     const bool undone = note->color() == before;
     doc->undoStack()->redo();
     pump(3);
-    report(changed && undone && note->color() == blue, "notes-colour-undo", note->color().name());
+    report(changed && undone && note->color() == blue, "notes-color-undo", note->color().name());
 
     // Long text in a narrower note wraps onto more lines: taller.
     note->setHtml(QStringLiteral("<p>one two three four five six seven eight nine ten eleven twelve</p>"));
@@ -2979,7 +2979,7 @@ void testNotes(KisMainWindow *w)
         report(fresh->style() == GigaNote::Card, "notes-style-default-remembered", QString::number(fresh->style()));
         delete fresh;
 
-        // Render all four on a mid-grey background.
+        // Render all four on a mid-gray background.
         const QStringList names = GigaNote::styleNames();
         QImage sheet(4 * 240 + 20, 200, QImage::Format_ARGB32);
         sheet.fill(QColor(110, 110, 110));
@@ -3047,7 +3047,7 @@ void testNotes(KisMainWindow *w)
     if (menu) {
         Q_FOREACH (QAction *a, menu->actions()) texts << a->text().remove(QLatin1Char('&'));
     }
-    report(texts.contains(QStringLiteral("Add Note")) && texts.contains(QStringLiteral("Note Colour"))
+    report(texts.contains(QStringLiteral("Add Note")) && texts.contains(QStringLiteral("Note Color"))
                && texts.contains(QStringLiteral("Duplicate Note")),
            "notes-context-menu", texts.join(QStringLiteral(", ")).right(160));
 
@@ -3431,7 +3431,7 @@ void testBrushPopup(KisMainWindow *w)
 
 /// Right-click menus for the tools that had none (feature/tool-context-menus):
 /// Move = layers with paint under the pointer (top first, pick = active layer),
-/// Hand/Zoom = Krita's view zoom actions, Colour Sampler = sample size/source +
+/// Hand/Zoom = Krita's view zoom actions, Color Sampler = sample size/source +
 /// copy hex, selection menu = Fill entries.
 void testRightClickMenus(KisMainWindow *w)
 {
@@ -3525,7 +3525,7 @@ void testRightClickMenus(KisMainWindow *w)
         }
     }
 
-    // --- Colour sampler
+    // --- Color sampler
     KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaSelected/KisToolColorSampler"));
     pump(10);
     KoToolBase *sampler = KoToolManager::instance()->toolById(canvas, QStringLiteral("KritaSelected/KisToolColorSampler"));

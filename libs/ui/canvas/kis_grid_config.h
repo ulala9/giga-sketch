@@ -79,7 +79,7 @@ public:
     {
         loadStaticData();
         // Giga Sketch fix: fill the isometric cache too; it was left
-        // uninitialised until a setter ran, which could make the isometric
+        // uninitialized until a setter ran, which could make the isometric
         // grid loop forever on a freshly created config.
         updateTrigoCache();
         m_penMain.setWidth(0);

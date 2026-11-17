@@ -42,7 +42,7 @@ KConfigGroup pickerConfig()
 }
 
 /// Krita's preview is black text on a white 256x256 square. Turn it into
-/// text-coloured pixels on transparent, cropped to the text, so it reads on
+/// text-colored pixels on transparent, cropped to the text, so it reads on
 /// any theme.
 QImage tintPreview(const QImage &source, const QColor &color)
 {
@@ -74,12 +74,12 @@ QImage tintPreview(const QImage &source, const QColor &color)
 }
 
 /// Draws one row: star, family name, preview on the right. Headers are
-/// small grey section titles.
+/// small gray section titles.
 class FontRowDelegate : public QStyledItemDelegate
 {
 public:
-    FontRowDelegate(GigaFontPicker *picker, std::function<QImage(const QString &)> images, const QStringList *favourites)
-        : QStyledItemDelegate(picker), m_images(std::move(images)), m_favourites(favourites)
+    FontRowDelegate(GigaFontPicker *picker, std::function<QImage(const QString &)> images, const QStringList *favorites)
+        : QStyledItemDelegate(picker), m_images(std::move(images)), m_favorites(favorites)
     {
     }
 
@@ -117,8 +117,8 @@ public:
         const QColor textColor = selected ? pal.highlightedText().color() : pal.text().color();
         const QString family = index.data(FamilyRole).toString();
 
-        // Star (favourite).
-        const bool fav = m_favourites->contains(family);
+        // Star (favorite).
+        const bool fav = m_favorites->contains(family);
         p->setPen(fav ? QColor(240, 190, 60) : pal.color(QPalette::Disabled, QPalette::Text));
         p->drawText(QRect(r.left(), r.top(), STAR_WIDTH, r.height()), Qt::AlignCenter,
                     fav ? QStringLiteral("★") : QStringLiteral("☆"));
@@ -153,7 +153,7 @@ public:
 
 private:
     std::function<QImage(const QString &)> m_images;
-    const QStringList *m_favourites;
+    const QStringList *m_favorites;
 };
 
 } // namespace
@@ -180,7 +180,7 @@ GigaFontPicker::GigaFontPicker(QWidget *parent)
     m_list->setMouseTracking(true);
     m_list->viewport()->setMouseTracking(true);
     m_list->viewport()->installEventFilter(this); // star clicks
-    m_list->setItemDelegate(new FontRowDelegate(this, [this](const QString &f) { return previewImage(f); }, &m_favourites));
+    m_list->setItemDelegate(new FontRowDelegate(this, [this](const QString &f) { return previewImage(f); }, &m_favorites));
     m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     connect(m_list, &QListWidget::itemEntered, this, [this](QListWidgetItem *item) { preview(item); });
     connect(m_list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *item) { preview(item); });
@@ -196,7 +196,7 @@ void GigaFontPicker::popup(QWidget *anchor, const QStringList &families, const Q
     m_current = current;
     m_lastPreview.clear();
     m_chosen = false;
-    m_favourites = pickerConfig().readEntry("favourites", QStringList());
+    m_favorites = pickerConfig().readEntry("favourites", QStringList());
 
     m_search->blockSignals(true);
     m_search->clear();
@@ -253,20 +253,20 @@ void GigaFontPicker::rebuild()
     };
 
     if (filter.isEmpty()) {
-        QStringList favourites;
-        Q_FOREACH (const QString &f, m_favourites) if (m_families.contains(f)) favourites << f;
+        QStringList favorites;
+        Q_FOREACH (const QString &f, m_favorites) if (m_families.contains(f)) favorites << f;
         QStringList recent;
         Q_FOREACH (const QString &f, pickerConfig().readEntry("recent", QStringList())) if (m_families.contains(f)) recent << f;
 
-        if (!favourites.isEmpty()) {
-            addHeader(i18nc("font picker section", "Favourites"));
-            Q_FOREACH (const QString &f, favourites) addFamily(f);
+        if (!favorites.isEmpty()) {
+            addHeader(i18nc("font picker section", "Favorites"));
+            Q_FOREACH (const QString &f, favorites) addFamily(f);
         }
         if (!recent.isEmpty()) {
             addHeader(i18nc("font picker section", "Recent"));
             Q_FOREACH (const QString &f, recent) addFamily(f);
         }
-        if (!favourites.isEmpty() || !recent.isEmpty()) {
+        if (!favorites.isEmpty() || !recent.isEmpty()) {
             addHeader(i18nc("font picker section", "All Fonts"));
         }
         currentItem = nullptr; // prefer the entry in the full list
@@ -365,14 +365,14 @@ bool GigaFontPicker::eventFilter(QObject *watched, QEvent *event)
             break;
         }
     } else if (watched == m_list->viewport() && event->type() == QEvent::MouseButtonPress) {
-        // Clicking the star toggles the favourite instead of picking.
+        // Clicking the star toggles the favorite instead of picking.
         QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
         QListWidgetItem *item = m_list->itemAt(mouse->position().toPoint());
         if (item && !item->data(HeaderRole).toBool() && mouse->position().x() < STAR_WIDTH) {
             const QString family = item->data(FamilyRole).toString();
-            if (m_favourites.contains(family)) m_favourites.removeAll(family);
-            else m_favourites.append(family);
-            pickerConfig().writeEntry("favourites", m_favourites);
+            if (m_favorites.contains(family)) m_favorites.removeAll(family);
+            else m_favorites.append(family);
+            pickerConfig().writeEntry("favourites", m_favorites);
             m_list->viewport()->update();
             return true;
         }

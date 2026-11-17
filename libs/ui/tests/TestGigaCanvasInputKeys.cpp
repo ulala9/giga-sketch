@@ -36,7 +36,7 @@ void TestGigaCanvasInputKeys::testDragMatchIsExact()
     i = matchDrag(b, heldKeys(Qt::ShiftModifier | Qt::AltModifier, space), Qt::LeftButton);
     QCOMPARE(int(kindAt(b, i)), int(Kind::RotateDiscrete));
 
-    // Plain Space (pan), Ctrl alone (colour pick), wrong button: no match.
+    // Plain Space (pan), Ctrl alone (color pick), wrong button: no match.
     QCOMPARE(matchDrag(b, heldKeys(Qt::NoModifier, space), Qt::LeftButton), -1);
     QCOMPARE(matchDrag(b, heldKeys(Qt::ControlModifier, {}), Qt::LeftButton), -1);
     QCOMPARE(matchDrag(b, heldKeys(Qt::ControlModifier, space), Qt::RightButton), -1);

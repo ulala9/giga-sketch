@@ -292,12 +292,12 @@ QVector<int> orderFor(const QVector<KisReferenceImage *> &images, const QVector<
     switch (order) {
     case Order::Current:
         return GigaReferenceLayout::readingOrder(currentRects);
-    case Order::Colour: {
-        // Colourful images by hue, then greys from dark to light.
+    case Order::Color: {
+        // Colorful images by hue, then grays from dark to light.
         auto key = [&](int i) {
             const QColor c = images[i]->averageColor().toHsv();
-            const bool grey = c.hsvSaturationF() < 0.15 || c.hsvHueF() < 0.0;
-            return qMakePair(grey ? 1.0 : 0.0, grey ? c.valueF() : c.hsvHueF());
+            const bool gray = c.hsvSaturationF() < 0.15 || c.hsvHueF() < 0.0;
+            return qMakePair(gray ? 1.0 : 0.0, gray ? c.valueF() : c.hsvHueF());
         };
         std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return key(a) < key(b); });
         return idx;

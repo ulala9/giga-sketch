@@ -140,7 +140,7 @@ QWebEngineProfile *GigaImageSearchView::profile()
         s_profile->setPersistentCookiesPolicy(QWebEngineProfile::ForcePersistentCookies);
         s_profile->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
         // Look like the plain Chromium it is: some sites serve a basic page
-        // to browsers they don't recognise (the "QtWebEngine/x.y" part).
+        // to browsers they don't recognize (the "QtWebEngine/x.y" part).
         QString agent = s_profile->httpUserAgent();
         agent.remove(QRegularExpression(QStringLiteral("QtWebEngine/[0-9.]+ ?")));
         s_profile->setHttpUserAgent(agent);

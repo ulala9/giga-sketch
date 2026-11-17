@@ -48,7 +48,7 @@ Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
 - [x] Paragraph space before/after, left/right indents (`feature/text-paragraph-spacing`)
 - [x] Text options bar on top + easy moving (`feature/text-options-bar`, `feature/text-easy-move`)
 - [x] Photoshop-style box text with resize handles, point ↔ paragraph conversion (`feature/text-boxes`)
-- [x] Font picker: search, favourites, recent, previews, live preview (`feature/font-picker`)
+- [x] Font picker: search, favorites, recent, previews, live preview (`feature/font-picker`)
 - [x] Character and Paragraph panels (`feature/character-panel`)
 - [ ] Horizontal / vertical text scale — **low priority** (user decision); don't suggest it. Approach already
   scoped (2026-11-13): non-uniform FT_Set_Char_Size per face (scale in KoCSSFontInfo + font cache key),
@@ -68,11 +68,11 @@ Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
   - Paint tools: brush popup at the pointer (Size, Hardness, recent brushes, preset list with tags/search) instead of
     the popup palette (`feature/brush-popup`). Preferences > General > Tools > "Right-click on canvas" switches back to
     the palette; action "Show Popup Palette" (no default key) opens it anyway. Self-test `brushpopup`.
-  - Move = layer picker (layers with paint under the pointer), Hand/Zoom = fit/100%/zoom, Colour Sampler = sample
+  - Move = layer picker (layers with paint under the pointer), Hand/Zoom = fit/100%/zoom, Color Sampler = sample
     size/source + copy hex, selection menu + Fill/Stroke (`feature/tool-context-menus`). Self-test `rightclick`.
   - Not done (ask first): Gradient tool gradient picker on right-click; Fill/Gradient/shape tools still get the brush
     popup (they are paint tools in Krita).
-- [x] Colour panel, menus wording, New Document dialog (`feature/ui-color-panel`, `feature/ui-menus-wording`, …)
+- [x] Color panel, menus wording, New Document dialog (`feature/ui-color-panel`, `feature/ui-menus-wording`, …)
 - [x] Space-saving mode, panel flyouts (`feature/ui-space-saving`)
 - [x] Interface modes Studio / Photoshop / Procreate, F9 (`feature/interface-modes`, `feature/procreate-*`, `feature/studio-*`)
 - [x] Panels float inside the window: tear-off by tab/title/strip, drag back to dock, per-mode memory (`feature/in-window-panels`)
@@ -89,7 +89,7 @@ Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
 - Aesthetic polish (approved 2026-11-15, one branch each), merged 2026-11-15 after the user's look test:
   - [x] Brush cursor: two-tone outline, fade while painting, size readout (`feature/brush-cursor-look`). Self-test `cursorlook`.
     The fade only runs when Preferences > Cursor > While painting > "Show outline" is off (user has it on).
-  - [x] Accent colour choice in Preferences > General (`feature/accent-color`). Self-test `accent`.
+  - [x] Accent color choice in Preferences > General (`feature/accent-color`). Self-test `accent`.
   - [x] Softer slider look, Preferences > General "Softer sliders" (`feature/slider-look`)
   - [x] Soft shadow around the canvas, Preferences > Display (`feature/canvas-shadow`)
   - [x] Interface motion: panel/flyout/tool-menu fades, mode-switch cross-fade, "Interface animations" (`feature/ui-motion`). Self-test `motion`.
@@ -97,7 +97,7 @@ Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
 
 ## Phase 5 — Feature blueprints (doc "Giga Sketch Feature Blueprints")
 - [x] Reference Board (`feature/reference-board`, merged 2026-11-14, hand-tested): Normalize, Arrange (5 styles,
-  order, shape, spacing), Board panel with own camera, Send to Board / Canvas, click-to-focus, ←/→, Ctrl+click colour,
+  order, shape, spacing), Board panel with own camera, Send to Board / Canvas, click-to-focus, ←/→, Ctrl+click color,
   drop/paste, look options, Resample to Current Size + shrink-on-save. Self-test `refboard`.
 - [x] Board rotate/zoom/flip with the canvas (`feature/refboard-rotate-zoom`, `feature/refboard-flip`, merged 2026-11-15)
 - [x] Board image search: small browser panel, Google Images / Bing / Pinterest (`feature/refboard-image-search`,
@@ -108,7 +108,7 @@ Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
   (`fix/refboard-delete-key`, merged 2026-11-16).
 - [x] **Annotations** (sticky notes, `feature/annotations`, merged 2026-11-16, hand-tested). A note is a
   special kind of reference image (GigaNote). Reference Images tool: Add Note (click to place), right-click menu,
-  double-click to type, paste text; Edit > Add Note (no shortcut); View > Show Annotations; colours, 3 text sizes,
+  double-click to type, paste text; Edit > Add Note (no shortcut); View > Show Annotations; colors, 3 text sizes,
   collapse, Keep readable, 4 styles (Sticky, Card, Speech Bubble, Outline); Board + .kra/.krf. Self-test `notes`.
   2026-11-16: user reported a freeze on Edit > Add Note → fixed (no undoStack()->undo() from the editor; outside-click
   watcher starts after the opening click); re-tested OK.
@@ -119,7 +119,7 @@ Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
   - Scope (user): **on demand** (a "Send" in Blender / "Refresh" in GigaSketch, no live streaming);
     **Solid/EEVEE viewport look** (no Cycles); **one plain image** (no passes).
   - Blender side: small add-on (Python) renders the active camera view offscreen
-    (`gpu.types.GPUOffScreen` + `draw_view3d`), reads the pixels back, sends them with the colours as Blender
+    (`gpu.types.GPUOffScreen` + `draw_view3d`), reads the pixels back, sends them with the colors as Blender
     displays them (view transform AgX/Filmic applied, else it looks washed out).
   - Transport: shared-memory file in `/dev/shm` for pixels + local socket for small messages
     ("frame ready, W×H", "canvas is W×H", "refresh"); version number in the first message.
@@ -130,7 +130,7 @@ Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
     Canvas size → Blender render size.
   - Step 0 (try before any C++): Blender script saves a PNG on "Send"; add it in GigaSketch as a File Layer
     (already auto-reloads, `kis_safe_document_loader.cpp`, 500 ms debounce). Tells whether the workflow fits.
-  - Not in scope unless asked: live updates, Cycles, render passes (line art, colour IDs, AO, depth, normals),
+  - Not in scope unless asked: live updates, Cycles, render passes (line art, color IDs, AO, depth, normals),
     camera control from GigaSketch.
   - Branch: `feature/blender-bridge` (merged). **Step 0 done 2026-11-16**; user wanted less setup, so **step 1 done
     2026-11-16**: local socket bridge (`GigaBlenderBridge`), Send adds the layer above the active one (or a new

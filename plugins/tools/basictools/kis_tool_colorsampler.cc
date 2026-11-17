@@ -416,7 +416,7 @@ QMenu *KisToolColorSampler::popupActionsMenu()
     menu->clear();
 
     menu->addSection(i18n("Sample Size"));
-    // Krita's radius counts the centre pixel: radius r averages a disc about
+    // Krita's radius counts the center pixel: radius r averages a disc about
     // 2r-1 pixels wide, so these give roughly the square sizes in the labels.
     const QList<QPair<QString, int>> sizes = {
         {i18n("Point Sample"), 1},

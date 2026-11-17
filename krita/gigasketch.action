@@ -61,7 +61,7 @@
     <Action name="giga_show_popup_palette">
       <icon></icon>
       <text>Show Popup Palette</text>
-      <whatsThis>Open Krita's round popup palette (favourite brushes, colours, canvas rotation) under the pointer. Right-click opens the brush popup instead unless Preferences > General > Tools says otherwise.</whatsThis>
+      <whatsThis>Open Krita's round popup palette (favorite brushes, colors, canvas rotation) under the pointer. Right-click opens the brush popup instead unless Preferences > General > Tools says otherwise.</whatsThis>
       <toolTip>Open the popup palette under the pointer</toolTip>
       <iconText>Popup Palette</iconText>
       <activationFlags>1</activationFlags>

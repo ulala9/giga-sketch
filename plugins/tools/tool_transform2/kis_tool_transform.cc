@@ -925,7 +925,7 @@ void KisToolTransform::requestImageRecalculation()
 KisNodeSP KisToolTransform::gigaBlenderLayerTransformMask(KisNodeSP node, const KisNodeList &selected)
 {
     // Only when the Blender layer is the one thing being transformed
-    // (several selected layers keep Krita's usual behaviour).
+    // (several selected layers keep Krita's usual behavior).
     if (!node || selected.size() > 1 || (selected.size() == 1 && selected.first() != node)) return 0;
 
     KisFileLayer *fileLayer = dynamic_cast<KisFileLayer*>(node.data());

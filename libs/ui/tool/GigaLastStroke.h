@@ -47,7 +47,7 @@ struct KRITAUI_EXPORT GigaLastStrokeRecord
 
     KisImageWSP image;
     KisNodeSP node;                       ///< the layer the stroke was painted on
-    KisResourcesSnapshotSP resources;     ///< brush, colour, opacity... at stroke start
+    KisResourcesSnapshotSP resources;     ///< brush, color, opacity... at stroke start
     KisSelectionSP selection;             ///< selection that clipped the stroke (may be null)
     QVector<KisDistanceInformation> startDistances; ///< one per mirrored copy
     KisStrokeRandomSource randomSource;   ///< fresh copy, taken before any dab

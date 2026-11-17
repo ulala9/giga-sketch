@@ -238,7 +238,7 @@ const ColorPatches popupPatches {
 
 const GenericSetting<bool> proofToPaintingColors {"proofToPaintingColors", false};
 const GenericSetting<bool> colorHistoryEnabled {"colorHistoryEnabled", true};
-// Giga Sketch: off by default (no Photoshop equivalent; recent colours stay).
+// Giga Sketch: off by default (no Photoshop equivalent; recent colors stay).
 const GenericSetting<bool> commonColorsEnabled {"commonColorsEnabled", false};
 const GenericSetting<bool> colorHistoryShowClearButton { "colorHistoryShowClearButton", false };
 const GenericSetting<bool> commonColorsAutoUpdate { "commonColorsAutoUpdate", false };

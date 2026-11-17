@@ -21,7 +21,7 @@ class KisViewManager;
 
 /**
  * Giga Sketch Procreate mode widgets. Only used while Procreate mode is on
- * (GigaProcreateMode); they show Krita's real data (colours, layers, brush
+ * (GigaProcreateMode); they show Krita's real data (colors, layers, brush
  * presets) with a Procreate-like look.
  */
 
@@ -49,7 +49,7 @@ private:
     bool m_arrowOnRight {false};
 };
 
-/// Procreate-like colour disc: hue ring around a saturation/brightness square.
+/// Procreate-like color disc: hue ring around a saturation/brightness square.
 class GigaColorDisc : public QWidget
 {
 public:
@@ -72,7 +72,7 @@ private:
     enum Dragging { None, Ring, Square } m_dragging {None};
 };
 
-/// Popover content: colour disc + recent colours.
+/// Popover content: color disc + recent colors.
 class GigaColorPanel : public QWidget
 {
 public:

@@ -34,7 +34,7 @@ namespace
 {
 QPointer<GigaNoteEditor> s_current;
 
-/// toHtml() of a copy of doc with the explicit sizes/colours removed.
+/// toHtml() of a copy of doc with the explicit sizes/colors removed.
 QString cleanHtml(const QTextDocument *doc)
 {
     QScopedPointer<QTextDocument> copy(doc->clone());
@@ -144,7 +144,7 @@ void GigaNoteEditor::applyLook()
     document()->setUseDesignMetrics(true);
     document()->setIndentWidth(GigaNote::indentUnits() * z);
 
-    // The box's own fill; a see-through one (Outline) is shown over dark grey while typing.
+    // The box's own fill; a see-through one (Outline) is shown over dark gray while typing.
     QColor background = m_note->fillColor();
     if (background.alpha() < 255) {
         const qreal a = background.alphaF();

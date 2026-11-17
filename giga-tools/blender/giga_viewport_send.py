@@ -17,7 +17,7 @@ the side bar > Assign Shortcut.
 
 How it works, in short:
   1. GPUOffScreen + draw_view3d draws the viewport again, offscreen, at the
-     size we want, with Blender's colour management on (so AgX/Filmic is
+     size we want, with Blender's color management on (so AgX/Filmic is
      applied and the picture looks like the viewport, not washed out).
   2. The pixels are read back from the GPU. When Giga Sketch is connected they
      go to a shared-memory file (/dev/shm, i.e. RAM) that Giga Sketch reads
@@ -315,7 +315,7 @@ def write_png(path, rgba, width, height):
     rows[:, 1:] = rgba.reshape(height, width * 4)
     png = (b"\x89PNG\r\n\x1a\n"
            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
-           + chunk(b"sRGB", b"\x00")  # the pixels are display (sRGB) colours
+           + chunk(b"sRGB", b"\x00")  # the pixels are display (sRGB) colors
            + chunk(b"IDAT", zlib.compress(rows.tobytes(), 3))
            + chunk(b"IEND", b""))
     tmp = path + ".tmp"
@@ -422,7 +422,7 @@ def capture(context, space, region, reason):
     rgba = buffer_to_array(buf, width * height * 4).reshape(height, width, 4)
     rgba = np.flipud(rgba)  # GPU rows are bottom-up, PNG rows top-down
     if settings.transparent:
-        # The GPU gives premultiplied colour; PNG wants it straight.
+        # The GPU gives premultiplied color; PNG wants it straight.
         f = rgba.astype(np.float32)
         a = f[..., 3:4]
         f[..., :3] = np.where(a > 0, np.minimum(f[..., :3] * 255.0 / np.maximum(a, 1.0), 255.0), 0.0)

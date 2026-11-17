@@ -105,9 +105,9 @@ public:
     /// Draws the image (with its saturation) stretched into target, using
     /// the same mipmaps as the canvas. Used by the Board.
     virtual void paintInRect(QPainter &gc, const QRectF &target) const;
-    /// Colour at uv (0..1 across the image), for Ctrl+click on the Board.
+    /// Color at uv (0..1 across the image), for Ctrl+click on the Board.
     QColor pixelAtNormalized(const QPointF &uv);
-    /// Cheap average colour (cached), for "sort by colour".
+    /// Cheap average color (cached), for "sort by color".
     QColor averageColor() const;
 
     // --- Giga Sketch: sticky notes (GigaNote derives from this class) -------

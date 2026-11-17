@@ -169,7 +169,7 @@ void GigaColorDisc::setColor(const QColor &color)
 {
     float h, s, v;
     color.getHsvF(&h, &s, &v);
-    if (h >= 0) m_hue = h; // keep hue for greys
+    if (h >= 0) m_hue = h; // keep hue for grays
     m_sat = s;
     m_val = v;
     update();

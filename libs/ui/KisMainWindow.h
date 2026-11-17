@@ -443,7 +443,7 @@ public:
     /**
      * Giga Sketch interface modes. Classic (Studio mode) means Krita's own
      * menus and toolbars (krita5.xmlgui, including the user's toolbar
-     * customisations), Krita's menu wording, and no Giga panel strip or
+     * customizations), Krita's menu wording, and no Giga panel strip or
      * compact tweaks. Otherwise Giga Sketch's (gigasketch.xmlgui). Switching
      * rebuilds the menus and toolbars, the same way Configure Toolbars does.
      */

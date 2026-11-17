@@ -354,7 +354,7 @@ void GigaTextOptionsBar::updateFromProperties()
 
     m_orientation->setChecked(para.propertyOrDefault(KoSvgTextProperties::WritingModeId).toInt() != KoSvgText::HorizontalTB);
 
-    // Colour: the text's own fill if it has one, else the foreground colour.
+    // Color: the text's own fill if it has one, else the foreground color.
     QColor color = Qt::black;
     if (m_canvasResources) {
         color = m_canvasResources->foregroundColor().toQColor();
@@ -494,7 +494,7 @@ void GigaTextOptionsBar::slotColorClicked()
     const QColor current = m_canvasResources->foregroundColor().toQColor();
     const QColor chosen = QColorDialog::getColor(current, this, i18nc("@title:window", "Text Color"));
     if (!chosen.isValid()) return;
-    // Setting the foreground colour is how Krita colours text: the text
+    // Setting the foreground color is how Krita colors text: the text
     // tool applies it to the selected text, and new text uses it.
     m_canvasResources->setForegroundColor(KoColor(chosen, KoColorSpaceRegistry::instance()->rgb8()));
 }

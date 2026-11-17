@@ -804,7 +804,7 @@ void GigaToolStrokePoints::paintCircles(QPainter &gc, GigaLastStrokeTransform *s
     const bool label = m_radiusChanged.isValid() && m_radiusChanged.elapsed() < 1200;
     for (qreal at : centers) {
         const QPointF c = pixelToView(s->path().bentPointAt(at));
-        // Same two-tone line as the brush outline: readable on any colour.
+        // Same two-tone line as the brush outline: readable on any color.
         gc.setPen(QPen(QColor(0, 0, 0, 140), 3.0));
         gc.drawEllipse(c, r, r);
         gc.setPen(QPen(QColor(255, 255, 255, 220), 1.2));

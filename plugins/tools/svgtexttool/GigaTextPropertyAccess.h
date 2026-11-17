@@ -56,9 +56,9 @@ public:
     void applyParagraph(const QSet<KoSvgTextProperties::PropertyId> &ids,
                         const std::function<void(KoSvgTextProperties &)> &change);
 
-    /// Text colour: the text's own fill, else the foreground colour.
+    /// Text color: the text's own fill, else the foreground color.
     QColor textColor() const;
-    /// Krita colours text through the foreground colour.
+    /// Krita colors text through the foreground color.
     void setForegroundColor(const QColor &color);
 
     // --- font family with live preview (font picker) ---

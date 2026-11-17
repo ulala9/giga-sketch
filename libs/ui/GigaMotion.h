@@ -20,8 +20,8 @@ class QWidget;
  * window partly transparent without slow effects. So instead of fading the
  * widget itself we lay a short-lived "cover" over it:
  *
- *  - reveal(): the cover is filled with the widget's own background colour and
- *    fades away, so the content appears to fade in from the panel colour.
+ *  - reveal(): the cover is filled with the widget's own background color and
+ *    fades away, so the content appears to fade in from the panel color.
  *  - crossFade(): the cover shows a picture of the window taken before a big
  *    change (interface mode switch) and fades away, showing the new layout.
  *

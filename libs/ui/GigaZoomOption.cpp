@@ -79,7 +79,7 @@ QAction *GigaZoomOption::createAction(QObject *parent)
     QAction *action = new QAction(i18nc("@action:inmenu", "Ctrl+Space Zooms Toward Pointer"), parent);
     action->setCheckable(true);
     action->setToolTip(i18nc("@info:tooltip", "On: Ctrl+Space + drag zooms toward where you press, like the mouse wheel. "
-                                              "Off: it zooms around the centre of the canvas."));
+                                              "Off: it zooms around the center of the canvas."));
     action->setChecked(isTowardPointer());
     QObject::connect(action, &QAction::toggled, action, [](bool on) {
         if (on != isTowardPointer()) setTowardPointer(on);
