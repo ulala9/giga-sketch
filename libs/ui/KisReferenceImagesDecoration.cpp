@@ -12,6 +12,9 @@
 #include "KisDocument.h"
 #include "KisReferenceImagesLayer.h"
 #include "kis_layer_utils.h"
+#include "GigaNoteActions.h"
+#include "kis_canvas2.h"
+#include <QTimer>
 
 struct KisReferenceImagesDecoration::Private {
     struct Buffer
@@ -119,11 +122,23 @@ bool KisReferenceImagesDecoration::documentHasReferenceImages() const
     return view()->document()->referenceImagesLayer() != nullptr;
 }
 
-void KisReferenceImagesDecoration::drawDecoration(QPainter &gc, const QRectF &/*updateRect*/, const KisCoordinatesConverter *converter, KisCanvas2 */*canvas*/)
+void KisReferenceImagesDecoration::drawDecoration(QPainter &gc, const QRectF &/*updateRect*/, const KisCoordinatesConverter *converter, KisCanvas2 *canvas)
 {
     // TODO: can we use partial updates here?
 
     KisSharedPtr<KisReferenceImagesLayer> layer = d->layer.toStrongRef();
+
+    // Giga Sketch: "Keep readable" sticky notes follow this view's zoom. Set
+    // up on the first paint (the view is not ready when we are made), and
+    // deferred so no shape changes size in the middle of painting.
+    if (canvas && !layer.isNull() && !canvas->property("gigaNotesFollowZoom").toBool()) {
+        QPointer<KisCanvas2> c = canvas;
+        QTimer::singleShot(0, canvas, [c]() {
+            if (!c) return;
+            GigaNoteActions::followZoom(c);
+            GigaNoteActions::applyKeepReadable(c);
+        });
+    }
 
     if (!layer.isNull()) {
         QSizeF viewSize = view()->size();

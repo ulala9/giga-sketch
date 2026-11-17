@@ -71,6 +71,8 @@
 #include "GigaSaveDated.h"
 #include "GigaLastStrokeTransform.h"
 #include "GigaBlenderBridge.h"
+#include "GigaNoteActions.h"
+#include "GigaNote.h"
 #include "GigaZoomOption.h"
 #include <kis_action_registry.h>
 #include <QToolBar>
@@ -974,6 +976,14 @@ void KisMainWindow::gigaAddEditMenuItems()
         QAction *before = (at >= 0 && at + 1 < items.size()) ? items.at(at + 1) : nullptr;
         editMenu->insertAction(before, lastStroke);
     }
+    // Edit > Add Note, right after Transform Last Stroke.
+    QAction *addNote = actionCollection()->action(QStringLiteral("giga_add_note"));
+    if (editMenu && addNote && !editMenu->actions().contains(addNote)) {
+        const QList<QAction *> items = editMenu->actions();
+        const int at = lastStroke ? items.indexOf(lastStroke) : -1;
+        QAction *before = (at >= 0 && at + 1 < items.size()) ? items.at(at + 1) : nullptr;
+        editMenu->insertAction(before, addNote);
+    }
 
     // Layer > Refresh Blender Layers, just above the Convert submenu.
     QMenu *layerMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("Layer"), this));
@@ -990,6 +1000,9 @@ void KisMainWindow::gigaAddViewMenuItems()
     QMenu *viewMenu = qobject_cast<QMenu *>(guiFactory()->container(QStringLiteral("view"), this));
     if (!viewMenu) return;
     viewMenu->addSeparator();
+    if (QAction *showNotes = actionCollection()->action(QStringLiteral("giga_show_annotations"))) {
+        viewMenu->addAction(showNotes);
+    }
     if (d->gigaCompactAction) viewMenu->addAction(d->gigaCompactAction);
     if (!d->gigaZoomTowardPointer) d->gigaZoomTowardPointer = GigaZoomOption::createAction(this);
     viewMenu->addAction(d->gigaZoomTowardPointer);
@@ -3946,6 +3959,17 @@ void KisMainWindow::createActions()
     if (KisAction *lastStroke = actionManager->createAction("giga_transform_last_stroke")) {
         GigaLastStrokeTransform *controller = new GigaLastStrokeTransform(this);
         connect(lastStroke, &QAction::triggered, this, [this, controller]() { controller->trigger(viewManager()); });
+    }
+
+    // Giga Sketch: Edit > Add Note (gigasketch.action, no default shortcut).
+    if (KisAction *addNote = actionManager->createAction("giga_add_note")) {
+        connect(addNote, &QAction::triggered, this, [this]() { GigaNoteActions::addNoteFromMenu(viewManager()); });
+    }
+
+    // Giga Sketch: View > Show Annotations (sticky notes on/off, remembered).
+    if (KisAction *showNotes = actionManager->createAction("giga_show_annotations")) {
+        showNotes->setChecked(GigaNote::notesShown());
+        connect(showNotes, &QAction::toggled, this, [this](bool shown) { GigaNoteActions::setNotesShown(viewManager(), shown); });
     }
 
     // Giga Sketch: Layer > Refresh Blender Layers (gigasketch.action, no default shortcut).

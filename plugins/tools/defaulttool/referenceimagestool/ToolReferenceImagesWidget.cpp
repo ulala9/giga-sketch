@@ -29,6 +29,12 @@
 #include <QSpinBox>
 
 #include <GigaReferenceBoard.h>
+#include <GigaNote.h>
+#include <GigaNoteActions.h>
+#include <kis_canvas2.h>
+#include <QHBoxLayout>
+#include <QToolButton>
+#include <QCheckBox>
 
 #include "ToolReferenceImages.h"
 
@@ -47,7 +53,13 @@ struct ToolReferenceImagesWidget::Private {
     QComboBox *order {nullptr};
     QComboBox *shape {nullptr};
     QSpinBox *spacing {nullptr};
+    QCheckBox *keepNotes {nullptr};
     QPushButton *resample {nullptr};
+
+    // Giga Sketch: sticky notes section
+    QWidget *noteOptions {nullptr};
+    QComboBox *noteSize {nullptr};
+    QCheckBox *noteReadable {nullptr};
 };
 
 ToolReferenceImagesWidget::ToolReferenceImagesWidget(ToolReferenceImages *tool, KisCanvasResourceProvider */*provider*/, QWidget *parent)
@@ -135,6 +147,7 @@ ToolReferenceImagesWidget::ToolReferenceImagesWidget(ToolReferenceImages *tool, 
     d->ui->referenceImageLocationCombobox->addItem(i18n("Link to Image"));
     connect(d->ui->referenceImageLocationCombobox, SIGNAL(currentIndexChanged(int)), this, SLOT(slotSaveLocationChanged(int)));
 
+    gigaSetupNotesSection();
     gigaSetupBoardSection();
 
     updateVisibility(false); // no selection when we start
@@ -206,6 +219,9 @@ void ToolReferenceImagesWidget::gigaSetupBoardSection()
     d->spacing->setRange(0, 500);
     d->spacing->setSuffix(i18n(" px"));
     form->addRow(i18n("Spacing:"), d->spacing);
+    d->keepNotes = new QCheckBox(i18n("Keep notes in place"), optionsBox);
+    d->keepNotes->setToolTip(i18n("Arrange moves only the pictures, not the sticky notes"));
+    form->addRow(QString(), d->keepNotes);
     d->ui->verticalLayout->addWidget(optionsBox);
 
     QWidget *boardBox = new QWidget(this);
@@ -239,20 +255,144 @@ void ToolReferenceImagesWidget::gigaSetupBoardSection()
         connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this]() { gigaSaveSettings(); });
     }
     connect(d->spacing, qOverload<int>(&QSpinBox::valueChanged), this, [this]() { gigaSaveSettings(); });
+    connect(d->keepNotes, &QCheckBox::toggled, this, [this]() { gigaSaveSettings(); });
     // The Board panel changes the same settings.
     connect(GigaReferenceBoard::Notifier::instance(), &GigaReferenceBoard::Notifier::settingsChanged, this,
             [this]() { gigaLoadSettings(); });
 }
 
+void ToolReferenceImagesWidget::gigaSetupNotesSection()
+{
+    // Giga Sketch: sticky notes. "Add Note" is always there; the colour and
+    // text size rows show when notes are selected.
+    QFrame *line = new QFrame(this);
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Sunken);
+    d->ui->verticalLayout->addWidget(line);
+
+    QPushButton *addNote = new QPushButton(KisIconUtils::loadIcon("draw-text"), i18n("Add Note"), this);
+    addNote->setToolTip(i18n("Add a sticky note: click on the canvas to place it.\n"
+                             "Notes are never painted into the image or exported."));
+    d->ui->verticalLayout->addWidget(addNote);
+    connect(addNote, SIGNAL(clicked()), d->tool, SLOT(gigaAddNote()));
+
+    d->noteOptions = new QWidget(this);
+    QFormLayout *form = new QFormLayout(d->noteOptions);
+    form->setContentsMargins(0, 0, 0, 0);
+    form->setSpacing(4);
+
+    QWidget *swatches = new QWidget(d->noteOptions);
+    QHBoxLayout *row = new QHBoxLayout(swatches);
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(3);
+    const QVector<QColor> colors = GigaNote::presetColors();
+    const QStringList names = GigaNote::presetColorNames();
+    auto applyColor = [this](const QColor &color) {
+        auto *canvas = dynamic_cast<KisCanvas2*>(d->tool->canvas());
+        GigaNoteActions::changeNotes(canvas, GigaNoteActions::selectedNotes(d->tool->koSelection()),
+                                     kundo2_i18n("Change Note Colour"),
+                                     [color](GigaNote::State &s) { s.color = color; });
+    };
+    for (int i = 0; i < colors.size(); ++i) {
+        QToolButton *swatch = new QToolButton(swatches);
+        swatch->setFixedSize(20, 20);
+        swatch->setToolTip(names.value(i));
+        swatch->setAutoRaise(false);
+        swatch->setStyleSheet(QString("QToolButton { background: %1; border: 1px solid %2; border-radius: 4px; }")
+                                  .arg(colors[i].name(), colors[i].darker(150).name()));
+        const QColor color = colors[i];
+        connect(swatch, &QToolButton::clicked, this, [applyColor, color]() { applyColor(color); });
+        row->addWidget(swatch);
+    }
+    QToolButton *custom = new QToolButton(swatches);
+    custom->setText(QStringLiteral("…"));
+    custom->setFixedHeight(20);
+    custom->setToolTip(i18n("Custom colour"));
+    connect(custom, &QToolButton::clicked, this, [this, applyColor]() {
+        const QVector<GigaNote*> notes = GigaNoteActions::selectedNotes(d->tool->koSelection());
+        if (notes.isEmpty()) return;
+        const QColor color = GigaNoteActions::askColor(notes.first()->color());
+        if (color.isValid()) applyColor(color);
+    });
+    row->addWidget(custom);
+    row->addStretch(1);
+    form->addRow(i18n("Note colour:"), swatches);
+
+    d->noteSize = new QComboBox(d->noteOptions);
+    d->noteSize->addItem(i18nc("note text size", "Small"));
+    d->noteSize->addItem(i18nc("note text size", "Medium"));
+    d->noteSize->addItem(i18nc("note text size", "Large"));
+    form->addRow(i18n("Text size:"), d->noteSize);
+    connect(d->noteSize, qOverload<int>(&QComboBox::activated), this, [this](int size) {
+        auto *canvas = dynamic_cast<KisCanvas2*>(d->tool->canvas());
+        GigaNoteActions::changeNotes(canvas, GigaNoteActions::selectedNotes(d->tool->koSelection()),
+                                     kundo2_i18n("Change Note Text Size"),
+                                     [size](GigaNote::State &s) { s.textSize = size; });
+    });
+
+    d->noteReadable = new QCheckBox(i18n("Keep readable at any zoom"), d->noteOptions);
+    d->noteReadable->setToolTip(i18n("The note stays the same size on screen when you zoom"));
+    form->addRow(QString(), d->noteReadable);
+    connect(d->noteReadable, &QCheckBox::clicked, this, [this](bool keep) {
+        auto *canvas = dynamic_cast<KisCanvas2*>(d->tool->canvas());
+        GigaNoteActions::changeNotes(canvas, GigaNoteActions::selectedNotes(d->tool->koSelection()),
+                                     keep ? kundo2_i18n("Keep Note Readable") : kundo2_i18n("Note Follows Zoom"),
+                                     [keep](GigaNote::State &s) { s.keepReadable = keep; });
+        GigaNoteActions::applyKeepReadable(canvas);
+    });
+
+    d->ui->verticalLayout->addWidget(d->noteOptions);
+    d->noteOptions->setVisible(false);
+}
+
+void ToolReferenceImagesWidget::gigaUpdateNotesSection(KoSelection *selection)
+{
+    if (!d->noteOptions) return;
+    QList<KoShape*> shapes = selection->selectedEditableShapes();
+    bool anyNote = false;
+    bool anyImage = false;
+    bool allReadable = true;
+    int size = -1;
+    Q_FOREACH (KoShape *shape, shapes) {
+        auto *reference = dynamic_cast<KisReferenceImage*>(shape);
+        if (!reference) continue;
+        if (reference->isNote()) {
+            anyNote = true;
+            allReadable &= static_cast<GigaNote*>(reference)->keepReadable();
+            const int noteSize = static_cast<GigaNote*>(reference)->textSize();
+            size = (size == -1 || size == noteSize) ? noteSize : -2; // -2 = mixed
+        } else {
+            anyImage = true;
+        }
+    }
+    d->noteOptions->setVisible(anyNote);
+    {
+        KisSignalsBlocker blocker(d->noteSize);
+        d->noteSize->setCurrentIndex(size >= 0 ? size : -1);
+    }
+    {
+        KisSignalsBlocker blocker(d->noteReadable);
+        d->noteReadable->setChecked(anyNote && allReadable);
+    }
+    if (anyNote && !anyImage) {
+        // Only notes: the picture options mean nothing for them.
+        d->ui->saturationSlider->setVisible(false);
+        d->ui->referenceImageLocationCombobox->setVisible(false);
+        d->ui->saveLocationLabel->setVisible(false);
+        d->ui->chkKeepAspectRatio->setVisible(false);
+    }
+}
+
 void ToolReferenceImagesWidget::gigaLoadSettings()
 {
     const GigaReferenceBoard::Settings s = GigaReferenceBoard::Settings::load();
-    KisSignalsBlocker blocker(d->normalizeMode, d->style, d->order, d->shape, d->spacing);
+    KisSignalsBlocker blocker(d->normalizeMode, d->style, d->order, d->shape, d->spacing, d->keepNotes);
     d->normalizeMode->setCurrentIndex(int(s.normalizeMode));
     d->style->setCurrentIndex(int(s.style));
     d->order->setCurrentIndex(int(s.order));
     d->shape->setCurrentIndex(int(s.targetShape));
     d->spacing->setValue(s.spacing);
+    d->keepNotes->setChecked(s.keepNotesInPlace);
 }
 
 void ToolReferenceImagesWidget::gigaSaveSettings()
@@ -263,6 +403,7 @@ void ToolReferenceImagesWidget::gigaSaveSettings()
     s.order = GigaReferenceBoard::Order(d->order->currentIndex());
     s.targetShape = GigaReferenceBoard::TargetShape(d->shape->currentIndex());
     s.spacing = d->spacing->value();
+    s.keepNotesInPlace = d->keepNotes->isChecked();
     s.save();
 }
 
@@ -316,6 +457,7 @@ void ToolReferenceImagesWidget::selectionChanged(KoSelection *selection)
 
 
     updateVisibility(anySelected);
+    gigaUpdateNotesSection(selection);
 
     // Giga Sketch: show what Resample would do before you press it.
     if (d->resample) {

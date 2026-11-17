@@ -31,6 +31,33 @@
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
     </Action>
+    <Action name="giga_add_note">
+      <icon>draw-text</icon>
+      <text>Add Note</text>
+      <whatsThis>Add a sticky note under the pointer (or in the middle of the view). Notes sit on top of the canvas like reference images: they are never painted into the image or exported, and they are saved in the .kra.</whatsThis>
+      <toolTip>Add a sticky note</toolTip>
+      <iconText>Add Note</iconText>
+      <activationFlags>1</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+  </Actions>
+  <Actions category="View">
+    <text>View</text>
+    <Action name="giga_show_annotations">
+      <icon>draw-text</icon>
+      <text>Show Annotations</text>
+      <whatsThis>Show or hide every sticky note. Hidden notes are kept and come back when you turn this on again.</whatsThis>
+      <toolTip>Show or hide the sticky notes</toolTip>
+      <iconText>Show Annotations</iconText>
+      <activationFlags>0</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>true</isCheckable>
+      <statusTip></statusTip>
+    </Action>
   </Actions>
   <Actions category="Layer">
     <text>Layer</text>

@@ -61,6 +61,7 @@
 #include <kis_filter_configuration.h>
 #include "KisReferenceImagesLayer.h"
 #include "KisReferenceImage.h"
+#include "GigaNote.h"
 #include <KoColorSet.h>
 
 #include "KisDocument.h"
@@ -1567,6 +1568,11 @@ KisNodeSP KisKraLoader::loadReferenceImagesLayer(const QDomElement &elem, KisIma
             auto* reference = KisReferenceImage::fromXml(child);
             reference->setZIndex(layer->shapes().size());
             layer->addShape(reference);
+        } else if (child.nodeName().toLower() == GigaNote::xmlTagName()) {
+            // Giga Sketch: sticky notes (stock Krita skips this element)
+            GigaNote *note = GigaNote::fromXml(child);
+            note->setZIndex(layer->shapes().size());
+            layer->addShape(note);
         }
     }
 

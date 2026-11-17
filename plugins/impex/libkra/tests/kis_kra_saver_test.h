@@ -37,6 +37,9 @@ private Q_SLOTS:
 
     void testExportToReadonly();
 
+    // Giga Sketch: sticky notes in the reference layer
+    void testRoundTripGigaNotes();
+
 };
 
 #endif

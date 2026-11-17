@@ -35,6 +35,13 @@
 #include <GigaReferenceBoard.h>
 #include <KisMainWindow.h>
 #include <QDockWidget>
+#include <QKeyEvent>
+#include <QMimeData>
+#include <KoPointerEvent.h>
+#include <GigaNote.h>
+#include <GigaNoteActions.h>
+#include <GigaNoteEditor.h>
+#include <kis_clipboard.h>
 
 #include "ToolReferenceImagesWidget.h"
 #include "KisReferenceImageCollection.h"
@@ -66,6 +73,8 @@ void ToolReferenceImages::activate(const QSet<KoShape*> &shapes)
 
 void ToolReferenceImages::deactivate()
 {
+    gigaSetPlacingNote(false);
+    GigaNoteEditor::finishCurrent();
     DefaultTool::deactivate();
 }
 
@@ -374,6 +383,19 @@ QMenu* ToolReferenceImages::popupActionsMenu()
                               : i18n("Resample to Current Size (%1)", summary),
             this, SLOT(gigaResample()));
         resample->setEnabled(!summary.isEmpty());
+
+        // Giga Sketch: sticky notes. "Add Note" puts it where you right-clicked.
+        m_contextMenu->addSeparator();
+        auto *kisCanvas = dynamic_cast<KisCanvas2*>(canvas());
+        const QPointF clickPos = GigaNoteActions::defaultPosition(kisCanvas);
+        m_contextMenu->addAction(i18n("Add Note"), this, [kisCanvas, clickPos]() {
+            GigaNoteActions::addNote(kisCanvas, clickPos, QString(), true);
+        });
+        const QVector<GigaNote*> notes = GigaNoteActions::selectedNotes(koSelection());
+        if (!notes.isEmpty()) {
+            GigaNoteActions::addNoteMenuItems(m_contextMenu.data(), kisCanvas, notes);
+            m_contextMenu->addAction(KisIconUtils::loadIcon("edit-delete"), i18n("Delete"), this, SLOT(gigaDeleteSelected()));
+        }
     }
 
     return m_contextMenu.data();
@@ -393,12 +415,30 @@ void ToolReferenceImages::copy() const
         KisReferenceImage *reference = dynamic_cast<KisReferenceImage*>(shape);
         KIS_SAFE_ASSERT_RECOVER_RETURN(reference);
         QClipboard *cb = QApplication::clipboard();
+        if (reference->isNote()) {
+            // Giga Sketch: a note copies its text (rich and plain).
+            GigaNote *note = static_cast<GigaNote*>(reference);
+            QMimeData *data = new QMimeData();
+            data->setHtml(note->html());
+            data->setText(note->plainText());
+            cb->setMimeData(data);
+            return;
+        }
         cb->setImage(reference->getImage());
     }
 }
 
 bool ToolReferenceImages::paste()
 {
+    // Giga Sketch: text without a picture on the clipboard becomes a note.
+    const QMimeData *data = QApplication::clipboard()->mimeData();
+    if (data && data->hasText() && !data->text().trimmed().isEmpty()
+        && !KisClipboard::instance()->hasClip() && !KisClipboard::instance()->hasUrls()) {
+        GigaNoteActions::addNote(dynamic_cast<KisCanvas2*>(canvas()),
+                                 GigaNoteActions::defaultPosition(dynamic_cast<KisCanvas2*>(canvas())),
+                                 data->text());
+        return true;
+    }
     pasteReferenceImage();
     return true;
 }
@@ -548,4 +588,84 @@ void ToolReferenceImages::gigaResample()
     if (kisCanvas && kisCanvas->viewManager()) {
         kisCanvas->viewManager()->showFloatingMessage(i18n("Resampled: %1", summary), QIcon());
     }
+}
+
+// --- Giga Sketch: sticky notes ----------------------------------------------
+
+void ToolReferenceImages::gigaAddNote()
+{
+    gigaSetPlacingNote(true);
+    auto kisCanvas = dynamic_cast<KisCanvas2*>(canvas());
+    if (kisCanvas && kisCanvas->viewManager()) {
+        kisCanvas->viewManager()->showFloatingMessage(i18n("Click on the canvas to place the note (Esc cancels)"), QIcon());
+    }
+}
+
+void ToolReferenceImages::gigaSetPlacingNote(bool placing)
+{
+    if (m_gigaPlacingNote == placing) return;
+    m_gigaPlacingNote = placing;
+    if (placing) {
+        useCursor(Qt::CrossCursor);
+    } else {
+        // DefaultTool picks its cursor again on the next mouse move.
+        useCursor(Qt::ArrowCursor);
+    }
+}
+
+void ToolReferenceImages::mousePressEvent(KoPointerEvent *event)
+{
+    if (m_gigaPlacingNote && event->button() == Qt::LeftButton) {
+        gigaSetPlacingNote(false);
+        GigaNoteActions::addNote(dynamic_cast<KisCanvas2*>(canvas()), event->point, QString(), true);
+        event->accept();
+        return;
+    }
+    DefaultTool::mousePressEvent(event);
+}
+
+void ToolReferenceImages::mouseMoveEvent(KoPointerEvent *event)
+{
+    if (m_gigaPlacingNote) {
+        useCursor(Qt::CrossCursor); // keep the crosshair over shapes too
+        return;
+    }
+    DefaultTool::mouseMoveEvent(event);
+}
+
+void ToolReferenceImages::keyPressEvent(QKeyEvent *event)
+{
+    if (m_gigaPlacingNote && event->key() == Qt::Key_Escape) {
+        gigaSetPlacingNote(false);
+        event->accept();
+        return;
+    }
+    DefaultTool::keyPressEvent(event);
+}
+
+void ToolReferenceImages::mouseDoubleClickEvent(KoPointerEvent *event)
+{
+    // Giga Sketch: double-click a note to type in it; on its top strip, to
+    // collapse/expand it. Double-clicking a picture still does nothing.
+    KoShapeManager *manager = shapeManager();
+    if (!manager) return;
+    KoShape *shape = manager->shapeAt(event->point, KoFlake::ShapeOnTop);
+    auto *reference = dynamic_cast<KisReferenceImage*>(shape);
+    if (!reference || !reference->isNote() || !reference->isVisible()) return;
+    GigaNote *note = static_cast<GigaNote*>(reference);
+    auto *kisCanvas = dynamic_cast<KisCanvas2*>(canvas());
+    const QPointF local = note->absoluteTransformation().inverted().map(event->point);
+    if (note->stripRect().contains(local)) {
+        const bool collapse = !note->isCollapsed();
+        GigaNoteActions::changeNotes(kisCanvas, {note}, collapse ? kundo2_i18n("Collapse Note") : kundo2_i18n("Expand Note"),
+                                     [collapse](GigaNote::State &s) { s.collapsed = collapse; });
+    } else {
+        GigaNoteEditor::edit(kisCanvas, note);
+    }
+    event->accept();
+}
+
+void ToolReferenceImages::gigaDeleteSelected()
+{
+    deleteSelection();
 }

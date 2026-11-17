@@ -817,3 +817,42 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Blender-side tests: `blender --factory-startup --python test.py` with a `bpy.app.timers` callback calling the
   operator under `context.temp_override(window, area, region, space_data)`, then `wm.quit_blender()` (opens a
   window; `-b` has no viewport). A fake Giga server in Python on a short socket path covers refresh/ack.
+
+## Sticky notes / Annotations (feature/annotations, 2026-11-16)
+- A note is a **subclass of KisReferenceImage**: `libs/ui/GigaNote.{h,cpp}`. It lives in the reference layer, so
+  select/move/stack/undo/Board/Send to Board all work unchanged. `KisReferenceImage` got virtual `saveXml`,
+  `saveImage`, `loadImage`, `paintInRect` and `isNote()` / `hiddenOnCanvas()` (additions only).
+- Saved as `<giga-note>` inside the reference layer's XML (stock Krita reads only `referenceimage`, so it skips
+  notes); no picture file. Loaders: `kis_kra_loader.cpp` (loadReferenceImagesLayer), `KisReferenceImageCollection`
+  (.krf). Tests: `kis_kra_saver_test` testRoundTripGigaNotes, `TestGigaNoteCollection` (plugins/tools/defaulttool/tests).
+- Units: text laid out in "note units" (≈ 1 screen px at the zoom the note was made); `contentScale()` = document
+  points per unit. Width is the user's (setSize keeps it, min 80 units); height always follows the text (relayout()).
+  `State::width` is in **note units** so undo survives Keep readable rescaling.
+- Drawing: `paint()` draws a rounded box, darker top strip (`stripRect()`), QTextDocument text (font = app font,
+  no hinting, design metrics, list indent 18 units). Text colour auto (luminance). `normalizeFonts()` strips explicit
+  sizes/families/colours from html (pasted text, editor's toHtml).
+- Shared actions: `libs/ui/GigaNoteActions.{h,cpp}` (addNote, changeNotes = one StateCommand, right-click items,
+  duplicate, Edit > Add Note, Keep readable follow-zoom, Show Annotations). `pointsPerScreenPixel()` = 1/√|det|
+  of documentToWidget.
+- Editor: `libs/ui/GigaNoteEditor.{h,cpp}`, a QTextEdit child of the canvas widget, upright, font scaled to screen.
+  Takes every ShortcutOverride except Save/SaveAs (B/E type letters). Live: each change → note->setHtml (box grows).
+  Finish = Esc / Ctrl+Enter / **app-wide mouse/tablet press outside** (event filter on qApp; middle button ignored
+  for panning). Not on focus-out: menus and window activation move focus (made the editor close at once in tests).
+  Commit = StateCommand "Edit Note" with setSkipFirstRedo. New note left empty → `undoStack()->undo()` of its add
+  (only if the stack index is still the one right after the add).
+- Tool (`ToolReferenceImages`): Add Note button (placement mode, crosshair, Esc cancels), double-click note = edit,
+  double-click strip = collapse, right-click menu (Add Note at the click, Note Colour/Text Size/Collapse/Keep
+  Readable/Duplicate/Delete), paste text (no image/urls on the clipboard) = new note, copy note = html + text.
+  Options: Notes section (colour swatches, text size, keep readable); picture-only options hide when only notes are
+  selected. Right-click in this tool shows the tool menu, not the popup palette (KisPopupWidgetAction asks the tool).
+- Edit > Add Note (`giga_add_note`, no shortcut), View > Show Annotations (`giga_show_annotations`, KisConfig
+  `gigaShowAnnotations`), both in gigasketch.action, menu items added in code (`gigaAddEditMenuItems`/`gigaAddViewMenuItems`).
+  Adding a note while hidden turns notes back on.
+- Keep readable: per note, `applyKeepReadable(canvas)` sets contentScale to the view's zoom on sigCanvasStateChanged
+  (not an undo step). Hooked per canvas on the first paint of KisReferenceImagesDecoration (deferred, singleShot).
+- Board: Normalize skips notes (`withoutNotes()`), Arrange skips them when Settings::keepNotesInPlace (default on,
+  key `gigaRefBoardKeepNotes`, checkbox in the tool options). Resample skips them (no pixels). Ctrl+click colour
+  on a note does nothing (pixelAtNormalized invalid).
+- Self-test `notes` (38 checks).
+- Known limits: resizing several shapes at once uses post-scaling (text scales with it); notes can't be edited on
+  the Board panel; rotated canvas → editor upright at the note's text corner.

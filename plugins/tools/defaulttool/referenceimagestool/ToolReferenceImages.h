@@ -36,7 +36,12 @@ public:
         return 3;
     }
 
-    void mouseDoubleClickEvent(KoPointerEvent */*event*/) override {}
+    void mouseDoubleClickEvent(KoPointerEvent *event) override; // Giga Sketch: edit/collapse notes
+
+    // Giga Sketch: sticky notes (click to place after Add Note, Esc cancels)
+    void mousePressEvent(KoPointerEvent *event) override;
+    void mouseMoveEvent(KoPointerEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
     bool hasSelection() override;
 
@@ -75,6 +80,10 @@ public Q_SLOTS:
     void gigaSendAllToCanvas();
     void gigaResample();
 
+    // Giga Sketch: sticky notes
+    void gigaAddNote();          ///< next click on the canvas places a note
+    void gigaDeleteSelected();
+
     void slotNodeAdded(KisNodeSP node);
     void slotNodeAdded(KisNodeSP node, KisNodeAdditionFlags flags);
     void slotSelectionChanged();
@@ -94,6 +103,8 @@ private:
 
     KisDocument *document() const;
     QVector<KisReferenceImage*> gigaTargets() const;
+    void gigaSetPlacingNote(bool placing);
+    bool m_gigaPlacingNote = false;
     void setReferenceImageLayer(KisSharedPtr<KisReferenceImagesLayer> layer);
 };
 
