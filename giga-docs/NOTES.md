@@ -840,7 +840,12 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   for panning). Not on focus-out: menus and window activation move focus (made the editor close at once in tests).
   The outside-click filter is installed one event-loop turn after opening, plus 250 ms grace: the placing click
   still travels up to the canvas's parents (Viewport, KisView…) and would close the box at once (seen 2026-11-16).
-  Commit = StateCommand "Edit Note" with setSkipFirstRedo. New note left empty → a normal remove command.
+  Commit = StateCommand "Edit Note" with setSkipFirstRedo. New note left empty → a normal remove command, unless
+  the closing click was on the note itself or within 14 screen px of it (handles): that is "move/resize it", the note
+  stays (user report 2026-11-16: Edit > Add Note, then move/scale → note vanished).
+  Edit > Add Note only switches tool if needed: re-requesting the active tool restarts it (deactivate → editor closes).
+  Self-test gotcha: a ShortcutOverride the editor doesn't take goes on to the canvas → KisShortcutMatcher thinks the
+  key is held (S+click = temporary tool in gigasketch.profile → tool restart). Send the KeyRelease.
   **Never call `undoStack()->undo()` from here:** KisDocument's undo loops processEvents (ignoring input) until the
   image is idle; the user's app froze on Edit > Add Note in a big file (first note creates the reference layer).
 - Diagnostic self-test `notesfreeze` (by name only): big 8-layer document, timings; `GIGA_NOTES_FILE=<kra>`,

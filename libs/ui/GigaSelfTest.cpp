@@ -2653,6 +2653,11 @@ void testNotes(KisMainWindow *w)
         QKeyEvent saveOverride(QEvent::ShortcutOverride, Qt::Key_S, Qt::ControlModifier);
         QCoreApplication::sendEvent(editor, &saveOverride);
         report(!saveOverride.isAccepted(), "notes-editor-lets-save-through", QString());
+        {
+            // The un-taken Ctrl+S went on to the canvas, which now thinks S is held: let it go.
+            QKeyEvent release(QEvent::KeyRelease, Qt::Key_S, Qt::ControlModifier);
+            QCoreApplication::sendEvent(canvas->canvasWidget(), &release);
+        }
         for (const QChar c : QStringLiteral("Hello b")) {
             const int key = c.isSpace() ? int(Qt::Key_Space) : int(Qt::Key_A) + (c.toLower().unicode() - 'a');
             QKeyEvent press(QEvent::KeyPress, key, c.isUpper() ? Qt::ShiftModifier : Qt::NoModifier, QString(c));
@@ -2693,6 +2698,35 @@ void testNotes(KisMainWindow *w)
         pump(5);
         report(withEmpty == 2 && GigaNote::notesOf(layer.data()).size() == 1, "notes-empty-new-removed",
                QStringLiteral("%1 -> %2").arg(withEmpty).arg(GigaNote::notesOf(layer.data()).size()));
+
+        // Edit > Add Note, then a click on the new note's strip (to move it): the
+        // editor closes but the empty note stays, selected.
+        {
+            addAction->trigger();
+            pump(5);
+            GigaNote *fresh = GigaNoteEditor::current() ? GigaNoteEditor::current()->note() : nullptr;
+            { QElapsedTimer gt; gt.start(); while (gt.elapsed() < 300) pump(1); }
+            QWidget *cw = canvas->canvasWidget();
+            if (fresh) {
+                const QPointF onStrip = fresh->absoluteTransformation().map(fresh->stripRect().center());
+                const QPointF p = canvas->coordinatesConverter()->documentToWidget(onStrip);
+                QEnterEvent enter(p, p, cw->mapToGlobal(p));
+                QCoreApplication::sendEvent(cw, &enter);
+                QMouseEvent press(QEvent::MouseButtonPress, p, cw->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(cw, &press);
+                QMouseEvent release(QEvent::MouseButtonRelease, p, cw->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(cw, &release);
+                pump(5);
+            }
+            const bool kept = fresh && layer->shapes().contains(fresh) && !GigaNoteEditor::current();
+            report(kept, "notes-click-on-new-note-keeps-it", fresh ? QStringLiteral("in layer %1, editor %2")
+                       .arg(layer->shapes().contains(fresh)).arg(GigaNoteEditor::current() != nullptr) : QStringLiteral("no editor"));
+            if (kept) {
+                // Tidy up so the counts below stay as before.
+                canvas->addCommand(layer->removeReferenceImages(doc, {fresh}));
+                pump(3);
+            }
+        }
 
         // Double-click opens the editor again.
         KoToolBase *refTool = KoToolManager::instance()->toolById(canvas, QStringLiteral("ToolReferenceImages"));

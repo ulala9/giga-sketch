@@ -283,7 +283,11 @@ void addNoteFromMenu(KisViewManager *viewManager)
     if (!viewManager || !viewManager->canvasBase()) return;
     KisCanvas2 *canvas = viewManager->canvasBase();
     const QPointF position = defaultPosition(canvas); // before the tool switch moves focus
-    KoToolManager::instance()->switchToolRequested(QStringLiteral("ToolReferenceImages"));
+    // Switching to the tool it is already in would restart the tool, which
+    // closes the text box we are about to open.
+    if (KoToolManager::instance()->activeToolId() != QLatin1String("ToolReferenceImages")) {
+        KoToolManager::instance()->switchToolRequested(QStringLiteral("ToolReferenceImages"));
+    }
     addNote(canvas, position, QString(), true);
 }
 

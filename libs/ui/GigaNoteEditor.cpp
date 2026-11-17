@@ -207,7 +207,7 @@ void GigaNoteEditor::finish()
         m_note->update();
         const GigaNote::State after = m_note->state();
 
-        if (m_isNewNote && m_note->isEmpty() && m_canvas) {
+        if (m_isNewNote && m_note->isEmpty() && !m_keepEvenIfEmpty && m_canvas) {
             // Nothing typed into a new note: remove it. A normal remove
             // command, NOT undoStack()->undo(): the document's undo waits
             // (processing events, ignoring input) until the image is idle,
@@ -285,6 +285,21 @@ bool GigaNoteEditor::eventFilter(QObject *watched, QEvent *event)
     if (!widget) return false; // the same press also arrives for its QWindow
     if (widget == this || isAncestorOf(widget)) return false;
     if (QApplication::activePopupWidget()) return false; // our right-click menu
+
+    // A click on the note itself (or its resize handles just outside it)
+    // means "move or resize it": finish typing but keep the note, even
+    // if it is still empty. The click goes on to the tool as usual.
+    if (widget == parentWidget() && m_canvas && noteStillExists()) {
+        QPointF pos;
+        if (type == QEvent::MouseButtonPress) pos = static_cast<QMouseEvent *>(event)->position();
+        else pos = static_cast<QTabletEvent *>(event)->position();
+        const QPointF doc = m_canvas->coordinatesConverter()->widgetToDocument(pos);
+        const QPointF local = m_note->absoluteTransformation().inverted().map(doc);
+        const qreal margin = 14.0 * GigaNoteActions::pointsPerScreenPixel(m_canvas);
+        if (QRectF(QPointF(), m_note->size()).adjusted(-margin, -margin, margin, margin).contains(local)) {
+            m_keepEvenIfEmpty = true;
+        }
+    }
     if (qEnvironmentVariableIsSet("GIGA_NOTE_TRACE")) {
         fprintf(stderr, "GIGA_SELFTEST INFO editor closed by press on %s (%s) type %d\n",
                 watched->metaObject()->className(), qPrintable(watched->objectName()), int(type));

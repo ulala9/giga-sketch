@@ -78,6 +78,7 @@ private:
     GigaNote::State m_before;
     bool m_isNewNote = false;
     bool m_finishing = false;
+    bool m_keepEvenIfEmpty = false; ///< closed by a click on the note itself (to move/resize it)
     QElapsedTimer m_opened;
 };
 
