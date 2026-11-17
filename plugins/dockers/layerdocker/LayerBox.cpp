@@ -750,11 +750,13 @@ void LayerBox::gigaSetupPanel()
 
     row->addWidget(makeButton("groupLayer", i18nc("@info:tooltip", "Group the selected layers"), "create_quick_group"));
 
+    // Delete sits at the far right, after Group (user choice 2026-11-17).
+    row->addWidget(m_wdgLayerBox->bnDelete);
+
     // The .ui row has a stretching spacer after the (now hidden) original
     // buttons, so anything inserted at the front sits on the left.
     row->insertWidget(0, m_wdgLayerBox->bnAdd);
     row->insertWidget(1, m_wdgLayerBox->bnDuplicate);
-    row->insertWidget(2, m_wdgLayerBox->bnDelete);
 
     gigaUpdateLockButtons();
 }

@@ -1748,9 +1748,16 @@ void testLayerButtons(KisMainWindow *w)
     }
     const bool visible = !add->isHidden() && !dup->isHidden() && !del->isHidden();
     const bool order = add->x() < dup->x() && dup->x() < del->x();
-    const bool adjacent = dup->x() - (add->x() + add->width()) < 12 && del->x() - (dup->x() + dup->width()) < 12;
+    const bool adjacent = dup->x() - (add->x() + add->width()) < 12;
     report(visible && order && adjacent, "layerbuttons-order",
            QStringLiteral("x: new %1, duplicate %2, delete %3").arg(add->x()).arg(dup->x()).arg(del->x()));
+    // Delete is the rightmost button of the row (user choice 2026-11-17).
+    int rightmost = -1;
+    for (QToolButton *b : del->parentWidget()->findChildren<QToolButton *>(QString(), Qt::FindDirectChildrenOnly)) {
+        if (!b->isHidden() && qAbs(b->y() - del->y()) < 4) rightmost = qMax(rightmost, b->x());
+    }
+    report(rightmost == del->x(), "layerbuttons-delete-right",
+           QStringLiteral("delete x %1, rightmost button x %2").arg(del->x()).arg(rightmost));
 
     // (Clicking is not tested: in a headless run Krita never gets an active
     // layer, so Duplicate Layer stays disabled. The button just triggers
