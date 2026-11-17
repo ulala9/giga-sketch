@@ -174,6 +174,8 @@ KRITAUI_EXPORT GeometryCommand *moveOnBoard(KisReferenceImage *image, const QRec
 /// Moves several Board images in one undo step (a drag of a selection).
 /// newRects[i] is where images[i] goes.
 KRITAUI_EXPORT GeometryCommand *moveOnBoard(const QVector<KisReferenceImage *> &images, const QVector<QRectF> &newRects);
+/// Same, named "Scale on Reference Board" in the undo history (corner handles).
+KRITAUI_EXPORT GeometryCommand *scaleOnBoard(const QVector<KisReferenceImage *> &images, const QVector<QRectF> &newRects);
 
 /// Where the next new Board images go: a group laid out with the Board
 /// style, under what is already there.

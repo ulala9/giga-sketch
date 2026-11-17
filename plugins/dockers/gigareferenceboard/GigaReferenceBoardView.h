@@ -70,6 +70,10 @@ public:
     Q_INVOKABLE QPointF imageWidgetCenter(int index) const;
     int selectedCount() const { return m_selected.size(); }
     Q_INVOKABLE bool isImageSelected(int index) const; ///< in z order
+    /// Widget position of a scale handle (0 top-left, 1 top-right,
+    /// 2 bottom-right, 3 bottom-left of the selection), (-1,-1) if none shown.
+    Q_INVOKABLE QPointF scaleHandleCenter(int corner) const;
+    Q_INVOKABLE QSizeF imageBoardSize(int index) const;
 
 public Q_SLOTS:
     void fitAll(); ///< overview of the whole Board (Home / Esc)
@@ -157,6 +161,14 @@ private:
     QPolygonF widgetPolygon(KisReferenceImage *image) const; ///< its outline on screen (turned/flipped)
     void updateMarquee(const QPointF &pos);
 
+    // Scale handles at the corners of the selection's bounds.
+    bool showsScaleHandles() const;
+    QRectF selectionBounds() const;      ///< board units, as drawn now
+    QPointF boardCorner(const QRectF &r, int corner) const;
+    int scaleHandleAt(const QPointF &widgetPos) const; ///< -1 = none
+    QRectF scaledRect(KisReferenceImage *image, const QRectF &start) const; ///< during a Scale drag
+    void updateScale(const QPointF &pos, Qt::KeyboardModifiers modifiers);
+
     Camera cameraFitting(const QRectF &boardRect, qreal margin) const;
     void animateCamera(const Camera &target, int durationMs);
     void setCamera(const Camera &camera);
@@ -213,7 +225,7 @@ private:
     KisReferenceImage *m_current {nullptr}; // last clicked (match-to for Normalize, start for ←/→)
     QVector<KisReferenceImage *> m_selected; // outlined, what Delete / drags / the menu act on
 
-    enum class Drag { None, Pending, Pan, MoveImage, Touch, Zoom, Rotate, Marquee };
+    enum class Drag { None, Pending, Pan, MoveImage, Touch, Zoom, Rotate, Marquee, Scale };
     Drag m_drag = Drag::None;
     QPointF m_pressPos;
     QPointF m_lastPos;
@@ -222,6 +234,12 @@ private:
     QVector<KisReferenceImage *> m_moving; // MoveImage: the images being dragged (the selection, or the pressed one)
     QPointF m_dragOffset; // board units, for MoveImage
     QVector<KisReferenceImage *> m_marqueeBase; // Shift+marquee: selection before the drag (added to)
+    // Scale drag: start rects of m_moving, the fixed point and the factor.
+    QHash<KisReferenceImage *, QRectF> m_scaleStart;
+    QRectF m_scaleBounds;  // selection bounds at the press
+    int m_scaleCorner = -1;
+    QPointF m_scaleAnchor; // board units: opposite corner, or the centre with Alt
+    qreal m_scale = 1.0;
     // Just dropped by hand: drawn at these rects until their move lands.
     QHash<KisReferenceImage *, QRectF> m_dropRects;
     bool m_spaceHeld = false;
