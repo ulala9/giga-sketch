@@ -4,15 +4,13 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Annotations + Blender layer transform built, waiting for hand test)
+Last updated: 2026-11-16 (Annotations + Blender layer transform merged, G'MIC tried — all hand-tested)
 
 ## Resume here
-- **Next up:** the user's hand test of **Annotations** (`feature/annotations`) and **Blender layer transform**
-  (`feature/blender-layer-transform`), both in giga-test. After that, candidates:
-  a Phase 5 blueprint (Bubble Guess, Blob Brush, Harmony Wheel), Phase 6 extras, or Blender bridge extras.
-- Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
-- Repo state: everything merged and pushed (2026-11-16: transform-last-stroke, stroke-points,
-  stroke-points-proportional, refboard-image-search, refboard-delete-key, all hand-tested by the user).
+- **Next up:** ask the user what to do next. Candidates: a Phase 5 blueprint (Bubble Guess, Blob Brush,
+  Harmony Wheel), Phase 6 extras, or Blender bridge extras.
+- Repo state: everything merged and pushed (2026-11-16: annotations, blender-layer-transform, plus earlier
+  transform-last-stroke, stroke-points(-proportional), refboard-image-search, refboard-delete-key; all hand-tested).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
   user tests by hand → merge `--no-ff` into `giga-main` → push → update this file and NOTES.md.
@@ -21,9 +19,7 @@ Last updated: 2026-11-16 (Annotations + Blender layer transform built, waiting f
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/annotations` (waiting for hand test), `feature/blender-layer-transform`
-  (waiting for hand test), `feature/giga-tool-icons` (batch 2,
-  unreviewed, extreme low priority).
+  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2, unreviewed, extreme low priority).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -96,16 +92,15 @@ Last updated: 2026-11-16 (Annotations + Blender layer transform built, waiting f
 - [x] Board image search: small browser panel, Google Images / Bing / Pinterest (`feature/refboard-image-search`,
   merged 2026-11-16, hand-tested). Self-test `refsearch`.
 - [x] G'MIC filters: Krita's G'MIC-Qt fork built as a plugin by `giga-tools/build-gmic.sh` (no source changes;
-  2026-11-16). Waiting for the user to try a filter.
+  2026-11-16). Hand-tested by the user 2026-11-16.
 - [x] Board: Delete / Backspace / the Clear shortcut (Ctrl+Q for the user) delete the focused or outlined image
   (`fix/refboard-delete-key`, merged 2026-11-16).
-- [ ] **Annotations** (sticky notes, `feature/annotations`, built 2026-11-16, **waiting for hand test**). A note is a
+- [x] **Annotations** (sticky notes, `feature/annotations`, merged 2026-11-16, hand-tested). A note is a
   special kind of reference image (GigaNote). Reference Images tool: Add Note (click to place), right-click menu,
   double-click to type, paste text; Edit > Add Note (no shortcut); View > Show Annotations; colours, 3 text sizes,
   collapse, Keep readable, 4 styles (Sticky, Card, Speech Bubble, Outline); Board + .kra/.krf. Self-test `notes`.
   2026-11-16: user reported a freeze on Edit > Add Note → fixed (no undoStack()->undo() from the editor; outside-click
-  watcher starts after the opening click); needs re-test. Things to try by hand: Edit > Add Note on a big file,
-  typing feel, click outside to finish, styles, rotated/zoomed canvas, Board panel look.
+  watcher starts after the opening click); re-tested OK.
 - [ ] Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
 - [x] **Blender Viewport Layer** (`feature/blender-bridge`, merged 2026-11-16, hand-tested). Self-test `blender`;
   add-on `giga-tools/blender/giga_viewport_send.py`.
@@ -137,10 +132,9 @@ Last updated: 2026-11-16 (Annotations + Blender layer transform built, waiting f
     **Step 3 done 2026-11-16** (speed): raw pixels via shared memory, decoded off the GUI thread, Blender layers no
     longer watch their PNG (no double load), canvas progress bar, Blender "Resolution: Full / Half". Hand-tested,
     merged 2026-11-16.
-  - [ ] **Scale/move a Blender layer** (user request 2026-11-16, `feature/blender-layer-transform`, built, **waiting for
-    hand test**): Ctrl+T on a Blender layer works through a transform mask under it (added on first use, reused
-    after), so every refresh keeps the transform. Self-test `blendertransform`. Try by hand: scale, refresh from
-    Blender, rotate/warp, save + reopen, Esc (= Krita's Reset), delete the mask.
+  - [x] **Scale/move a Blender layer** (user request 2026-11-16, `feature/blender-layer-transform`, merged 2026-11-16,
+    hand-tested): Ctrl+T on a Blender layer works through a transform mask under it (added on first use, reused
+    after), so every refresh keeps the transform. Self-test `blendertransform`.
 
 ## Phase 6 — Edit what you just drew (user request 2026-11-15)
 - [x] Transform Last Stroke (`feature/transform-last-stroke`, merged 2026-11-16, hand-tested). Self-test `laststroke`.
