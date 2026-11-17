@@ -6,6 +6,7 @@
  */
 
 #include "kis_tool_paint.h"
+#include "GigaBrushPopup.h"
 
 #include <algorithm>
 
@@ -457,6 +458,14 @@ KisPopupWidgetInterface *KisToolPaint::popupWidget()
 
     if (!kisCanvas) {
         return nullptr;
+    }
+
+    // Giga Sketch: right-click opens the brush popup (size, hardness, brushes),
+    // unless Preferences > General > Tools says to use Krita's popup palette.
+    if (GigaBrushPopup::rightClickMode() == GigaBrushPopup::BrushPopup) {
+        if (GigaBrushPopup *gigaPopup = GigaBrushPopup::forCanvas(kisCanvas)) {
+            return gigaPopup;
+        }
     }
 
     KisPopupWidgetInterface* popupWidget = kisCanvas->popupPalette();

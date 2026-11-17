@@ -8,6 +8,7 @@
  */
 
 #include "kis_dlg_preferences.h"
+#include "GigaBrushPopup.h"
 #include <GigaBranding.h>
 #include "GigaAccent.h"
 #include <QColorDialog>
@@ -520,6 +521,20 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
     cmbFlowMode->setCurrentIndex((int)!cfg.readEntry<bool>("useCreamyAlphaDarken", true));
     cmbCmykBlendingMode->setCurrentIndex((int)!cfg.readEntry<bool>("useSubtractiveBlendingForCmykColorSpaces", true));
     m_chkSwitchSelectionCtrlAlt->setChecked(cfg.switchSelectionCtrlAlt());
+
+    // Giga Sketch: right-click on the canvas with a paint tool.
+    m_cmbGigaRightClick = new QComboBox(this);
+    m_cmbGigaRightClick->setObjectName(QStringLiteral("GigaRightClickMode"));
+    m_cmbGigaRightClick->addItem(i18n("Brush popup (size, hardness, brushes)"), int(GigaBrushPopup::BrushPopup));
+    m_cmbGigaRightClick->addItem(i18n("Popup palette (Krita)"), int(GigaBrushPopup::PopupPalette));
+    m_cmbGigaRightClick->setToolTip(i18n("What right-clicking the canvas opens while a brush or other paint tool is active."));
+    m_cmbGigaRightClick->setCurrentIndex(m_cmbGigaRightClick->findData(int(GigaBrushPopup::rightClickMode())));
+    if (QFormLayout *toolsForm = qobject_cast<QFormLayout*>(m_chkSwitchSelectionCtrlAlt->parentWidget()->layout())) {
+        int row = -1;
+        QFormLayout::ItemRole role;
+        toolsForm->getWidgetPosition(m_chkSwitchSelectionCtrlAlt, &row, &role);
+        toolsForm->insertRow(row + 1, i18n("Right-click on canvas:"), m_cmbGigaRightClick);
+    }
     cmbTouchPainting->addItem(
         KoPointerEvent::tabletInputReceived() ? i18nc("touch painting", "Auto (Disabled)")
                                               : i18nc("touch painting", "Auto (Enabled)"));
@@ -990,6 +1005,7 @@ void GeneralTab::setDefault()
     m_chkKineticScrollingHideScrollbars->setChecked(cfg.kineticScrollingHiddenScrollbars(true));
     intZoomMarginSize->setValue(cfg.zoomMarginSize(true));
     m_chkSwitchSelectionCtrlAlt->setChecked(cfg.switchSelectionCtrlAlt(true));
+    if (m_cmbGigaRightClick) m_cmbGigaRightClick->setCurrentIndex(0); // Giga Sketch: brush popup
     cmbTouchPainting->setCurrentIndex(int(cfg.touchPainting(true)));
     chkTouchPressureSensitivity->setChecked(true);
     chkEnableTransformToolAfterPaste->setChecked(cfg.activateTransformToolAfterPaste(true));
@@ -3138,6 +3154,9 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
         cfg.setZoomMarginSize(m_general->zoomMarginSize());
 
         cfg.setSwitchSelectionCtrlAlt(m_general->switchSelectionCtrlAlt());
+        if (m_general->m_cmbGigaRightClick) {
+            GigaBrushPopup::setRightClickMode(GigaBrushPopup::RightClickMode(m_general->m_cmbGigaRightClick->currentData().toInt()));
+        }
         cfg.setTouchPainting(KisConfig::TouchPainting(m_general->cmbTouchPainting->currentIndex()));
         cfg.writeEntry("useTouchPressureSensitivity", m_general->chkTouchPressureSensitivity->isChecked());
         cfg.setActivateTransformToolAfterPaste(m_general->chkEnableTransformToolAfterPaste->isChecked());
