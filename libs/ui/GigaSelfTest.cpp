@@ -1819,11 +1819,12 @@ void testHarmonyWheel(KisMainWindow *w)
 
     wheel->setProperty("mode", 3); // Triadic
     wait(50);
-    report(count() == 3 && near(swatch(1), Qt::red), "harmony-triadic-keeps-base",
-           QStringLiteral("%1 swatches, swatch 1 %2").arg(count()).arg(swatch(1).name()));
+    report(count() == 3 && near(swatch(0), Qt::red) && near(swatch(1), Qt::green), "harmony-triadic-keeps-base",
+           QStringLiteral("%1 swatches: %2 %3").arg(count()).arg(swatch(0).name(), swatch(1).name()));
 
-    canvas->resourceManager()->setForegroundColor(KoColor(QColor(0, 0, 255), cs));
+    // (blue first would count as "picked from the red triad" and keep red)
     wheel->setProperty("mode", 2); // Analogous
+    canvas->resourceManager()->setForegroundColor(KoColor(QColor(0, 0, 255), cs));
     wait(250);
     QMetaObject::invokeMethod(wheel, "setSpread", Q_ARG(qreal, 60.0));
     report(count() == 3 && near(swatch(1), QColor(0, 0, 255)) && near(swatch(0), QColor(0, 255, 255))
