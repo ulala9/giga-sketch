@@ -4,11 +4,11 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Blender bridge merged)
+Last updated: 2026-11-16 (Annotations built, waiting for hand test)
 
 ## Resume here
-- **Next up:** not chosen. Candidates: a Phase 5 blueprint (Annotations, Bubble Guess, Blob Brush, Harmony Wheel),
-  Phase 6 extras, or Blender bridge extras if wanted (live updates, render passes — out of scope so far).
+- **Next up:** the user's hand test of **Annotations** (`feature/annotations`, in giga-test). After that, candidates:
+  a Phase 5 blueprint (Bubble Guess, Blob Brush, Harmony Wheel), Phase 6 extras, or Blender bridge extras.
 - Waiting for a hand test: G'MIC filters (Filters > Start G'MIC-Qt; installed by `giga-tools/build-gmic.sh`, not a branch).
 - Repo state: everything merged and pushed (2026-11-16: transform-last-stroke, stroke-points,
   stroke-points-proportional, refboard-image-search, refboard-delete-key, all hand-tested by the user).
@@ -20,7 +20,8 @@ Last updated: 2026-11-16 (Blender bridge merged)
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2, unreviewed, extreme low priority).
+  Pending in `giga-test` now: `feature/annotations` (waiting for hand test), `feature/giga-tool-icons` (batch 2,
+  unreviewed, extreme low priority).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -96,7 +97,12 @@ Last updated: 2026-11-16 (Blender bridge merged)
   2026-11-16). Waiting for the user to try a filter.
 - [x] Board: Delete / Backspace / the Clear shortcut (Ctrl+Q for the user) delete the focused or outlined image
   (`fix/refboard-delete-key`, merged 2026-11-16).
-- [ ] Annotations, Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
+- [ ] **Annotations** (sticky notes, `feature/annotations`, built 2026-11-16, **waiting for hand test**). A note is a
+  special kind of reference image (GigaNote). Reference Images tool: Add Note (click to place), right-click menu,
+  double-click to type, paste text; Edit > Add Note (no shortcut); View > Show Annotations; colours, 3 text sizes,
+  collapse, Keep readable; Board + .kra/.krf. Self-test `notes`. Things to try by hand: typing feel, click outside
+  to finish, rotated/zoomed canvas, Board panel look.
+- [ ] Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
 - [x] **Blender Viewport Layer** (`feature/blender-bridge`, merged 2026-11-16, hand-tested). Self-test `blender`;
   add-on `giga-tools/blender/giga_viewport_send.py`.
   A basic capture of Blender's viewport onto a GigaSketch layer, instead of importing models.
@@ -153,6 +159,9 @@ Last updated: 2026-11-16 (Blender bridge merged)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-16: Annotations: a note is a subclass of KisReferenceImage (not a separate object), saved as `<giga-note>`;
+  created from the Reference Images tool + Edit > Add Note (right-click from any tool would clash with the popup
+  palette). Editor finishes on a click outside, not on focus loss. An empty new note disappears on finish.
 - 2026-11-16: Blender bridge transport = raw RGBA in /dev/shm + PNG written afterwards in the background
   (the PNG stays the File Layer's file); progress shown as a small bar on the canvas.
 - 2026-11-16: Blender bridge: Send creates the layer itself (above the active layer), refresh when switching
