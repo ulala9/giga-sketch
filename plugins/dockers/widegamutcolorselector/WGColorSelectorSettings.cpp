@@ -5,6 +5,7 @@
  */
 
 #include "WGColorSelectorSettings.h"
+#include "WGHarmonyWheel.h"
 #include "ui_WdgWGSelectorSettings.h"
 
 #include "WGConfigSelectorTypes.h"
@@ -17,6 +18,8 @@
 #include <QVBoxLayout>
 #include <QScreen>
 #include <QDialogButtonBox>
+#include <QBoxLayout>
+#include <QCheckBox>
 #include <QPushButton>
 #include <QToolButton>
 
@@ -49,6 +52,16 @@ WGColorSelectorSettings::WGColorSelectorSettings(QWidget *parent)
     m_shadeLineGroup->setExclusive(false);
     slotSetShadeLineCount(m_ui->sbShadeLineCount->value());
     connect(m_shadeLineGroup, SIGNAL(idClicked(int)), SLOT(slotShowLineEditor(int)));
+
+    // Giga Sketch: Harmony Wheel on/off, right after the shade selector group
+    m_chkGigaHarmony = new QCheckBox(i18n("Show harmony wheel (complementary, analogous, triadic... swatches)"), this);
+    m_chkGigaHarmony->setObjectName(QStringLiteral("chkGigaHarmonyWheel"));
+    bool placed = false;
+    for (QBoxLayout *box : findChildren<QBoxLayout *>()) {
+        const int at = box->indexOf(m_ui->grpMinimalShadeSelector);
+        if (at >= 0) { box->insertWidget(at + 1, m_chkGigaHarmony); placed = true; break; }
+    }
+    if (!placed && layout()) layout()->addWidget(m_chkGigaHarmony);
 }
 
 WGColorSelectorSettings::~WGColorSelectorSettings()
@@ -104,6 +117,7 @@ void WGColorSelectorSettings::savePreferences() const
     cfg.set(WGConfig::popupPatches.scrolling, static_cast<WGConfig::Scrolling>(m_ui->cbPopupScrolling->currentIndex()));
     // Shade Selector
     cfg.set(WGConfig::minimalShadeSelectorEnabled, m_ui->grpMinimalShadeSelector->isChecked());
+    cfg.set(WGConfig::gigaHarmonyWheelEnabled, m_chkGigaHarmony->isChecked());
     cfg.set(WGConfig::shadeSelectorUpdateOnExternalChanges, m_ui->chkShadeSelUpdateExternal->isChecked());
     cfg.set(WGConfig::shadeSelectorUpdateOnInteractionEnd, m_ui->chkShadeSelUpdateInteraction->isChecked());
     cfg.set(WGConfig::shadeSelectorUpdateOnRightClick, m_ui->chkShadeSelUpdateOnRightClick->isChecked());
@@ -178,6 +192,7 @@ void WGColorSelectorSettings::loadPreferencesImpl(bool defaults)
     m_ui->cbPopupScrolling->setCurrentIndex(static_cast<int>(cfg.get(WGConfig::popupPatches.scrolling, defaults)));
     // Shade Selector
     m_ui->grpMinimalShadeSelector->setChecked(cfg.get(WGConfig::minimalShadeSelectorEnabled, defaults));
+    m_chkGigaHarmony->setChecked(cfg.get(WGConfig::gigaHarmonyWheelEnabled, defaults));
     m_ui->chkShadeSelUpdateExternal->setChecked(cfg.get(WGConfig::shadeSelectorUpdateOnExternalChanges, defaults));
     m_ui->chkShadeSelUpdateInteraction->setChecked(cfg.get(WGConfig::shadeSelectorUpdateOnInteractionEnd, defaults));
     m_ui->chkShadeSelUpdateOnRightClick->setChecked(cfg.get(WGConfig::shadeSelectorUpdateOnRightClick, defaults));

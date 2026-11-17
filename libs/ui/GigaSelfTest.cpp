@@ -1776,6 +1776,67 @@ void testLayerButtons(KisMainWindow *w)
     // Krita's own "duplicatelayer" action.)
 }
 
+/// Harmony Wheel in the Color panel (feature/harmony-wheel): swatches follow
+/// the foreground color, a swatch click sets it and keeps the harmony,
+/// Shift+click sets the background, Analogous spread.
+void testHarmonyWheel(KisMainWindow *w)
+{
+    openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    QWidget *wheel = w->findChild<QWidget *>(QStringLiteral("GigaHarmonyWheel"));
+    if (!canvas || !wheel) {
+        report(false, "harmony-found", QStringLiteral("canvas %1, wheel %2").arg(!!canvas).arg(!!wheel));
+        return;
+    }
+    report(true, "harmony-found", QString());
+    const KoColorSpace *cs = KoColorSpaceRegistry::instance()->rgb8();
+    auto count = [&]() { int n = 0; QMetaObject::invokeMethod(wheel, "swatchCount", Q_RETURN_ARG(int, n)); return n; };
+    auto swatch = [&](int i) { QColor c; QMetaObject::invokeMethod(wheel, "swatchColor", Q_RETURN_ARG(QColor, c), Q_ARG(int, i)); return c; };
+    auto active = [&]() { int n = -1; QMetaObject::invokeMethod(wheel, "activeSwatch", Q_RETURN_ARG(int, n)); return n; };
+    auto near = [](const QColor &a, const QColor &b) {
+        return qAbs(a.red() - b.red()) < 6 && qAbs(a.green() - b.green()) < 6 && qAbs(a.blue() - b.blue()) < 6;
+    };
+    auto wait = [](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) pump(1); };
+    const int oldMode = wheel->property("mode").toInt();
+
+    wheel->setProperty("mode", 0); // Complementary
+    canvas->resourceManager()->setForegroundColor(KoColor(Qt::red, cs));
+    wait(250);
+    report(count() == 2 && near(swatch(0), Qt::red) && near(swatch(1), Qt::cyan), "harmony-complementary",
+           QStringLiteral("%1 swatches: %2 %3").arg(count()).arg(swatch(0).name(), swatch(1).name()));
+
+    QMetaObject::invokeMethod(wheel, "pickSwatch", Q_ARG(int, 1), Q_ARG(bool, false));
+    wait(400); // the panel sets the canvas color after 100 ms
+    const QColor fg = canvas->resourceManager()->foregroundColor().toQColor();
+    report(near(fg, Qt::cyan) && active() == 1 && near(swatch(0), Qt::red), "harmony-pick-keeps-harmony",
+           QStringLiteral("fg %1, active %2, swatch 0 %3").arg(fg.name()).arg(active()).arg(swatch(0).name()));
+
+    QMetaObject::invokeMethod(wheel, "pickSwatch", Q_ARG(int, 0), Q_ARG(bool, true));
+    wait(200);
+    const QColor bg = canvas->resourceManager()->backgroundColor().toQColor();
+    report(near(bg, Qt::red), "harmony-shift-background", bg.name());
+
+    wheel->setProperty("mode", 3); // Triadic
+    wait(50);
+    report(count() == 3 && near(swatch(1), Qt::red), "harmony-triadic-keeps-base",
+           QStringLiteral("%1 swatches, swatch 1 %2").arg(count()).arg(swatch(1).name()));
+
+    canvas->resourceManager()->setForegroundColor(KoColor(QColor(0, 0, 255), cs));
+    wheel->setProperty("mode", 2); // Analogous
+    wait(250);
+    QMetaObject::invokeMethod(wheel, "setSpread", Q_ARG(qreal, 60.0));
+    report(count() == 3 && near(swatch(1), QColor(0, 0, 255)) && near(swatch(0), QColor(0, 255, 255))
+               && near(swatch(2), QColor(255, 0, 255)),
+           "harmony-analogous-spread",
+           QStringLiteral("%1 %2 %3").arg(swatch(0).name(), swatch(1).name(), swatch(2).name()));
+
+    wheel->setProperty("mode", 5); // Monochrome
+    wait(50);
+    report(count() == 5, "harmony-monochrome", QStringLiteral("%1 swatches").arg(count()));
+    wheel->setProperty("mode", oldMode);
+}
+
 /// Lasso Fill tool: one lasso stroke fills the whole loop; with eraser mode
 /// (E) on, the next lasso erases it again.
 void testLassoFill(KisMainWindow *w)
@@ -3595,6 +3656,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("notesfreeze"), testNotesFreeze},
         {QStringLiteral("brushpopup"), testBrushPopup},
         {QStringLiteral("rightclick"), testRightClickMenus},
+        {QStringLiteral("harmony"), testHarmonyWheel},
     };
     bool found = false;
     for (const auto &test : tests) {

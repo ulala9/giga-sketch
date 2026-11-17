@@ -30,6 +30,7 @@ class WGColorPreviewToolTip;
 class WGCommonColorSet;
 class WGQuickSettingsWidget;
 class WGShadeSelector;
+class WGHarmonyWheel;
 class QBoxLayout;
 class QToolButton;
 class QVariant;
@@ -79,6 +80,7 @@ private Q_SLOTS:
     void slotCanvasResourceChanged(int key, const QVariant &value);
     void slotOpenSettings();
     void slotShowGamutMaskToolbar(bool show);
+    void slotGigaHarmonyBackground(const KoColor &color);
 private:
     QPointer<KisCanvas2> m_canvas;
     WGSelectorDisplayConfigSP m_displayConfig;
@@ -96,6 +98,7 @@ private:
     WGActionManager *m_actionManager {0};
     WGColorPreviewToolTip *m_colorTooltip {0};
     WGShadeSelector *m_shadeSelector {0};
+    WGHarmonyWheel *m_harmonyWheel {0}; // Giga Sketch
     WGColorPatches *m_history {0};
     WGColorPatches *m_commonColors {0};
     QWidgetAction *m_quickSettingAction {0};
