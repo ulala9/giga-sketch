@@ -859,6 +859,10 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Edit > Add Note (`giga_add_note`, no shortcut), View > Show Annotations (`giga_show_annotations`, KisConfig
   `gigaShowAnnotations`), both in gigasketch.action, menu items added in code (`gigaAddEditMenuItems`/`gigaAddViewMenuItems`).
   Adding a note while hidden turns notes back on.
+- Drawing order (2026-11-16, user: "it's behind the grid"): notes are drawn by `GigaNotesDecoration` (priority 100,
+  above grid 0, guides 90, assistants 95; added in KisView ctor), in widget coords, z-order sorted. Once it exists
+  `GigaNote::paint()` is a no-op (`setDrawnOnTop`), so the reference layer's own pass (under the grid) skips notes;
+  pictures stay where Krita draws them. Use `paintOnTop()` to draw a note directly (Board uses paintInRect).
 - Keep readable: per note, `applyKeepReadable(canvas)` sets contentScale to the view's zoom on sigCanvasStateChanged
   (not an undo step). Hooked per canvas on the first paint of KisReferenceImagesDecoration (deferred, singleShot).
 - Board: Normalize skips notes (`withoutNotes()`), Arrange skips them when Settings::keepNotesInPlace (default on,

@@ -51,6 +51,7 @@
 #include "KisMainWindow.h"
 #include "KisMimeDatabase.h"
 #include "KisPart.h"
+#include "GigaNotesDecoration.h"
 #include "KisReferenceImagesDecoration.h"
 #include "KisRemoteFileFetcher.h"
 #include "KisSynchronizedConnection.h"
@@ -239,6 +240,13 @@ KisView::KisView(KisDocument *document, KisViewManager *viewManager, QWidget *pa
     d->paintingAssistantsDecoration = new KisPaintingAssistantsDecoration(this);
     d->canvas.addDecoration(d->paintingAssistantsDecoration);
     d->paintingAssistantsDecoration->setVisible(true);
+
+    // Giga Sketch: sticky notes on top of the grid, guides and assistants.
+    {
+        KisCanvasDecorationSP notes = new GigaNotesDecoration(this);
+        d->canvas.addDecoration(notes);
+        notes->setVisible(true);
+    }
 
     d->showFloatingMessage = cfg.showCanvasMessages();
     slotScreenOrResolutionChanged();

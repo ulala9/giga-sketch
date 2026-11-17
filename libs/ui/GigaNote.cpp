@@ -592,7 +592,23 @@ void GigaNote::paintNote(QPainter &gc, qreal pointsPerUnit) const
     gc.restore();
 }
 
+namespace
+{
+bool s_drawnOnTop = false;
+}
+
+void GigaNote::setDrawnOnTop(bool onTop)
+{
+    s_drawnOnTop = onTop;
+}
+
 void GigaNote::paint(QPainter &gc) const
+{
+    if (s_drawnOnTop) return; // GigaNotesDecoration draws it above the grid
+    paintNote(gc, m_d->scale);
+}
+
+void GigaNote::paintOnTop(QPainter &gc) const
 {
     paintNote(gc, m_d->scale);
 }

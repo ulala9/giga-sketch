@@ -2759,6 +2759,14 @@ void testNotes(KisMainWindow *w)
         pump(5);
     }
 
+    // Notes are drawn by their own layer above the grid, guides and assistants.
+    {
+        KisCanvasDecorationSP top = canvas->decoration(QStringLiteral("gigaNotesDecoration"));
+        KisCanvasDecorationSP grid = canvas->decoration(QStringLiteral("grid"));
+        report(top && top->visible() && (!grid || top->priority() > grid->priority()) && top->priority() > 95,
+               "notes-above-grid", top ? QString::number(top->priority()) : QStringLiteral("missing"));
+    }
+
     // Same size on screen as interface text: ~220 screen px wide.
     const qreal screenWidth = canvas->coordinatesConverter()->documentToWidget(note->boundingRect()).width();
     report(qAbs(screenWidth - 220.0) < 3.0, "notes-screen-size", QString::number(screenWidth));
@@ -2768,7 +2776,7 @@ void testNotes(KisMainWindow *w)
         QImage img(note->size().toSize() + QSize(2, 2), QImage::Format_ARGB32);
         img.fill(Qt::transparent);
         QPainter gc(&img);
-        note->paint(gc);
+        note->paintOnTop(gc);
         gc.end();
         const QColor mid = img.pixelColor(img.width() / 2, img.height() - qMax(3, img.height() / 6));
         report(qAbs(mid.red() - note->color().red()) < 8 && mid.alpha() > 250, "notes-paint",
@@ -2829,7 +2837,7 @@ void testNotes(KisMainWindow *w)
             n->setColor(GigaNote::presetColors().at(st));
             gc.save();
             gc.translate(10 + st * 240, 10);
-            n->paint(gc);
+            n->paintOnTop(gc);
             gc.restore();
             // Pixel just inside the left edge, halfway down the text area.
             const QPointF probe(10 + st * 240 + 2.5, 10 + n->textRect().center().y());

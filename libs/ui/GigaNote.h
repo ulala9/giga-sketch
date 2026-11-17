@@ -145,7 +145,12 @@ public:
     qreal textPixelSize() const; ///< font size in note units
 
     // --- drawing, saving ------------------------------------------------------
+    /// Does nothing once notes have their own top layer (GigaNotesDecoration),
+    /// so the reference layer's pass (under the grid) skips them.
     void paint(QPainter &gc) const override;
+    /// Draws the note in shape coordinates (used by GigaNotesDecoration).
+    void paintOnTop(QPainter &gc) const;
+    static void setDrawnOnTop(bool onTop);
     void paintInRect(QPainter &gc, const QRectF &target) const override;
 
     void saveXml(QDomDocument &document, QDomElement &parentElement, int id) override;
