@@ -174,8 +174,10 @@ void GigaReferenceBoardView::setCanvas(KisCanvas2 *canvas)
     m_layer = nullptr;
     m_focused = nullptr;
     m_current = nullptr;
+    m_selected.clear();
+    m_moving.clear();
     m_drag = Drag::None;
-    m_dropImage = nullptr;
+    m_dropRects.clear();
     m_shownRects.clear();
     m_animFrom.clear();
 
@@ -252,6 +254,19 @@ QPointF GigaReferenceBoardView::imageWidgetCenter(int index) const
     return rotationTransform().map(cameraTransform().map(displayRect(images[index]).center()));
 }
 
+bool GigaReferenceBoardView::isImageSelected(int index) const
+{
+    const QVector<KisReferenceImage *> images = liveImages();
+    return index >= 0 && index < images.size() && m_selected.contains(images[index]);
+}
+
+QPolygonF GigaReferenceBoardView::widgetPolygon(KisReferenceImage *image) const
+{
+    // Board -> view (camera), then view -> widget (flip + turn). Qt applies
+    // the left transform of a product first.
+    return (cameraTransform() * rotationTransform()).map(QPolygonF(displayRect(image)));
+}
+
 void GigaReferenceBoardView::refresh()
 {
     QVector<KisReferenceImage *> images = GigaReferenceBoard::boardImages(layer());
@@ -262,7 +277,7 @@ void GigaReferenceBoardView::refresh()
     // wherever they are drawn right now.
     QHash<KisReferenceImage *, QRectF> from;
     for (KisReferenceImage *image : images) {
-        if (image == m_dropImage) continue; // a hand-dropped image never animates
+        if (m_dropRects.contains(image)) continue; // a hand-dropped image never animates
         const auto it = m_shownRects.constFind(image);
         if (it != m_shownRects.constEnd() && it.value() != image->boardRect()) {
             from.insert(image, displayRect(image));
@@ -280,13 +295,27 @@ void GigaReferenceBoardView::refresh()
         m_rectAnimation->start();
     }
 
-    if (m_dropImage && (!images.contains(m_dropImage) || m_dropImage->boardRect() == m_dropRect)) {
-        m_dropImage = nullptr; // landed (or gone)
+    for (auto it = m_dropRects.begin(); it != m_dropRects.end();) {
+        if (!images.contains(it.key()) || it.key()->boardRect() == it.value()) {
+            it = m_dropRects.erase(it); // landed (or gone)
+        } else {
+            ++it;
+        }
     }
     if (m_focused && !images.contains(m_focused)) m_focused = nullptr;
     if (m_current && !images.contains(m_current)) m_current = nullptr;
-    if (m_pressImage && !images.contains(m_pressImage)) {
+    m_selected.erase(std::remove_if(m_selected.begin(), m_selected.end(),
+                                    [&images](KisReferenceImage *i) { return !images.contains(i); }),
+                     m_selected.end());
+    m_marqueeBase.erase(std::remove_if(m_marqueeBase.begin(), m_marqueeBase.end(),
+                                       [&images](KisReferenceImage *i) { return !images.contains(i); }),
+                        m_marqueeBase.end());
+    bool movingGone = false;
+    for (KisReferenceImage *image : std::as_const(m_moving)) movingGone |= !images.contains(image);
+    if ((m_pressImage && !images.contains(m_pressImage)) || movingGone) {
+        // Something being dragged was deleted (undo...): drop the drag.
         m_pressImage = nullptr;
+        m_moving.clear();
         if (m_drag == Drag::MoveImage || m_drag == Drag::Pending) m_drag = Drag::None;
     }
 
@@ -428,18 +457,88 @@ void GigaReferenceBoardView::deleteImage(KisReferenceImage *image)
     if (wasFocused) fitAll();
 }
 
+void GigaReferenceBoardView::deleteImages(const QVector<KisReferenceImage *> &images)
+{
+    KisReferenceImagesLayer *l = layer();
+    if (!l || !m_canvas) return;
+    const QVector<KisReferenceImage *> live = liveImages();
+    QList<KoShape *> shapes;
+    bool hadFocused = false;
+    for (KisReferenceImage *image : images) {
+        if (!live.contains(image)) continue;
+        shapes.append(image);
+        hadFocused |= image == m_focused;
+    }
+    if (shapes.isEmpty()) return;
+    pushCommand(l->removeReferenceImages(m_canvas->imageView()->document(), shapes)); // one undo step
+    if (hadFocused) fitAll();
+}
+
 void GigaReferenceBoardView::deleteCurrent()
 {
-    deleteImage(m_focused ? m_focused : m_current);
+    if (m_focused) {
+        deleteImage(m_focused);
+    } else if (!m_selected.isEmpty()) {
+        deleteImages(m_selected);
+    } else {
+        deleteImage(m_current);
+    }
+}
+
+void GigaReferenceBoardView::setSelection(const QVector<KisReferenceImage *> &images)
+{
+    if (images == m_selected) return;
+    m_selected = images;
+    update();
+}
+
+void GigaReferenceBoardView::selectAll()
+{
+    // Stop dimming the others so the outlines show; the camera stays put.
+    m_focused = nullptr;
+    setSelection(liveImages());
+    update();
+}
+
+void GigaReferenceBoardView::clearSelection()
+{
+    setSelection({});
+}
+
+QVector<KisReferenceImage *> GigaReferenceBoardView::targetsFor(KisReferenceImage *image) const
+{
+    if (!image) return {};
+    if (m_selected.contains(image)) {
+        // In z order, like everything else on the Board.
+        QVector<KisReferenceImage *> out;
+        for (KisReferenceImage *i : liveImages()) {
+            if (m_selected.contains(i)) out.append(i);
+        }
+        return out;
+    }
+    return {image};
+}
+
+void GigaReferenceBoardView::arrangeSelected()
+{
+    QVector<KisReferenceImage *> images;
+    for (KisReferenceImage *i : liveImages()) {
+        if (m_selected.contains(i)) images.append(i);
+    }
+    if (images.size() < 2) return;
+    m_settings = GigaReferenceBoard::Settings::load();
+    // Laid out from the selection's top-left corner, with the Board style.
+    pushCommand(GigaReferenceBoard::arrangeOnBoard(images, m_settings, m_canvas, layer()));
 }
 
 QRectF GigaReferenceBoardView::displayRect(KisReferenceImage *image) const
 {
-    if (image == m_dropImage) return m_dropRect;
+    const auto dropped = m_dropRects.constFind(image);
+    if (dropped != m_dropRects.constEnd()) return dropped.value();
     QRectF r = image->boardRect();
     const auto it = m_animFrom.constFind(image);
     if (it != m_animFrom.constEnd() && m_rectT < 1.0) r = lerpRect(it.value(), r, m_rectT);
-    if (m_drag == Drag::MoveImage && image == m_pressImage) r.translate(m_dragOffset);
+    if (m_drag == Drag::MoveImage && m_moving.contains(image)) r.translate(m_dragOffset);
     return r;
 }
 
@@ -520,6 +619,7 @@ void GigaReferenceBoardView::focusImage(KisReferenceImage *image)
     if (!image || !liveImages().contains(image)) return;
     m_focused = image;
     m_current = image;
+    m_selected = {image};
     m_autoFit = false;
     animateCamera(cameraFitting(image->boardRect(), FOCUS_MARGIN), 300);
     update();
@@ -596,9 +696,13 @@ void GigaReferenceBoardView::paintEvent(QPaintEvent *)
     const qreal radius = m_settings.roundedCorners ? qBound(2.0, 6.0 * qSqrt(m_camera.zoom), 10.0) : 0.0;
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    // Draw the dragged image last so it floats above the others.
+    // Draw the dragged images last so they float above the others.
     QVector<KisReferenceImage *> order = images;
-    if (m_drag == Drag::MoveImage && m_pressImage && order.removeOne(m_pressImage)) order.append(m_pressImage);
+    if (m_drag == Drag::MoveImage) {
+        for (KisReferenceImage *image : images) {
+            if (m_moving.contains(image) && order.removeOne(image)) order.append(image);
+        }
+    }
 
     for (KisReferenceImage *image : order) {
         const QRectF boardRect = displayRect(image);
@@ -626,7 +730,7 @@ void GigaReferenceBoardView::paintEvent(QPaintEvent *)
         image->paintInRect(p, boardRect);
         p.restore();
 
-        if (image == m_current && !m_focused) {
+        if (m_selected.contains(image) && !m_focused) {
             QPen pen(palette().color(QPalette::Highlight), 2.0);
             p.setPen(pen);
             p.setBrush(Qt::NoBrush);
@@ -661,6 +765,19 @@ void GigaReferenceBoardView::paintEvent(QPaintEvent *)
                 p.drawText(band.adjusted(4, 0, -4, 0), Qt::AlignVCenter | Qt::AlignHCenter, text);
             }
         }
+    }
+
+    if (m_drag == Drag::Marquee) {
+        // The selection rectangle, upright on screen like on the canvas.
+        p.resetTransform();
+        p.setRenderHint(QPainter::Antialiasing, false);
+        QColor fill = palette().color(QPalette::Highlight);
+        QColor line = fill;
+        fill.setAlpha(45);
+        line.setAlpha(220);
+        p.setPen(QPen(line, 1.0));
+        p.setBrush(fill);
+        p.drawRect(QRectF(m_pressPos, m_lastPos).normalized());
     }
 }
 
@@ -724,8 +841,28 @@ void GigaReferenceBoardView::pressAt(const QPointF &pos, Qt::MouseButton button,
     // under the pen.
     stopCameraAnimation();
     m_pressImage = image;
+    m_pressModifiers = modifiers;
+    m_moving.clear();
     m_dragOffset = QPointF();
     m_drag = Drag::Pending;
+}
+
+void GigaReferenceBoardView::updateMarquee(const QPointF &pos)
+{
+    // Every image the rectangle touches (also turned/flipped ones: tested
+    // against their outline on screen). Shift adds to the earlier selection.
+    QPainterPath band;
+    band.addRect(QRectF(m_pressPos, pos).normalized());
+    QVector<KisReferenceImage *> selected = m_marqueeBase;
+    for (KisReferenceImage *image : liveImages()) {
+        if (selected.contains(image)) continue;
+        QPainterPath outline;
+        outline.addPolygon(widgetPolygon(image));
+        outline.closeSubpath();
+        if (band.intersects(outline)) selected.append(image);
+    }
+    m_selected = selected;
+    update();
 }
 
 void GigaReferenceBoardView::moveAt(const QPointF &pos)
@@ -736,16 +873,23 @@ void GigaReferenceBoardView::moveAt(const QPointF &pos)
     case Drag::Pending:
         if (QLineF(pos, m_pressPos).length() > DRAG_THRESHOLD) {
             if (m_pressImage) {
+                // Grabbing a selected image drags the whole selection;
+                // any other image is dragged alone (and becomes the selection).
                 m_drag = Drag::MoveImage;
                 m_current = m_pressImage;
+                if (!m_selected.contains(m_pressImage)) m_selected = {m_pressImage};
+                m_moving = m_focused ? QVector<KisReferenceImage *>{m_pressImage} : targetsFor(m_pressImage);
                 m_dragOffset = viewDelta(pos - m_pressPos) / m_camera.zoom;
                 setCursor(Qt::ClosedHandCursor);
             } else {
-                m_drag = Drag::Pan; // dragging empty space pans
-                stopCameraAnimation();
-                m_camera.pan += viewDelta(pos - m_pressPos);
-                m_autoFit = false;
-                setCursor(Qt::ClosedHandCursor);
+                // Dragging empty space draws a selection rectangle (pan is
+                // middle-drag, Space+drag or the canvas navigation keys).
+                m_drag = Drag::Marquee;
+                m_marqueeBase = (m_pressModifiers & Qt::ShiftModifier) ? m_selected : QVector<KisReferenceImage *>();
+                if (m_focused) {
+                    m_focused = nullptr; // stop dimming the others, camera stays
+                }
+                updateMarquee(pos);
             }
             update();
         }
@@ -758,6 +902,9 @@ void GigaReferenceBoardView::moveAt(const QPointF &pos)
     case Drag::MoveImage:
         m_dragOffset = viewDelta(pos - m_pressPos) / m_camera.zoom;
         update();
+        break;
+    case Drag::Marquee:
+        updateMarquee(pos);
         break;
     case Drag::Zoom: {
         // Same feel as the canvas: up = in, 100 px doubles (stepped: one
@@ -802,26 +949,51 @@ void GigaReferenceBoardView::releaseAt(const QPointF &pos)
     m_drag = Drag::None;
     KisReferenceImage *image = m_pressImage;
     m_pressImage = nullptr;
+    const QVector<KisReferenceImage *> moving = m_moving;
+    m_moving.clear();
+    const bool shift = m_pressModifiers & Qt::ShiftModifier;
 
-    if (drag == Drag::MoveImage && image && liveImages().contains(image)) {
+    if (drag == Drag::MoveImage && !moving.isEmpty()) {
         const QPointF offset = viewDelta(pos - m_pressPos) / m_camera.zoom;
-        // Keep it drawn exactly where it was dropped, before and after the
-        // move command lands: no animation from the old spot (that looked
-        // like rubber-banding).
-        m_dropImage = image;
-        m_dropRect = image->boardRect().translated(offset);
+        // Keep them drawn exactly where they were dropped, before and after
+        // the move command lands: no animation from the old spot (that
+        // looked like rubber-banding).
+        const QVector<KisReferenceImage *> live = liveImages();
+        QVector<KisReferenceImage *> images;
+        QVector<QRectF> rects;
+        for (KisReferenceImage *i : moving) {
+            if (!live.contains(i)) continue;
+            images.append(i);
+            rects.append(i->boardRect().translated(offset));
+            m_dropRects.insert(i, rects.last());
+        }
         m_dragOffset = QPointF();
-        pushCommand(GigaReferenceBoard::moveOnBoard(image, m_dropRect));
-        if (m_dropImage == image && image->boardRect() == m_dropRect) m_dropImage = nullptr; // landed
-        if (m_dropImage) {
-            // Safety net: never hold the drawn spot for long if the command
+        pushCommand(GigaReferenceBoard::moveOnBoard(images, rects)); // one undo step
+        for (KisReferenceImage *i : images) {
+            const auto it = m_dropRects.constFind(i);
+            if (it != m_dropRects.constEnd() && i->boardRect() == it.value()) m_dropRects.remove(i); // landed
+        }
+        if (!m_dropRects.isEmpty()) {
+            // Safety net: never hold the drawn spots for long if the command
             // didn't land (it always should).
-            QTimer::singleShot(1000, this, [this, image]() {
-                if (m_dropImage == image) {
-                    m_dropImage = nullptr;
-                    update();
-                }
+            QTimer::singleShot(1000, this, [this, images]() {
+                for (KisReferenceImage *i : images) m_dropRects.remove(i);
+                update();
             });
+        }
+    } else if (drag == Drag::Marquee) {
+        m_marqueeBase.clear();
+        if (!m_selected.isEmpty()) m_current = m_selected.last();
+    } else if (drag == Drag::Pending && shift) {
+        // Shift+click: add the image to the selection or take it out.
+        if (image) {
+            if (m_selected.contains(image)) {
+                m_selected.removeOne(image);
+            } else {
+                m_selected.append(image);
+                m_current = image;
+            }
+            if (m_focused) m_focused = nullptr; // show the outlines, camera stays
         }
     } else if (drag == Drag::Pending) {
         // A click: focus the image, or back to the overview on empty space.
@@ -832,6 +1004,7 @@ void GigaReferenceBoardView::releaseAt(const QPointF &pos)
                 focusImage(image);
             }
         } else {
+            m_selected.clear();
             fitAll();
         }
     }
@@ -898,7 +1071,8 @@ bool GigaReferenceBoardView::event(QEvent *event)
         QKeyEvent *key = static_cast<QKeyEvent *>(event);
         const int k = key->key();
         if (k == Qt::Key_Escape || k == Qt::Key_Home || k == Qt::Key_Left || k == Qt::Key_Right || k == Qt::Key_Space
-            || key->matches(QKeySequence::Paste) || isResetRotationKey(key) || isDeleteKey(key)) {
+            || key->matches(QKeySequence::Paste) || key->matches(QKeySequence::SelectAll) || isResetRotationKey(key)
+            || isDeleteKey(key)) {
             event->accept();
             return true;
         }
@@ -931,6 +1105,9 @@ bool GigaReferenceBoardView::event(QEvent *event)
         if (event->type() == QEvent::TouchCancel) {
             m_drag = Drag::None;
             m_pressImage = nullptr;
+            m_moving.clear();
+            if (!m_marqueeBase.isEmpty()) m_selected = m_marqueeBase;
+            m_marqueeBase.clear();
             update();
             return true;
         }
@@ -942,6 +1119,8 @@ bool GigaReferenceBoardView::event(QEvent *event)
             if (m_drag != Drag::Touch) {
                 m_drag = Drag::Touch;
                 m_pressImage = nullptr;
+                m_moving.clear();
+                m_marqueeBase.clear();
                 stopCameraAnimation();
             } else if (m_touchDistance > 1.0) {
                 m_camera.pan += viewDelta(center - m_touchCenter);
@@ -991,6 +1170,10 @@ void GigaReferenceBoardView::keyPressEvent(QKeyEvent *event)
         paste();
         return;
     }
+    if (event->matches(QKeySequence::SelectAll)) {
+        selectAll();
+        return;
+    }
     if (!event->isAutoRepeat() && isResetRotationKey(event)) {
         resetRotation();
         return;
@@ -1001,6 +1184,14 @@ void GigaReferenceBoardView::keyPressEvent(QKeyEvent *event)
     }
     switch (event->key()) {
     case Qt::Key_Escape:
+        // First Esc lets go of the selection, the next one shows everything.
+        // (Zoomed in on an image, Esc still flies back out first.)
+        if (!m_focused && !m_selected.isEmpty()) {
+            clearSelection();
+        } else {
+            fitAll();
+        }
+        return;
     case Qt::Key_Home:
         fitAll();
         return;
@@ -1439,36 +1630,44 @@ void GigaReferenceBoardView::updateFetchStatus()
 void GigaReferenceBoardView::contextMenuEvent(QContextMenuEvent *event)
 {
     m_drag = Drag::None;
+    m_moving.clear();
     KisReferenceImage *image = imageAt(event->pos());
     QMenu menu(this);
     if (image) {
+        // On a selected image the menu acts on the whole selection.
+        if (!m_selected.contains(image)) m_selected = {image};
         m_current = image;
         update();
+        const QVector<KisReferenceImage *> targets = targetsFor(image);
+        const int n = targets.size();
         menu.addAction(i18n("Focus"), this, [this, image]() { focusImage(image); });
-        menu.addAction(i18n("Send to Canvas"), this, [this, image]() {
-            pushCommand(GigaReferenceBoard::sendToCanvas({image}));
+        menu.addAction(n > 1 ? i18n("Send %1 to Canvas", n) : i18n("Send to Canvas"), this, [this, targets]() {
+            pushCommand(GigaReferenceBoard::sendToCanvas(targets));
         });
-        const QString summary = GigaReferenceBoard::resampleSummary({image});
+        if (n > 1) menu.addAction(i18n("Arrange Selected"), this, &GigaReferenceBoardView::arrangeSelected);
+        const QString summary = GigaReferenceBoard::resampleSummary(targets);
         QAction *resample = menu.addAction(summary.isEmpty() ? i18n("Resample to Current Size (already small)")
                                                              : i18n("Resample to Current Size (%1)", summary),
-                                           this, [this, image]() {
+                                           this, [this, targets]() {
             KUndo2Command *cmd = nullptr;
             {
                 KisCursorOverrideLock cursorLock(Qt::BusyCursor);
-                cmd = GigaReferenceBoard::resample({image});
+                cmd = GigaReferenceBoard::resample(targets);
             }
             pushCommand(cmd);
         });
         resample->setEnabled(!summary.isEmpty());
         resample->setToolTip(i18n("Keeps the size it fills here and on the canvas sharp (×1.5). Detail is lost once the file is saved and closed."));
         menu.addSeparator();
-        QAction *del = menu.addAction(KisIconUtils::loadIcon("edit-delete"), i18n("Delete"), this,
-                                      [this, image]() { deleteImage(image); });
+        QAction *del = menu.addAction(KisIconUtils::loadIcon("edit-delete"), n > 1 ? i18n("Delete %1", n) : i18n("Delete"),
+                                      this, [this, targets]() { deleteImages(targets); });
         del->setShortcut(QKeySequence(Qt::Key_Delete)); // shown as a hint; the key itself is handled in keyPressEvent
     } else {
         menu.addAction(KisIconUtils::loadIcon("zoom-fit"), i18n("Fit All"), this, &GigaReferenceBoardView::fitAll);
         menu.addAction(i18n("Arrange"), this, &GigaReferenceBoardView::arrange);
         menu.addAction(KisIconUtils::loadIcon("edit-paste"), i18n("Paste Image"), this, &GigaReferenceBoardView::paste);
+        QAction *all = menu.addAction(i18n("Select All"), this, &GigaReferenceBoardView::selectAll);
+        all->setShortcut(QKeySequence::SelectAll);
         menu.addSeparator();
         menu.addAction(i18n("Add from Canvas"), this, &GigaReferenceBoardView::addFromCanvas);
         menu.addAction(i18n("Send All to Canvas"), this, &GigaReferenceBoardView::sendAllToCanvas);
