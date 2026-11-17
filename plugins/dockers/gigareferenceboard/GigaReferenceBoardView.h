@@ -238,7 +238,7 @@ private:
     QHash<KisReferenceImage *, QRectF> m_scaleStart;
     QRectF m_scaleBounds;  // selection bounds at the press
     int m_scaleCorner = -1;
-    QPointF m_scaleAnchor; // board units: opposite corner, or the centre with Alt
+    QPointF m_scaleAnchor; // board units: opposite corner, or the center with Alt
     qreal m_scale = 1.0;
     // Just dropped by hand: drawn at these rects until their move lands.
     QHash<KisReferenceImage *, QRectF> m_dropRects;

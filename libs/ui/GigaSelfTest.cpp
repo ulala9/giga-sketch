@@ -2084,7 +2084,7 @@ void testBlenderTransform(KisMainWindow *w)
     auto isWhite = [](const QColor &q) { return q.red() > 230 && q.green() > 230 && q.blue() > 230; };
     report(at(corner).red() > 200 && at(corner).green() < 50, "blendertf-picture", name(at(corner)));
 
-    // Ctrl+T: scale to 50 % around the centre and apply.
+    // Ctrl+T: scale to 50 % around the center and apply.
     KoToolManager::instance()->switchToolRequested(QStringLiteral("KisToolTransform"));
     pass(500);
     KoToolBase *transform = KoToolManager::instance()->toolById(canvas, QStringLiteral("KisToolTransform"));

@@ -62,7 +62,7 @@ constexpr qreal FIT_MARGIN = 16.0;   // widget pixels around the overview
 constexpr qreal FOCUS_MARGIN = 8.0;  // around a focused image
 constexpr qreal DRAG_THRESHOLD = 4.0;
 constexpr qreal HANDLE_SIZE = 8.0;    // scale handles, widget pixels
-constexpr qreal HANDLE_GRAB = 9.0;    // grab distance from a handle's centre
+constexpr qreal HANDLE_GRAB = 9.0;    // grab distance from a handle's center
 constexpr qreal MIN_SCALED_SIDE = 6.0; // widget pixels: scaling never shrinks a picture below this
 constexpr qreal ROTATE_STEP = 15.0;        // stepped rotate, same as the canvas
 constexpr qreal ZOOM_DRAG_SMOOTH = 100.0;  // zoom drag: pixels per doubling (canvas value)
@@ -335,7 +335,7 @@ QRectF GigaReferenceBoardView::scaledRect(KisReferenceImage *image, const QRectF
 
 void GigaReferenceBoardView::updateScale(const QPointF &pos, Qt::KeyboardModifiers modifiers)
 {
-    // Alt scales around the centre, else around the opposite corner.
+    // Alt scales around the center, else around the opposite corner.
     const QPointF corner = boardCorner(m_scaleBounds, m_scaleCorner);
     m_scaleAnchor = (modifiers & Qt::AltModifier) ? m_scaleBounds.center()
                                                   : boardCorner(m_scaleBounds, (m_scaleCorner + 2) % 4);
