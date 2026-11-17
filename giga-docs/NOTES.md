@@ -817,3 +817,11 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - Blender-side tests: `blender --factory-startup --python test.py` with a `bpy.app.timers` callback calling the
   operator under `context.temp_override(window, area, region, space_data)`, then `wm.quit_blender()` (opens a
   window; `-b` has no viewport). A fake Giga server in Python on a short socket path covers refresh/ack.
+- Scaling/moving a Blender layer (`feature/blender-layer-transform`, 2026-11-16): Krita's Transform tool refuses File
+  Layers, so `KisToolTransform::startStroke` swaps a single selected Blender layer for its first transform mask
+  (`gigaBlenderLayerTransformMask`; adds one via KisNodeCommandsAdapter = undoable "Add Layer" if none, layer stays
+  active). The mask redraws every new picture with the same transform; saved as a normal mask in the .kra (stock
+  Krita too). All transform modes work (masks take warp/cage/liquify/mesh). Selection is ignored (stock message for
+  masks). Esc in a continued transform = Krita's Reset (back to before the first transform, committed when leaving
+  the tool), same as on any layer. Self-test `blendertransform` (also .kra round trip).
+

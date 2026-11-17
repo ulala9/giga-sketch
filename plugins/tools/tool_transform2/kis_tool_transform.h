@@ -254,6 +254,9 @@ private:
     QScopedPointer<QMenu> m_contextMenu;
 
     void startStroke(ToolTransformArgs::TransformMode mode, bool forceReset);
+    /// Giga Sketch: for a single selected Blender layer, its first transform mask
+    /// (added now if it has none); null for anything else.
+    KisNodeSP gigaBlenderLayerTransformMask(KisNodeSP node, const KisNodeList &selected);
     void endStroke();
     void cancelStroke();
 

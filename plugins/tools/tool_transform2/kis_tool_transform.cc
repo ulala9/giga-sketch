@@ -77,6 +77,9 @@
 #include "kis_layer_utils.h"
 #include <KisDelayedUpdateNodeInterface.h>
 #include "kis_config_notifier.h"
+#include "kis_file_layer.h"
+#include "kis_node_commands_adapter.h"
+#include "kis_node_manager.h"
 
 #include "strokes/transform_stroke_strategy.h"
 #include "strokes/inplace_transform_stroke_strategy.h"
@@ -919,6 +922,38 @@ void KisToolTransform::requestImageRecalculation()
     }
 }
 
+KisNodeSP KisToolTransform::gigaBlenderLayerTransformMask(KisNodeSP node, const KisNodeList &selected)
+{
+    // Only when the Blender layer is the one thing being transformed
+    // (several selected layers keep Krita's usual behaviour).
+    if (!node || selected.size() > 1 || (selected.size() == 1 && selected.first() != node)) return 0;
+
+    KisFileLayer *fileLayer = dynamic_cast<KisFileLayer*>(node.data());
+    if (!fileLayer || !fileLayer->gigaIsBlenderLayer() || !fileLayer->isEditable()) return 0;
+
+    // Reuse the first editable transform mask right under the layer
+    // (the same one Krita's transform strokes would pick).
+    KisNodeSP mask = KisTransformUtils::tryOverrideRootToTransformMask(node);
+    if (mask != node) return mask;
+
+    KisCanvas2 *kisCanvas = dynamic_cast<KisCanvas2*>(canvas());
+    if (!kisCanvas || !kisCanvas->viewManager() || !image()) return 0;
+    KisViewManager *viewManager = kisCanvas->viewManager();
+
+    KisTransformMaskSP newMask = new KisTransformMask(image(), i18n("Transform Mask"));
+    // Adding a node goes through the undo stack (Ctrl+Z removes the mask again).
+    KisNodeCommandsAdapter adapter(viewManager);
+    adapter.addNode(newMask, node, node->lastChild());
+
+    // Keep the Blender layer active, not the new mask, so painting/refresh and
+    // the next Ctrl+T still start from the layer.
+    if (viewManager->nodeManager() && viewManager->activeNode() != node) {
+        viewManager->nodeManager()->slotNonUiActivatedNode(node);
+    }
+
+    return newMask;
+}
+
 void KisToolTransform::startStroke(ToolTransformArgs::TransformMode mode, bool forceReset)
 {
     Q_ASSERT(!m_strokeId);
@@ -938,9 +973,24 @@ void KisToolTransform::startStroke(ToolTransformArgs::TransformMode mode, bool f
         }
     } gigaGuard{this, bool(externalSource)};
 
+    // Giga Sketch: a Blender layer (a File Layer the Blender bridge refreshes)
+    // can't be transformed directly, its picture is replaced on every refresh.
+    // Instead the transform goes into a transform mask on it, which redraws
+    // every new picture with the same transform. Reuse the layer's mask, or
+    // add one (undoable, as "Add Transform Mask").
+    KisNodeSP gigaSnapshotNode = currentNode();
+    KisNodeList gigaSnapshotSelected = selectedNodes();
+    if (!externalSource) {
+        KisNodeSP blenderMask = gigaBlenderLayerTransformMask(gigaSnapshotNode, gigaSnapshotSelected);
+        if (blenderMask) {
+            gigaSnapshotNode = blenderMask;
+            gigaSnapshotSelected = KisNodeList() << blenderMask;
+        }
+    }
+
     // set up and null checks before we do anything
     KisResourcesSnapshotSP resources =
-            new KisResourcesSnapshot(image(), currentNode(), this->canvas()->resourceManager(), 0, selectedNodes(), 0);
+            new KisResourcesSnapshot(image(), gigaSnapshotNode, this->canvas()->resourceManager(), 0, gigaSnapshotSelected, 0);
     KisNodeList rootNodes = resources->selectedNodes();
     //Filter out any nodes that might be children of other selected nodes so they aren't used twice
     KisLayerUtils::filterMergeableNodes(rootNodes, true);
