@@ -35,8 +35,6 @@ namespace
 constexpr qreal STRIP = 14.0;      ///< height of the darker top band
 constexpr qreal PAD = 10.0;        ///< left/right/bottom padding
 constexpr qreal PAD_TOP = 7.0;     ///< gap between the band and the text
-constexpr qreal RADIUS = 7.0;      ///< corner rounding
-constexpr qreal SHADOW = 3.0;      ///< Sticky: shadow offset (kept inside the shape)
 constexpr qreal CARD_BAR = 5.0;    ///< Card: coloured bar on the left
 constexpr qreal TAIL = 12.0;       ///< Bubble: height of the tail under the body
 const char *CONFIG_STYLE = "gigaNoteStyle";
@@ -257,7 +255,7 @@ QMarginsF GigaNote::insets() const
 {
     switch (m_d->style) {
     case Sticky:
-        return QMarginsF(PAD, STRIP + PAD_TOP, PAD + SHADOW, PAD + SHADOW);
+        return QMarginsF(PAD, STRIP + PAD_TOP, PAD, PAD);
     case Card:
         return QMarginsF(PAD + CARD_BAR, PAD, PAD, PAD);
     case Bubble:
@@ -501,13 +499,10 @@ void GigaNote::paintNote(QPainter &gc, qreal pointsPerUnit) const
 
     switch (m_d->style) {
     case Sticky: {
-        // Soft shadow (inside the shape's area), box, darker top strip.
-        const QRectF body = box.adjusted(0.0, 0.0, -SHADOW, -SHADOW);
-        QPainterPath shadow;
-        shadow.addRoundedRect(body.translated(SHADOW, SHADOW), RADIUS, RADIUS);
-        gc.fillPath(shadow, QColor(0, 0, 0, 45));
+        // Square box with a darker top strip (no shadow, no rounding: user choice).
+        const QRectF body = box;
         QPainterPath shape;
-        shape.addRoundedRect(body, RADIUS, RADIUS);
+        shape.addRect(body);
         gc.fillPath(shape, color);
         gc.save();
         gc.setClipPath(shape);
@@ -521,7 +516,7 @@ void GigaNote::paintNote(QPainter &gc, qreal pointsPerUnit) const
     case Card: {
         // Flat light card with the colour as a bar down the left edge.
         QPainterPath shape;
-        shape.addRoundedRect(box, 3.0, 3.0);
+        shape.addRect(box);
         gc.fillPath(shape, fillColor());
         gc.save();
         gc.setClipPath(shape);
@@ -536,11 +531,10 @@ void GigaNote::paintNote(QPainter &gc, qreal pointsPerUnit) const
         break;
     }
     case Bubble: {
-        // Rounded body with a tail at the bottom-left.
+        // Square body with a tail at the bottom-left.
         const QRectF body = box.adjusted(0.0, 0.0, 0.0, -TAIL);
-        const qreal r = qMin<qreal>(12.0, qMin(body.width(), body.height()) / 2.0);
         QPainterPath shape;
-        shape.addRoundedRect(body, r, r);
+        shape.addRect(body);
         QPainterPath tail;
         const qreal x = body.left() + qMin<qreal>(22.0, body.width() * 0.25);
         tail.moveTo(x, body.bottom() - 1.0);
@@ -557,7 +551,7 @@ void GigaNote::paintNote(QPainter &gc, qreal pointsPerUnit) const
     default: {
         // Outline: see-through dark glass with a coloured border.
         QPainterPath shape;
-        shape.addRoundedRect(box.adjusted(1.0, 1.0, -1.0, -1.0), RADIUS, RADIUS);
+        shape.addRect(box.adjusted(1.0, 1.0, -1.0, -1.0));
         gc.fillPath(shape, fillColor());
         QPen line(textColor());
         line.setWidthF(1.6);

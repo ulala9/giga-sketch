@@ -869,7 +869,7 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   key `gigaRefBoardKeepNotes`, checkbox in the tool options). Resample skips them (no pixels). Ctrl+click colour
   on a note does nothing (pixelAtNormalized invalid).
 - Styles (2026-11-16): `GigaNote::Style` Sticky / Card / Bubble / Outline, per note in State (undo) and saved as
-  `style="n"` (missing = Sticky). `insets()` gives the text margins per style (Sticky: strip + shadow inside the shape,
+  `style="n"` (missing = Sticky). All square, no shadow (user, 2026-11-16). `insets()` gives text margins (Sticky: strip,
   Card: left bar, Bubble: tail under the body); `fillColor()`/`textColor()` are style-aware (Outline = dark glass
   α≈0.45 with the colour lightened for text and border). `stripRect()` = Sticky strip or the top inset (double-click
   collapse). New notes take `defaultStyle()` (KisConfig `gigaNoteStyle`, set by `GigaNoteActions::applyStyle`).
