@@ -4,12 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-16 (Annotations + Blender layer transform merged, G'MIC tried — all hand-tested)
+Last updated: 2026-11-17 (Layers panel Delete button moved to the far right, merged)
 
 ## Resume here
 - **Next up:** ask the user what to do next. Candidates: a Phase 5 blueprint (Bubble Guess, Blob Brush,
   Harmony Wheel), Phase 6 extras, or Blender bridge extras.
-- Repo state: everything merged and pushed (2026-11-16: annotations, blender-layer-transform, plus earlier
+- Repo state: everything merged and pushed (2026-11-17: layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
   transform-last-stroke, stroke-points(-proportional), refboard-image-search, refboard-delete-key; all hand-tested).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
@@ -61,6 +61,8 @@ Last updated: 2026-11-16 (Annotations + Blender layer transform merged, G'MIC tr
 - [x] Photoshop-like layout, left toolbox with tool groups, top options bar, right panel icon strip
 - [x] Layers panel: lock row, PS button order, New/Delete on the left (`feature/ui-layers-panel`, `feature/layers-buttons-left`)
 - [x] Layers panel: Duplicate button between New and Delete (`feature/layers-duplicate-button`, merged 2026-11-14)
+- [x] Layers panel: Delete button at the far right, after Group (`feature/layers-delete-right`, merged 2026-11-17).
+  Self-test `layerbuttons`.
 - [x] Colour panel, menus wording, New Document dialog (`feature/ui-color-panel`, `feature/ui-menus-wording`, …)
 - [x] Space-saving mode, panel flyouts (`feature/ui-space-saving`)
 - [x] Interface modes Studio / Photoshop / Procreate, F9 (`feature/interface-modes`, `feature/procreate-*`, `feature/studio-*`)
@@ -161,6 +163,7 @@ Last updated: 2026-11-16 (Annotations + Blender layer transform merged, G'MIC tr
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-17: Layers panel Delete button at the far right of the bottom row (no gap before it); New + Duplicate stay left.
 - 2026-11-16: Blender layer scaling = a transform mask added automatically by Ctrl+T (not a transform stored on the
   layer): reuses Krita's mask (undo, .kra, sharp redraw of each refresh); the mask shows in the Layers panel.
 - 2026-11-16: Annotations: a note is a subclass of KisReferenceImage (not a separate object), saved as `<giga-note>`;
