@@ -53,6 +53,9 @@
 #include "GigaAccent.h"
 #include "GigaBlenderBridge.h"
 #include "kis_file_layer.h"
+#include "kis_transform_mask.h"
+#include "kis_transform_mask_params_interface.h"
+#include "kis_node_commands_adapter.h"
 #include <kis_layer_properties_icons.h>
 #include "kis_layer_utils.h"
 #include <QJsonDocument>
@@ -62,6 +65,7 @@
 #include <klocalizedstring.h>
 #include <KoCanvasResourceProvider.h>
 #include <KoColor.h>
+#include <KoProperties.h>
 #include <KoColorSpaceRegistry.h>
 
 #include <QApplication>
@@ -1875,6 +1879,138 @@ void testLassoFill(KisMainWindow *w)
 /// Edit > Transform Last Stroke: paint a blue line and a red line across it,
 /// lift the red one into the Transform tool, cancel (nothing changes), then
 /// move it and apply; check pixels and the undo history.
+// Blender layer transform (feature/blender-layer-transform): Ctrl+T on a
+// Blender layer puts the transform into a transform mask under it (added on
+// first use, reused after), the layer stays active, and a new picture from
+// Blender comes out with the same transform.
+void testBlenderTransform(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!doc || !canvas) { report(false, "setup", QStringLiteral("no document/canvas")); return; }
+    KisImageSP image = doc->image();
+    KisViewManager *vm = view->viewManager();
+    w->setActiveView(view);
+    vm->setCurrentView(view);
+    pump(10);
+
+    auto pass = [&](int ms) {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < ms) { pump(1); QThread::msleep(5); }
+        t.restart();
+        while (!image->isIdle() && t.elapsed() < 5000) { pump(1); QThread::msleep(5); }
+        pump(5);
+    };
+    const KoColorSpace *cs = KoColorSpaceRegistry::instance()->rgb8();
+    auto picture = [&](const QColor &col) {
+        KisPaintDeviceSP dev = new KisPaintDevice(cs);
+        dev->fill(QRect(0, 0, image->width(), image->height()), KoColor(col, cs));
+        return dev;
+    };
+
+    KisFileLayer *layer = new KisFileLayer(image, QString(), QString(), KisFileLayer::ToImageSize,
+                                           QStringLiteral("Bicubic"), QStringLiteral("Blender: Camera"), OPACITY_OPAQUE_U8);
+    layer->gigaSetBlenderLayer(true);
+    KisNodeSP layerNode(layer);
+    KisNodeCommandsAdapter(vm).addNode(layerNode, image->root(), image->root()->lastChild());
+    layer->gigaSetPicture(picture(Qt::red));
+    pass(300);
+    vm->nodeManager()->slotNonUiActivatedNode(layerNode);
+    pump(5);
+    if (vm->activeNode() != layerNode) {
+        view->setCurrentNode(layerNode);
+        canvas->resourceManager()->setResource(KoCanvasResource::CurrentKritaNode, QVariant::fromValue(KisNodeWSP(layerNode)));
+        pump(5);
+    }
+
+    const QPoint centre(image->width() / 2, image->height() / 2);
+    const QPoint corner(20, 20);
+    auto at = [&](const QPoint &p) {
+        QColor q;
+        image->projection()->pixel(p.x(), p.y(), &q);
+        return q;
+    };
+    auto masks = [&]() { return layerNode->childNodes(QStringList(QStringLiteral("KisTransformMask")), KoProperties()).size(); };
+    auto name = [](const QColor &q) { return q.name(QColor::HexArgb); };
+    auto isWhite = [](const QColor &q) { return q.red() > 230 && q.green() > 230 && q.blue() > 230; };
+    report(at(corner).red() > 200 && at(corner).green() < 50, "blendertf-picture", name(at(corner)));
+
+    // Ctrl+T: scale to 50 % around the centre and apply.
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KisToolTransform"));
+    pass(500);
+    KoToolBase *transform = KoToolManager::instance()->toolById(canvas, QStringLiteral("KisToolTransform"));
+    if (!transform) { report(false, "blendertf-tool", QStringLiteral("no transform tool")); return; }
+    report(masks() == 1, "blendertf-mask-added", QString::number(masks()));
+    report(vm->activeNode() == layerNode, "blendertf-layer-stays-active",
+           vm->activeNode() ? vm->activeNode()->name() : QStringLiteral("none"));
+    transform->setProperty("scaleX", 50.0);
+    transform->setProperty("scaleY", 50.0);
+    QMetaObject::invokeMethod(transform, "requestImageRecalculation");
+    pass(300);
+    static_cast<KisTool *>(transform)->requestStrokeEnd();
+    pass(1500);
+    report(isWhite(at(corner)) && at(centre).red() > 200, "blendertf-scaled",
+           QStringLiteral("corner %1, centre %2").arg(name(at(corner)), name(at(centre))));
+
+    // A new picture from Blender keeps the transform.
+    layer->gigaSetPicture(picture(Qt::blue));
+    pass(1500);
+    report(isWhite(at(corner)) && at(centre).blue() > 200 && at(centre).red() < 50, "blendertf-refresh-keeps-scale",
+           QStringLiteral("corner %1, centre %2").arg(name(at(corner)), name(at(centre))));
+
+    // Saved in the .kra: the reopened Blender layer has its mask, still 50 %.
+    {
+        const QString kra = QDir::home().filePath(QStringLiteral("blendertf-test.kra"));
+        const bool saved = doc->exportDocumentSync(kra, "application/x-krita");
+        KisDocument *reopened = KisPart::instance()->createDocument();
+        const bool opened = saved && reopened->openPath(kra, KisDocument::DontAddToRecent);
+        KisFileLayer *loaded = nullptr;
+        if (opened) {
+            KisLayerUtils::recursiveApplyNodes(reopened->image()->root(), [&](KisNodeSP node) {
+                if (KisFileLayer *fl = qobject_cast<KisFileLayer*>(node.data())) loaded = fl;
+            });
+        }
+        KisTransformMask *tm = loaded ? dynamic_cast<KisTransformMask*>(loaded->firstChild().data()) : nullptr;
+        const double sc = tm ? tm->transformParams()->finalAffineTransform().m11() : -1.0;
+        report(loaded && loaded->gigaIsBlenderLayer() && tm && qAbs(sc - 0.5) < 0.01, "blendertf-kra-roundtrip",
+               QStringLiteral("saved %1, opened %2, mask %3, scale %4").arg(saved).arg(opened).arg(tm != nullptr).arg(sc));
+        delete reopened;
+    }
+
+    // Second Ctrl+T reuses the mask (and picks up its 50 %).
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    pass(300);
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KisToolTransform"));
+    pass(500);
+    auto maskScale = [&]() {
+        KisTransformMask *tm = dynamic_cast<KisTransformMask*>(layerNode->firstChild().data());
+        return tm ? tm->transformParams()->finalAffineTransform().m11() : -1.0;
+    };
+    report(masks() == 1 && qAbs(transform->property("scaleX").toDouble() - 0.5) < 0.01, "blendertf-mask-reused",
+           QStringLiteral("%1 mask(s), tool scale %2").arg(masks()).arg(transform->property("scaleX").toDouble()));
+    // Esc = Krita's "Reset" (back to before the first transform), saved
+    // when the tool is left; Ctrl+Z brings the 50 % back.
+    static_cast<KisTool *>(transform)->requestStrokeCancellation();
+    pass(500);
+    KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+    pass(3000);
+    report(at(corner).blue() > 200 && qFuzzyCompare(maskScale(), 1.0), "blendertf-esc-resets",
+           QStringLiteral("corner %1, mask scale %2").arg(name(at(corner))).arg(maskScale()));
+    doc->undoStack()->undo();
+    pass(3000);
+    report(isWhite(at(corner)) && qFuzzyCompare(maskScale(), 0.5), "blendertf-undo-reset",
+           QStringLiteral("corner %1, mask scale %2").arg(name(at(corner))).arg(maskScale()));
+    doc->undoStack()->undo();
+    pass(3000);
+    report(at(corner).blue() > 200, "blendertf-undo-transform", name(at(corner)));
+    doc->undoStack()->undo();
+    pass(1000);
+    report(masks() == 0 && at(corner).blue() > 200, "blendertf-undo-mask",
+           QStringLiteral("%1 mask(s), corner %2").arg(masks()).arg(name(at(corner))));
+}
+
 void testLastStroke(KisMainWindow *w)
 {
     KisDocument *doc = openTestDocument(w);
@@ -3166,6 +3302,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("menuletter"), testMenuLetter},
         {QStringLiteral("cursorlook"), testCursorLook},
         {QStringLiteral("laststroke"), testLastStroke},
+        {QStringLiteral("blendertransform"), testBlenderTransform},
         {QStringLiteral("strokepoints"), testStrokePoints},
         {QStringLiteral("notes"), testNotes},
         {QStringLiteral("notesfreeze"), testNotesFreeze},

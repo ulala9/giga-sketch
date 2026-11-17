@@ -818,6 +818,14 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   operator under `context.temp_override(window, area, region, space_data)`, then `wm.quit_blender()` (opens a
   window; `-b` has no viewport). A fake Giga server in Python on a short socket path covers refresh/ack.
 
+- Scaling/moving a Blender layer (`feature/blender-layer-transform`, 2026-11-16): Krita's Transform tool refuses File
+  Layers, so `KisToolTransform::startStroke` swaps a single selected Blender layer for its first transform mask
+  (`gigaBlenderLayerTransformMask`; adds one via KisNodeCommandsAdapter = undoable "Add Layer" if none, layer stays
+  active). The mask redraws every new picture with the same transform; saved as a normal mask in the .kra (stock
+  Krita too). All transform modes work (masks take warp/cage/liquify/mesh). Selection is ignored (stock message for
+  masks). Esc in a continued transform = Krita's Reset (back to before the first transform, committed when leaving
+  the tool), same as on any layer. Self-test `blendertransform` (also .kra round trip).
+
 ## Sticky notes / Annotations (feature/annotations, 2026-11-16)
 - A note is a **subclass of KisReferenceImage**: `libs/ui/GigaNote.{h,cpp}`. It lives in the reference layer, so
   select/move/stack/undo/Board/Send to Board all work unchanged. `KisReferenceImage` got virtual `saveXml`,
