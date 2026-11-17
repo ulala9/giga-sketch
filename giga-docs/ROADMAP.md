@@ -100,8 +100,10 @@ Last updated: 2026-11-16 (Annotations built, waiting for hand test)
 - [ ] **Annotations** (sticky notes, `feature/annotations`, built 2026-11-16, **waiting for hand test**). A note is a
   special kind of reference image (GigaNote). Reference Images tool: Add Note (click to place), right-click menu,
   double-click to type, paste text; Edit > Add Note (no shortcut); View > Show Annotations; colours, 3 text sizes,
-  collapse, Keep readable; Board + .kra/.krf. Self-test `notes`. Things to try by hand: typing feel, click outside
-  to finish, rotated/zoomed canvas, Board panel look.
+  collapse, Keep readable, 4 styles (Sticky, Card, Speech Bubble, Outline); Board + .kra/.krf. Self-test `notes`.
+  2026-11-16: user reported a freeze on Edit > Add Note → fixed (no undoStack()->undo() from the editor; outside-click
+  watcher starts after the opening click); needs re-test. Things to try by hand: Edit > Add Note on a big file,
+  typing feel, click outside to finish, styles, rotated/zoomed canvas, Board panel look.
 - [ ] Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
 - [x] **Blender Viewport Layer** (`feature/blender-bridge`, merged 2026-11-16, hand-tested). Self-test `blender`;
   add-on `giga-tools/blender/giga_viewport_send.py`.
