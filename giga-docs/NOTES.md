@@ -838,8 +838,14 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   Takes every ShortcutOverride except Save/SaveAs (B/E type letters). Live: each change → note->setHtml (box grows).
   Finish = Esc / Ctrl+Enter / **app-wide mouse/tablet press outside** (event filter on qApp; middle button ignored
   for panning). Not on focus-out: menus and window activation move focus (made the editor close at once in tests).
-  Commit = StateCommand "Edit Note" with setSkipFirstRedo. New note left empty → `undoStack()->undo()` of its add
-  (only if the stack index is still the one right after the add).
+  The outside-click filter is installed one event-loop turn after opening, plus 250 ms grace: the placing click
+  still travels up to the canvas's parents (Viewport, KisView…) and would close the box at once (seen 2026-11-16).
+  Commit = StateCommand "Edit Note" with setSkipFirstRedo. New note left empty → a normal remove command.
+  **Never call `undoStack()->undo()` from here:** KisDocument's undo loops processEvents (ignoring input) until the
+  image is idle; the user's app froze on Edit > Add Note in a big file (first note creates the reference layer).
+- Diagnostic self-test `notesfreeze` (by name only): big 8-layer document, timings; `GIGA_NOTES_FILE=<kra>`,
+  `GIGA_NOTES_NO_TYPING=1`, `GIGA_NOTE_TRACE=1` (editor close reasons). Synthetic clicks need an Enter event first,
+  else KisInputManager drops them.
 - Tool (`ToolReferenceImages`): Add Note button (placement mode, crosshair, Esc cancels), double-click note = edit,
   double-click strip = collapse, right-click menu (Add Note at the click, Note Colour/Text Size/Collapse/Keep
   Readable/Duplicate/Delete), paste text (no image/urls on the clipboard) = new note, copy note = html + text.

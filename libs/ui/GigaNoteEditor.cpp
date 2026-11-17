@@ -18,6 +18,7 @@
 #include <QTextDocument>
 #include <QTextList>
 #include <QTimer>
+#include <cstdio>
 
 #include <klocalizedstring.h>
 #include <kundo2stack.h>
@@ -80,7 +81,6 @@ GigaNoteEditor::GigaNoteEditor(KisCanvas2 *canvas, GigaNote *note, bool isNewNot
     setTabChangesFocus(false);
     setLineWrapMode(QTextEdit::FixedPixelWidth);
 
-    if (m_isNewNote && m_document) m_undoIndexAfterAdd = m_document->undoStack()->index();
 
     note->setEditing(true); // the note now draws only its box
 
@@ -93,7 +93,14 @@ GigaNoteEditor::GigaNoteEditor(KisCanvas2 *canvas, GigaNote *note, bool isNewNot
     placeOnCanvas();
 
     connect(this, &QTextEdit::textChanged, this, &GigaNoteEditor::textChangedLive);
-    qApp->installEventFilter(this);
+    // Watch for clicks outside only once the click that opened us (e.g. the
+    // Add Note placement click, which still travels up to the canvas's
+    // parents) is fully handled. m_opened adds a short grace period for the
+    // mouse press a pen tap produces after its tablet press.
+    m_opened.start();
+    QTimer::singleShot(0, this, [this]() {
+        if (!m_finishing) qApp->installEventFilter(this);
+    });
     // Pan, zoom, rotate: follow the note.
     connect(canvas, &KisCanvas2::sigCanvasStateChanged, this, [this]() {
         applyLook();
@@ -184,6 +191,7 @@ void GigaNoteEditor::textChangedLive()
 void GigaNoteEditor::finish()
 {
     if (m_finishing) return;
+    if (qEnvironmentVariableIsSet("GIGA_NOTE_TRACE")) fprintf(stderr, "GIGA_SELFTEST INFO editor finish()\n");
     m_finishing = true;
     if (s_current == this) s_current = nullptr;
 
@@ -193,11 +201,15 @@ void GigaNoteEditor::finish()
         m_note->update();
         const GigaNote::State after = m_note->state();
 
-        KUndo2Stack *stack = m_document->undoStack();
-        if (m_isNewNote && m_note->isEmpty() && stack->index() == m_undoIndexAfterAdd) {
-            // Nothing typed into a new note: take the "add" back, as if the
-            // note was never made.
-            stack->undo();
+        if (m_isNewNote && m_note->isEmpty() && m_canvas) {
+            // Nothing typed into a new note: remove it. A normal remove
+            // command, NOT undoStack()->undo(): the document's undo waits
+            // (processing events, ignoring input) until the image is idle,
+            // which froze the app on a big file right after the first note
+            // had created the reference layer.
+            if (KisSharedPtr<KisReferenceImagesLayer> layer = m_document->referenceImagesLayer()) {
+                m_canvas->addCommand(layer->removeReferenceImages(m_document, {m_note}));
+            }
         } else if (!(after == m_before) && m_canvas) {
             auto *cmd = new GigaNote::StateCommand(kundo2_i18n("Edit Note"), {m_note}, {m_before}, {after});
             cmd->setSkipFirstRedo(true); // already applied while typing
@@ -262,10 +274,15 @@ bool GigaNoteEditor::eventFilter(QObject *watched, QEvent *event)
     if (type == QEvent::TabletPress && static_cast<QTabletEvent *>(event)->button() == Qt::MiddleButton) {
         return false;
     }
+    if (m_opened.elapsed() < 250) return false; // the press that opened us
     QWidget *widget = qobject_cast<QWidget *>(watched);
     if (!widget) return false; // the same press also arrives for its QWindow
     if (widget == this || isAncestorOf(widget)) return false;
     if (QApplication::activePopupWidget()) return false; // our right-click menu
+    if (qEnvironmentVariableIsSet("GIGA_NOTE_TRACE")) {
+        fprintf(stderr, "GIGA_SELFTEST INFO editor closed by press on %s (%s) type %d\n",
+                watched->metaObject()->className(), qPrintable(watched->objectName()), int(type));
+    }
     QTimer::singleShot(0, this, &GigaNoteEditor::finish);
     return false;
 }

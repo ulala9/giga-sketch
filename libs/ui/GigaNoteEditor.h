@@ -6,6 +6,7 @@
 #ifndef GIGA_NOTE_EDITOR_H
 #define GIGA_NOTE_EDITOR_H
 
+#include <QElapsedTimer>
 #include <QPointer>
 #include <QTextEdit>
 
@@ -36,7 +37,7 @@ class KRITAUI_EXPORT GigaNoteEditor : public QTextEdit
 public:
     /// Opens the editor on note (finishing any other open one first).
     /// isNewNote: the note was just added; if it is still empty when the
-    /// editor closes, the "add" is undone so no empty note is left behind.
+    /// editor closes, it is removed (a normal remove step, never an undo).
     static GigaNoteEditor *edit(KisCanvas2 *canvas, GigaNote *note, bool isNewNote = false);
     /// The open editor, if any.
     static GigaNoteEditor *current();
@@ -76,8 +77,8 @@ private:
     GigaNote *m_note = nullptr;
     GigaNote::State m_before;
     bool m_isNewNote = false;
-    int m_undoIndexAfterAdd = -1;
     bool m_finishing = false;
+    QElapsedTimer m_opened;
 };
 
 #endif // GIGA_NOTE_EDITOR_H

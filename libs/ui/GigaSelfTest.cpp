@@ -2705,6 +2705,7 @@ void testNotes(KisMainWindow *w)
         pump(3);
         report(GigaNoteEditor::current() && GigaNoteEditor::current()->note() == note, "notes-double-click-edits", QString());
         // Middle-button (pan) keeps it open; a left click on the canvas closes it.
+        { QElapsedTimer gt; gt.start(); while (gt.elapsed() < 300) pump(1); } // clicks right after opening are ignored
         QWidget *cw = canvas->canvasWidget();
         const QPointF far(5, 5);
         QMouseEvent middle(QEvent::MouseButtonPress, far, cw->mapToGlobal(far), Qt::MiddleButton, Qt::MiddleButton, Qt::NoModifier);
@@ -2896,6 +2897,159 @@ void testNotes(KisMainWindow *w)
     report(!other->isOnBoard() && other->isVisible(), "notes-back-to-canvas", QString());
 }
 
+/// Diagnostic: add a note on a real document (GIGA_NOTES_FILE) and time it.
+void testNotesFreeze(KisMainWindow *w)
+{
+    if (qEnvironmentVariable("GIGA_SELFTEST") == QLatin1String("all")) return; // diagnostic, run by name only
+    KisDocument *doc = nullptr;
+    const QString file = qEnvironmentVariable("GIGA_NOTES_FILE");
+    if (!file.isEmpty()) {
+        doc = KisPart::instance()->createDocument();
+        KisPart::instance()->addDocument(doc, false);
+        if (!doc->openPath(file)) { report(false, "setup", QStringLiteral("cannot open ") + file); return; }
+        w->showDocument(doc);
+        pump(40);
+        if (doc->image()) doc->image()->waitForDone();
+        pump(40);
+    } else {
+        // Like the user's sketch: big, 100 ppi, several layers, no reference layer.
+        doc = KisPart::instance()->createDocument();
+        KisPart::instance()->addDocument(doc, false);
+        const KoColorSpace *cs = KoColorSpaceRegistry::instance()->rgb8();
+        doc->newImage(QStringLiteral("big"), 7020, 3120, cs, KoColor(Qt::white, cs), KisConfig::RASTER_LAYER, 8,
+                      QString(), 100.0 / 72.0);
+        w->showDocument(doc);
+        pump(20);
+    }
+    KisView *view = w->activeView();
+    KisCanvas2 *canvas = view ? view->canvasBase() : nullptr;
+    if (!canvas) { report(false, "setup", QStringLiteral("no canvas")); return; }
+    view->zoomManager()->slotZoomToFit();
+    pump(20);
+
+    if (qEnvironmentVariableIsSet("GIGA_NOTES_PLACE_FIRST")) {
+        KoToolManager::instance()->switchToolRequested(QStringLiteral("ToolReferenceImages"));
+        pump(10);
+        KoToolBase *tool0 = KoToolManager::instance()->toolById(canvas, QStringLiteral("ToolReferenceImages"));
+        QMetaObject::invokeMethod(tool0, "gigaAddNote", Qt::DirectConnection);
+        pump(3);
+        QWidget *cw0 = canvas->canvasWidget();
+        const QPointF p(cw0->width() * 0.5, cw0->height() * 0.5);
+        QElapsedTimer t0;
+        t0.start();
+        QMouseEvent press(QEvent::MouseButtonPress, p, cw0->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(cw0, &press);
+        info(QStringLiteral("first place press %1 ms").arg(t0.restart()));
+        for (int i = 0; i < 10; ++i) qApp->processEvents();
+        info(QStringLiteral("after press rounds %1 ms").arg(t0.restart()));
+        QMouseEvent release(QEvent::MouseButtonRelease, p, cw0->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(cw0, &release);
+        for (int i = 0; i < 10; ++i) qApp->processEvents();
+        info(QStringLiteral("after release %1 ms, layer %2, editor %3").arg(t0.restart())
+                 .arg(doc->referenceImagesLayer() ? GigaNote::notesOf(doc->referenceImagesLayer().data()).size() : -1)
+                 .arg(GigaNoteEditor::current() ? "open" : "none"));
+    }
+
+    int stateChanges = 0;
+    QObject::connect(canvas, &KisCanvas2::sigCanvasStateChanged, canvas, [&stateChanges]() { ++stateChanges; });
+    QElapsedTimer t;
+    t.start();
+    KisAction *addAction = view->viewManager()->actionManager()->actionByName(QStringLiteral("giga_add_note"));
+    addAction->trigger();
+    info(QStringLiteral("trigger took %1 ms").arg(t.restart()));
+    if (qEnvironmentVariableIsSet("GIGA_NOTES_NO_TYPING")) {
+        t.restart();
+        GigaNoteEditor::finishCurrent(); // like the old focus-out: closes at once, image still busy
+        for (int i = 0; i < 20; ++i) qApp->processEvents();
+        info(QStringLiteral("immediate empty finish %1 ms, notes %2").arg(t.restart())
+                 .arg(GigaNote::notesOf(doc->referenceImagesLayer().data()).size()));
+    }
+    for (int i = 0; i < 20; ++i) {
+        QElapsedTimer one;
+        one.start();
+        qApp->processEvents();
+        if (one.elapsed() > 200) info(QStringLiteral("processEvents round %1 took %2 ms").arg(i).arg(one.elapsed()));
+    }
+    info(QStringLiteral("20 rounds took %1 ms, state changes %2").arg(t.restart()).arg(stateChanges));
+    QPointer<GigaNoteEditor> editor = GigaNoteEditor::current();
+    info(QStringLiteral("editor %1").arg(editor ? "open" : "none"));
+    if (editor && qEnvironmentVariableIsSet("GIGA_NOTES_NO_TYPING")) {
+        t.restart();
+        GigaNoteEditor::finishCurrent();
+        pump(5);
+        info(QStringLiteral("empty finish took %1 ms, notes %2").arg(t.elapsed())
+                 .arg(GigaNote::notesOf(doc->referenceImagesLayer().data()).size()));
+    } else if (editor) {
+        for (const QChar c : QStringLiteral("hello")) {
+            QKeyEvent press(QEvent::KeyPress, int(Qt::Key_A) + (c.unicode() - 'a'), Qt::NoModifier, QString(c));
+            QElapsedTimer one;
+            one.start();
+            QCoreApplication::sendEvent(editor, &press);
+            qApp->processEvents();
+            info(QStringLiteral("key %1 took %2 ms").arg(c).arg(one.elapsed()));
+        }
+        t.restart();
+        GigaNoteEditor::finishCurrent();
+        pump(5);
+        info(QStringLiteral("finish took %1 ms").arg(t.elapsed()));
+    }
+
+    // Add Note button, then a click on the canvas (mouse, then pen).
+    KoToolBase *tool = KoToolManager::instance()->toolById(canvas, QStringLiteral("ToolReferenceImages"));
+    QWidget *cw = canvas->canvasWidget();
+    for (int pass = 0; pass < 2 && tool; ++pass) {
+        const bool pen = pass == 1;
+        KoToolManager::instance()->switchToolRequested(QStringLiteral("ToolReferenceImages"));
+        pump(5);
+        QMetaObject::invokeMethod(tool, "gigaAddNote", Qt::DirectConnection);
+        pump(3);
+        info(QStringLiteral("active tool %1").arg(KoToolManager::instance()->activeToolId()));
+        const int before = GigaNote::notesOf(doc->referenceImagesLayer().data()).size();
+        const QPointF p(cw->width() * 0.4, cw->height() * 0.4);
+        const QPointF g = cw->mapToGlobal(p);
+        {
+            QEnterEvent enter(p, p, g);
+            QCoreApplication::sendEvent(cw, &enter);
+            QMouseEvent move(QEvent::MouseMove, p, g, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(cw, &move);
+            pump(2);
+        }
+        t.restart();
+        if (pen) {
+            QTabletEvent press(QEvent::TabletPress, QPointingDevice::primaryPointingDevice(), p, g, 0.5, 0, 0, 0, 0, 0,
+                               Qt::NoModifier, Qt::LeftButton, Qt::LeftButton);
+            QCoreApplication::sendEvent(cw, &press);
+        } else {
+            QMouseEvent press(QEvent::MouseButtonPress, p, g, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(cw, &press);
+        }
+        info(QStringLiteral("%1 press took %2 ms, editor %3").arg(pen ? "pen" : "mouse").arg(t.restart())
+                 .arg(GigaNoteEditor::current() ? "open" : "none"));
+        pump(5);
+        if (pen) {
+            QTabletEvent release(QEvent::TabletRelease, QPointingDevice::primaryPointingDevice(), p, g, 0, 0, 0, 0, 0, 0,
+                                 Qt::NoModifier, Qt::LeftButton, Qt::NoButton);
+            QCoreApplication::sendEvent(cw, &release);
+        } else {
+            QMouseEvent release(QEvent::MouseButtonRelease, p, g, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(cw, &release);
+        }
+        for (int i = 0; i < 20; ++i) {
+            QElapsedTimer one;
+            one.start();
+            qApp->processEvents();
+            if (one.elapsed() > 200) info(QStringLiteral("round %1 took %2 ms").arg(i).arg(one.elapsed()));
+        }
+        info(QStringLiteral("%1 release+20 rounds %2 ms, notes %3 -> %4, editor %5")
+                 .arg(pen ? "pen" : "mouse").arg(t.restart()).arg(before)
+                 .arg(GigaNote::notesOf(doc->referenceImagesLayer().data()).size())
+                 .arg(GigaNoteEditor::current() ? "open" : "none"));
+        GigaNoteEditor::finishCurrent();
+        pump(5);
+    }
+    report(true, "notesfreeze-done", QString());
+}
+
 bool runNamed(const QString &name, KisMainWindow *w)
 {
     const QList<QPair<QString, std::function<void(KisMainWindow *)>>> tests = {
@@ -2921,6 +3075,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("laststroke"), testLastStroke},
         {QStringLiteral("strokepoints"), testStrokePoints},
         {QStringLiteral("notes"), testNotes},
+        {QStringLiteral("notesfreeze"), testNotesFreeze},
     };
     bool found = false;
     for (const auto &test : tests) {
