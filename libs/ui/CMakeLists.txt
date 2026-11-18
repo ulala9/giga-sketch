@@ -92,6 +92,7 @@ set(kritaui_LIB_SRCS
     GigaSaveDated.cpp
     GigaLastStrokeTransform.cpp
     GigaBlenderBridge.cpp
+    GigaBackgroundMemoryTrimmer.cpp
     GigaZoomOption.cpp
     GigaCanvasInputKeys.cpp
     GigaPanelTitleBar.cpp

@@ -86,7 +86,9 @@ public:
           m_store(store)
     {
         m_iterator.setMap(m_map);
-        m_finalPosition = m_iterator.getValue()->m_tileNumber;
+        // Giga Sketch: the map can be empty when every tile has been swapped
+        // out (background memory trim), so don't dereference a null item
+        m_finalPosition = m_iterator.getValue() ? m_iterator.getValue()->m_tileNumber : startIndex;
         m_startItem = m_map.get(startIndex);
 
         if (m_iterator.getValue() == m_startItem || !m_startItem) {

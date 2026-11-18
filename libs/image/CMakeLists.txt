@@ -47,6 +47,7 @@ set(kritaimage_LIB_SRCS
    tiles3/swap/kis_memory_window.cpp
    tiles3/swap/kis_swapped_data_store.cpp
    tiles3/swap/kis_tile_data_swapper.cpp
+   tiles3/swap/GigaTileMemoryTrim.cpp
    kis_distance_information.cpp
    kis_painter.cc
    kis_painter_blt_multi_fixed.cpp

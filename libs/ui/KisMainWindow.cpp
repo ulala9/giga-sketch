@@ -68,6 +68,7 @@
 #include "GigaMotion.h"
 #include "GigaFloatingPanelManager.h"
 #include "GigaSelfTest.h"
+#include "GigaBackgroundMemoryTrimmer.h"
 #include "GigaSaveDated.h"
 #include "GigaLastStrokeTransform.h"
 #include "GigaBlenderBridge.h"
@@ -749,6 +750,8 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     Q_FOREACH (QDockWidget *dock, dockWidgets()) d->gigaFloating->watchDock(dock);
     // Giga Sketch: listen for the "Send to GigaSketch" Blender add-on.
     GigaBlenderBridge::ensureStarted(this);
+    // Giga Sketch: give memory back while the app sits in the background.
+    GigaBackgroundMemoryTrimmer::instance()->watchWindow(this);
     GigaSelfTest::maybeRun(this); // dev only: does nothing unless GIGA_SELFTEST is set
     static bool gigaFloatHandlerSet = false;
     if (!gigaFloatHandlerSet) {

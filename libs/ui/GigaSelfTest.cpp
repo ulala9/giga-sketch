@@ -45,6 +45,9 @@
 #include "kis_coordinates_converter.h"
 #include <kis_image.h>
 #include <kis_paint_device.h>
+#include <QCryptographicHash>
+#include "GigaBackgroundMemoryTrimmer.h"
+#include "tiles3/swap/GigaTileMemoryTrim.h"
 #include <kis_layer.h>
 #include <KoToolManager.h>
 #include <KoToolRegistry.h>
@@ -3429,6 +3432,113 @@ void testBrushPopup(KisMainWindow *w)
     }
 }
 
+/// Background memory trim (feature/background-memory-trim): swap out, give
+/// the memory back, load it again, and the pixels are unchanged.
+void testMemoryTrim(KisMainWindow *w)
+{
+    KisDocument *doc = openTestDocument(w);
+    KisImageSP image = doc->image();
+    const KoColorSpace *cs = image->colorSpace();
+    const QRect rect(0, 0, 2000, 1500);
+
+    // Four layers full of a pattern (so the tiles are real and not all alike).
+    QList<KisPaintLayerSP> layers;
+    QByteArray pattern(rect.width() * rect.height() * 4, 0);
+    for (int i = 0; i < 4; i++) {
+        for (int p = 0; p < pattern.size(); p++) {
+            pattern[p] = char((p * (i + 3) / 7 + (p >> 13)) & 0xff);
+        }
+        KisPaintLayerSP layer = new KisPaintLayer(image, QStringLiteral("Trim %1").arg(i), OPACITY_OPAQUE_U8, cs);
+        layer->paintDevice()->writeBytes((const quint8 *)pattern.constData(), rect);
+        image->addNode(layer, image->root());
+        layer->setDirty();
+        layers << layer;
+    }
+    image->waitForDone();
+    pump(10);
+
+    auto checksum = [&]() {
+        QByteArray all;
+        for (KisPaintLayerSP l : layers) {
+            QByteArray buf(rect.width() * rect.height() * 4, 0);
+            l->paintDevice()->readBytes((quint8 *)buf.data(), rect);
+            all += QCryptographicHash::hash(buf, QCryptographicHash::Md5);
+        }
+        return QCryptographicHash::hash(all, QCryptographicHash::Md5).toHex();
+    };
+    const QByteArray before = checksum();
+    const int tilesBefore = GigaTileMemoryTrim::tilesInMemory();
+
+    GigaBackgroundMemoryTrimmer *trimmer = GigaBackgroundMemoryTrimmer::instance();
+    bool trimmed = false;
+    bool poolsReleased = false;
+    int rssBefore = -1, rssAfter = -1;
+    QMetaObject::Connection c1 = QObject::connect(trimmer, &GigaBackgroundMemoryTrimmer::sigTrimmed,
+        [&](bool released, int b, int a) { trimmed = true; poolsReleased = released; rssBefore = b; rssAfter = a; });
+
+    QElapsedTimer clock;
+    clock.start();
+    trimmer->trimNow();
+    while (!trimmed && clock.elapsed() < 60000) pump(2);
+    QObject::disconnect(c1);
+    const int tilesTrimmed = GigaTileMemoryTrim::tilesInMemory();
+
+    report(trimmed, "memtrim-finished", QStringLiteral("%1 ms").arg(clock.elapsed()));
+    report(tilesTrimmed < 100, "memtrim-swapped-out",
+           QStringLiteral("tiles in memory %1 -> %2 (of %3)").arg(tilesBefore).arg(tilesTrimmed).arg(GigaTileMemoryTrim::tilesTotal()));
+    report(poolsReleased && rssAfter < rssBefore, "memtrim-memory-returned",
+           QStringLiteral("resident %1 -> %2 MiB").arg(rssBefore).arg(rssAfter));
+
+    // Back in front: the tiles come back in a worker thread.
+    bool warmed = false;
+    int warmTiles = 0, warmMs = 0, visibleMs = 0;
+    QMetaObject::Connection c2 = QObject::connect(trimmer, &GigaBackgroundMemoryTrimmer::sigPrewarmFinished,
+        [&](int tiles, int ms, int vis) { warmed = true; warmTiles = tiles; warmMs = ms; visibleMs = vis; });
+    trimmer->restoreNow();
+    clock.restart();
+    while (!warmed && clock.elapsed() < 60000) pump(2);
+    QObject::disconnect(c2);
+    report(warmed && GigaTileMemoryTrim::tilesInMemory() > tilesBefore / 2, "memtrim-prewarm",
+           QStringLiteral("%1 tiles in %2 ms (visible area after %3 ms), now %4 in memory, %5 MiB resident")
+               .arg(warmTiles).arg(warmMs).arg(visibleMs).arg(GigaTileMemoryTrim::tilesInMemory()).arg(GigaTileMemoryTrim::residentMiB()));
+    // the view shows only part of the image, so the visible pass is the shorter one
+    report(warmed && visibleMs <= warmMs, "memtrim-visible-first", QStringLiteral("%1 <= %2 ms").arg(visibleMs).arg(warmMs));
+
+    report(checksum() == before, "memtrim-pixels-intact", QString::fromLatin1(before));
+
+    // Painting still works after a trim (new tiles come from the fresh pools).
+    layers[0]->paintDevice()->fill(QRect(10, 10, 300, 300), KoColor(Qt::red, cs));
+    layers[0]->setDirty();
+    image->waitForDone();
+    KoColor px;
+    layers[0]->paintDevice()->pixel(20, 20, &px);
+    report(px.toQColor() == QColor(Qt::red), "memtrim-paint-after", px.toQColor().name());
+    const QByteArray afterPaint = checksum();
+
+    // Second round, so a trim right after a prewarm also works.
+    trimmed = false;
+    QMetaObject::Connection c3 = QObject::connect(trimmer, &GigaBackgroundMemoryTrimmer::sigTrimmed,
+        [&](bool released, int b, int a) { trimmed = true; poolsReleased = released; rssBefore = b; rssAfter = a; });
+    trimmer->trimNow();
+    clock.restart();
+    while (!trimmed && clock.elapsed() < 60000) pump(2);
+    QObject::disconnect(c3);
+    report(trimmed && poolsReleased, "memtrim-second-round",
+           QStringLiteral("resident %1 -> %2 MiB").arg(rssBefore).arg(rssAfter));
+
+    // The pointer entering a window (while unfocused) starts loading back too.
+    warmed = false;
+    QMetaObject::Connection c4 = QObject::connect(trimmer, &GigaBackgroundMemoryTrimmer::sigPrewarmFinished,
+        [&](int, int, int) { warmed = true; });
+    trimmer->pointerEnteredNow();
+    clock.restart();
+    while (!warmed && clock.elapsed() < 60000) pump(2);
+    QObject::disconnect(c4);
+    report(warmed && !trimmer->isTrimmed() && GigaTileMemoryTrim::tilesInMemory() > tilesBefore / 2,
+           "memtrim-hover-prewarm", QStringLiteral("%1 tiles in memory").arg(GigaTileMemoryTrim::tilesInMemory()));
+    report(checksum() == afterPaint, "memtrim-hover-pixels", QString::fromLatin1(afterPaint));
+}
+
 /// Right-click menus for the tools that had none (feature/tool-context-menus):
 /// Move = layers with paint under the pointer (top first, pick = active layer),
 /// Hand/Zoom = Krita's view zoom actions, Colour Sampler = sample size/source +
@@ -3595,6 +3705,7 @@ bool runNamed(const QString &name, KisMainWindow *w)
         {QStringLiteral("notesfreeze"), testNotesFreeze},
         {QStringLiteral("brushpopup"), testBrushPopup},
         {QStringLiteral("rightclick"), testRightClickMenus},
+        {QStringLiteral("memtrim"), testMemoryTrim},
     };
     bool found = false;
     for (const auto &test : tests) {

@@ -8,6 +8,7 @@
  */
 
 #include "kis_dlg_preferences.h"
+#include "GigaBackgroundMemoryTrimmer.h"
 #include "GigaBrushPopup.h"
 #include <GigaBranding.h>
 #include "GigaAccent.h"
@@ -19,6 +20,8 @@
 
 #include <QBitmap>
 #include <QCheckBox>
+#include <QSpinBox>
+#include <QHBoxLayout>
 #include <QComboBox>
 #include <GigaSliderStyle.h>
 #include <QClipboard>
@@ -2039,6 +2042,26 @@ PerformanceTab::PerformanceTab(QWidget *parent, const char *name)
     chkDisableAVXOptimizations->setVisible(false);
 #endif
 
+    {
+        // Giga Sketch: free memory while the app sits in the background
+        QWidget *row = new QWidget(this);
+        QHBoxLayout *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        m_gigaBackgroundTrim = new QCheckBox(i18n("Free memory when Giga Sketch is not focused, after"), row);
+        m_gigaBackgroundTrim->setToolTip(
+            i18n("When no Giga Sketch window has had focus for this long, image data moves to the compressed "
+                 "swap file and the memory goes back to the system. It is loaded back in the background "
+                 "when you return; the first stroke right after switching back can be a little slower."));
+        m_gigaBackgroundTrimDelay = new QSpinBox(row);
+        m_gigaBackgroundTrimDelay->setRange(5, 3600);
+        m_gigaBackgroundTrimDelay->setSuffix(i18nc("suffix for \"seconds\"", " sec"));
+        rowLayout->addWidget(m_gigaBackgroundTrim);
+        rowLayout->addWidget(m_gigaBackgroundTrimDelay);
+        rowLayout->addStretch(1);
+        connect(m_gigaBackgroundTrim, SIGNAL(toggled(bool)), m_gigaBackgroundTrimDelay, SLOT(setEnabled(bool)));
+        formLayout->addRow(i18n("In background:"), row);
+    }
+
     load(false);
 }
 
@@ -2114,10 +2137,21 @@ void PerformanceTab::load(bool requestDefault)
         KConfigGroup group( KSharedConfig::openConfig(), "filterdialog");
         chkFiltersForceLodMode->setChecked(group.readEntry("forceLodMode", true));
     }
+
+    if (m_gigaBackgroundTrim) {
+        m_gigaBackgroundTrim->setChecked(requestDefault ? true : GigaBackgroundMemoryTrimmer::enabledInConfig());
+        m_gigaBackgroundTrimDelay->setValue(requestDefault ? 30 : GigaBackgroundMemoryTrimmer::delaySecondsInConfig());
+        m_gigaBackgroundTrimDelay->setEnabled(m_gigaBackgroundTrim->isChecked());
+    }
 }
 
 void PerformanceTab::save()
 {
+    if (m_gigaBackgroundTrim) {
+        GigaBackgroundMemoryTrimmer::setEnabledInConfig(m_gigaBackgroundTrim->isChecked());
+        GigaBackgroundMemoryTrimmer::setDelaySecondsInConfig(m_gigaBackgroundTrimDelay->value());
+    }
+
     KisImageConfig cfg(false);
 
     cfg.setMemoryHardLimitPercent(sliderMemoryLimit->value());

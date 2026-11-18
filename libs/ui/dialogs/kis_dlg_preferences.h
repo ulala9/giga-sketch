@@ -36,6 +36,8 @@ class KisInputConfigurationPage;
 class KoConfigAuthorPage;
 class KisProofingConfigModel;
 class KisFrameRateLimitModel;
+class QCheckBox;
+class QSpinBox;
 
 /**
  *  "General"-tab for preferences dialog
@@ -321,6 +323,9 @@ private:
 
 private:
     QVector<SliderAndSpinBoxSync*> m_syncs;
+    // Giga Sketch: "Free memory in background" (GigaBackgroundMemoryTrimmer)
+    QCheckBox *m_gigaBackgroundTrim {nullptr};
+    QSpinBox *m_gigaBackgroundTrimDelay {nullptr};
     int m_lastUsedThreadsLimit;
     int m_lastUsedClonesLimit;
     QScopedPointer<KisFrameRateLimitModel> m_frameRateModel;

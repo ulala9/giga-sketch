@@ -7,7 +7,14 @@
 NAME="${1:-all}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRATCH="$(mktemp -d)"
-trap 'rm -rf "$SCRATCH"' EXIT
+# The test ends with _Exit (no cleanup), so remove the swap files it leaves.
+SWAPDIR=/var/tmp
+ls "$SWAPDIR"/KRITA_SWAP_FILE_* 2>/dev/null | sort > "$SCRATCH.swap-before"
+cleanup() {
+    ls "$SWAPDIR"/KRITA_SWAP_FILE_* 2>/dev/null | sort | comm -13 "$SCRATCH.swap-before" - | xargs -r rm -f
+    rm -rf "$SCRATCH" "$SCRATCH.swap-before"
+}
+trap cleanup EXIT
 mkdir -p "$SCRATCH/home" "$SCRATCH/cfg"
 HOME="$SCRATCH/home" XDG_CONFIG_HOME="$SCRATCH/cfg" GIGA_SELFTEST="$NAME" \
     GIGA_BLENDER_SOCKET="$SCRATCH/blender.sock" \
