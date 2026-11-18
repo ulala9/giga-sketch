@@ -19,6 +19,7 @@
 #include <kis_image_config.h>
 #include <brushengine/kis_paintop_preset.h>
 #include <kis_tool_utils.h>
+#include <GigaBrushSize.h>
 
 #include "KisToolBasicBrushBase.h"
 
@@ -196,7 +197,8 @@ void KisToolBasicBrushBase::continueAlternateAction(KoPointerEvent *event, Alter
 
         newSize = qBound(0.01, newSize, maxBrushSize);
 
-        settings->setPaintOpSize(newSize);
+        // Giga Sketch: optional rounding (the drag keeps counting from the exact size).
+        settings->setPaintOpSize(GigaBrushSize::rounded(newSize));
 
         requestUpdateOutline(m_changeSizeInitialGestureDocPoint, 0);
 

@@ -12,6 +12,7 @@
 #include "kis_paintop_settings.h"
 #include "KisPaintOpPresetUpdateProxy.h"
 #include "KisResourceModel.h"
+#include "GigaBrushSize.h"
 
 
 struct KisPresetUpdateMediator::Private
@@ -244,7 +245,8 @@ QVariant KisSizeResourceConverter::toSource(const QVariant &value, const QVarian
     KisPaintOpPresetSP preset = sourceValue.value<KisPaintOpPresetSP>();
     if (!preset) return sourceValue;
 
-    preset->settings()->setPaintOpSize(value.toReal());
+    // Giga Sketch: optional rounding (90.9 -> 91 px); a no-op when the preference is off.
+    preset->settings()->setPaintOpSize(GigaBrushSize::rounded(value.toReal()));
     return QVariant::fromValue(preset);
 }
 

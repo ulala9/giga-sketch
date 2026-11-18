@@ -945,3 +945,14 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
 - `selftest.sh` deletes the `KRITA_SWAP_FILE_*` the run left behind (tests end with `_Exit`).
 - Self-test `memtrim`: 4 patterned layers, trim (3851 → 0 tiles), restore (≈23k tiles/s), md5 of pixels unchanged,
   paint after, second round, hover prewarm. Krita's tiles3 + datamanager + paint device tests pass.
+
+## Brush size rounding (feature/brush-size-rounding, 2026-11-18)
+- Why Krita shows "90.90 px": the size is a qreal, the top-bar slider is `setRange(0.01, max, 2)` (2 decimals) with an
+  exponent ratio of 3, and Shift+drag adds a scaled float offset — nothing rounds.
+- `libs/ui/GigaBrushSize.{h,cpp}`: preference `gigaRoundBrushSize` (default on, cached in an atomic, read via KisConfig;
+  kept out of kis_config.h to avoid a ~900-step rebuild), `rounded()` (≥ 9.95 → whole px, below → 1 decimal),
+  `GigaBrushSizeSpinBox` (overrides `textFromValue`; `setSuffix(suffix())` refreshes the text on toggle).
+- Rounded where the user changes the size: `KisSizeResourceConverter::toSource` (top-bar slider, brush popup, anything
+  setting KoCanvasResource::Size), Shift+drag in `KisToolFreehand` and `KisToolBasicBrushBase` (drag keeps counting
+  from the exact size so slow drags still move). `[`/`]` already use whole standard sizes. Preset values are untouched
+  until changed. Pref: General > Tools > "Brush size". Self-test: `brushpopup` (brushsize-* checks).
