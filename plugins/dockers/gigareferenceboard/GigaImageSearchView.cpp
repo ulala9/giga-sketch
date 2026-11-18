@@ -6,6 +6,7 @@
 #include "GigaImageSearchView.h"
 
 #include <kis_icon_utils.h>
+#include <GigaBackgroundMemoryTrimmer.h>
 
 #include <klocalizedstring.h>
 #include <kconfiggroup.h>
@@ -235,6 +236,18 @@ GigaImageSearchView::GigaImageSearchView(QWidget *parent)
         m_back->setEnabled(m_web->history()->canGoBack());
         m_forward->setEnabled(m_web->history()->canGoForward());
     });
+
+    // Giga Sketch: when the app frees memory in the background, a browser that
+    // is not on screen drops its page (its web process lets go of the memory).
+    // Qt reloads the page by itself as soon as the browser is shown again.
+    if (GigaBackgroundMemoryTrimmer *trimmer = GigaBackgroundMemoryTrimmer::instance()) {
+        connect(trimmer, &GigaBackgroundMemoryTrimmer::sigTrimmed, this, [this]() {
+            if (m_page && !m_web->isVisible()
+                && m_page->lifecycleState() == QWebEnginePage::LifecycleState::Active) {
+                m_page->setLifecycleState(QWebEnginePage::LifecycleState::Discarded);
+            }
+        });
+    }
 
     m_site->setCurrentIndex(qBound(0, searchConfig().readEntry("site", 0), kSiteCount - 1));
     updatePickUi();

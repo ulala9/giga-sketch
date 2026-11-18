@@ -12,6 +12,8 @@
 #include <kis_debug.h>
 
 #include <boost/pool/singleton_pool.hpp>
+#include <QReadWriteLock>
+#include <QAtomicInt>
 #include "kis_tile_data_store_iterators.h"
 
 // BPP == bytes per pixel
@@ -25,6 +27,30 @@ const qint32 KisTileData::WIDTH = __TILE_DATA_WIDTH;
 const qint32 KisTileData::HEIGHT = __TILE_DATA_HEIGHT;
 
 SimpleCache KisTileData::m_cache;
+
+namespace {
+/**
+ * Giga Sketch: makes releaseInternalPools() safe to call while other threads
+ * are running (Giga Sketch calls it when the app sits in the background, see
+ * GigaTileMemoryTrim).
+ *
+ * purge_memory() frees *every* chunk of the pools, so it must never run while
+ * some chunk still belongs to a tile that releaseInternalPools() did not copy
+ * aside (e.g. a tile that is being created right now and is not registered in
+ * the store yet). We count the chunks that belong to tiles, and the purge only
+ * happens when that count matches the tiles it found. The read lock is taken
+ * by every allocateData()/freeData() (like SimpleCache's own lock), the write
+ * lock only by releaseInternalPools(), so no chunk can change hands while it
+ * checks and purges.
+ */
+QReadWriteLock s_gigaPoolLock;
+QAtomicInt s_gigaPooledChunksInUse;
+
+inline bool gigaIsPooledSize(qint32 pixelSize)
+{
+    return pixelSize == 4 || pixelSize == 8;
+}
+}
 
 SimpleCache::~SimpleCache()
 {
@@ -134,6 +160,11 @@ void KisTileData::allocateMemory()
 
 quint8* KisTileData::allocateData(const qint32 pixelSize)
 {
+    QReadLocker gigaPoolLocker(&s_gigaPoolLock);
+    if (gigaIsPooledSize(pixelSize)) {
+        s_gigaPooledChunksInUse.ref();
+    }
+
     quint8 *ptr = 0;
 
     if (!m_cache.pop(pixelSize, ptr)) {
@@ -155,6 +186,11 @@ quint8* KisTileData::allocateData(const qint32 pixelSize)
 
 void KisTileData::freeData(quint8* ptr, const qint32 pixelSize)
 {
+    QReadLocker gigaPoolLocker(&s_gigaPoolLock);
+    if (gigaIsPooledSize(pixelSize)) {
+        s_gigaPooledChunksInUse.deref();
+    }
+
     if (!m_cache.push(pixelSize, ptr)) {
         switch (pixelSize) {
         case 4:
@@ -188,22 +224,36 @@ void KisTileData::releaseInternalPools()
 
         KisTileDataStoreIterator *iter = KisTileDataStore::instance()->beginIteration();
 
+        /**
+         * Giga Sketch: two steps instead of one loop. While we hold the
+         * iteration lock no tile can be registered, swapped in or swapped
+         * out, so the list stays valid between the steps.
+         *
+         * Step 1: release all the clones. Their memory goes back through
+         * freeData(), which takes s_gigaPoolLock, so this must happen
+         * before we lock the pools.
+         */
+        QVector<KisTileData*> allItems;
         while (iter->hasNext()) {
             KisTileData *item = iter->next();
 
-            // first release all the clones
             KisTileData *clone = 0;
             while (item->m_clonesStack.pop(clone)) {
                 delete clone;
             }
 
-            // check if the tile data has actually been pooled
-            if (item->m_pixelSize != 4 &&
-                item->m_pixelSize != 8 &&
-                item->m_pixelSize != 16) {
+            allItems << item;
+        }
 
-                continue;
-            }
+        /**
+         * Step 2: with the pools locked, copy every pooled tile aside. Only
+         * 4 and 8 bytes-per-pixel tiles live in the pools (bigger ones use
+         * malloc() and are not touched by the purge).
+         */
+        QWriteLocker gigaPoolLocker(&s_gigaPoolLock);
+
+        Q_FOREACH (KisTileData *item, allItems) {
+            if (!gigaIsPooledSize(item->m_pixelSize)) continue;
 
             // check if the tile has been swapped out
             if (item->m_data) {
@@ -217,14 +267,17 @@ void KisTileData::releaseInternalPools()
                 dataObjects << item;
                 memoryChunks << QByteArray((const char*)item->m_data, chunkSize);
             }
-
         }
 
-        if (!failedToLock) {
+        const bool gigaChunksMatch =
+            dataObjects.size() == s_gigaPooledChunksInUse.loadAcquire();
+
+        if (!failedToLock && gigaChunksMatch) {
             // purge the pools memory
             m_cache.clear();
             BoostPool4BPP::purge_memory();
             BoostPool8BPP::purge_memory();
+            s_gigaPooledChunksInUse.storeRelease(0);
 
             auto it = dataObjects.begin();
             auto chunkIt = memoryChunks.constBegin();
@@ -233,7 +286,12 @@ void KisTileData::releaseInternalPools()
                 KisTileData *item = *it;
                 const int chunkSize = item->m_pixelSize * WIDTH * HEIGHT;
 
-                item->m_data = allocateData(item->m_pixelSize);
+                // allocateData() would take s_gigaPoolLock again; the cache
+                // is empty now, so ask the pools directly
+                item->m_data = item->m_pixelSize == 4
+                    ? (quint8*)BoostPool4BPP::malloc()
+                    : (quint8*)BoostPool8BPP::malloc();
+                s_gigaPooledChunksInUse.ref();
                 memcpy(item->m_data, chunkIt->data(), chunkSize);
 
                 item->m_swapLock.unlock();
@@ -243,8 +301,15 @@ void KisTileData::releaseInternalPools()
                 item->m_swapLock.unlock();
             }
 
-            warnKrita << "WARNING: Failed to lock the tiles while trying to release the pooled memory";
+            if (failedToLock) {
+                warnKrita << "WARNING: Failed to lock the tiles while trying to release the pooled memory";
+            } else {
+                dbgKrita << "DEBUG: releasing of the pooled memory has been cancelled:"
+                         << "some pooled memory belongs to tiles that are being created";
+            }
         }
+
+        gigaPoolLocker.unlock();
 
         KisTileDataStore::instance()->endIteration(iter);
 

@@ -908,3 +908,30 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   `updateOptionWidget()`. Selection menu: Fill FG/BG + Stroke added in `KisSelectionToolHelper::getSelectionContextMenu`.
 - Self-tests `brushpopup`, `rightclick`. Headless gotcha: the node manager has no image view in test runs, so
   activating a layer can't be checked there (the test says so in an INFO line).
+
+## Background memory trim (feature/background-memory-trim, 2026-11-17)
+- Measured first (user's 7020×3120, 9-layer sketch): 1.37 GB resident, of which 625 MB are image tiles (40k tiles).
+  Swapping alone frees nothing: tile memory sits in boost `singleton_pool`s (`kis_tile_data.cc`) that keep freed
+  chunks. Only `KisTileData::releaseInternalPools()` (purge + copy back, only when <100 tiles in memory) + `malloc_trim`
+  hands it back. Swap file compresses ~13:1 (625 MB → 47 MB). Result: 1.35 GB → ~0.56 GB in the background.
+- `libs/ui/GigaBackgroundMemoryTrimmer.{h,cpp}` (singleton, made in KisMainWindow ctor): `applicationStateChanged`
+  ≠ Active → wait `gigaBackgroundMemoryTrimDelay` s (default 30) → if no doc is saving/autosaving and every image
+  `isIdle()` → `GigaTileMemoryTrim::requestSwapOut()` → polls 250 ms → `releaseMemory()` → `sigTrimmed`. Active again
+  → `cancel()` + prewarm in its own 1-thread QThreadPool (active layer, projections, then every node's devices; read-only
+  random accessor per tile = swap-in, never creates tiles). Prefs: Performance tab row "In background:" (keys
+  `gigaBackgroundMemoryTrim`, `gigaBackgroundMemoryTrimDelay`, via KisConfig readEntry — no kis_config.h change).
+  `GIGA_MEMTRIM_TRACE=1` prints one stderr line per trim/prewarm. Auto-trim is off when `GIGA_SELFTEST` is set.
+- `libs/image/tiles3/swap/GigaTileMemoryTrim.{h,cpp}`: state flag read by `KisTileDataSwapper::doJob()`, which runs
+  `pass<AggressiveSwapStrategy>` in 16 MiB steps until cancelled or no tile is left (woken via `kickPooler()`).
+- **Safety change in Krita code** (`kis_tile_data.cc`): upstream's purge frees every pool chunk, so a tile being
+  created at that moment (chunk allocated, not yet registered) would be freed under it. Now allocateData/freeData take
+  a read lock + count pooled chunks in use; releaseInternalPools deletes clones first, then takes the write lock and
+  purges only if the chunks it copied == chunks in use (else logs and keeps the pools). Lock order: store iteration
+  lock → pool lock (same as swap-in, which allocates under the iteration lock). 16-bpp tiles (malloc) are no longer
+  copied around (they were leaked by upstream's copy-back).
+- Empty-map crash: when every tile is swapped out, `KisTileDataStoreClockIterator`'s ctor dereferenced a null item.
+  Guarded there and in `pass()` (`if (!item) break`).
+- Board image search: on `sigTrimmed`, a browser that is not visible gets `LifecycleState::Discarded` (Qt reloads it
+  when shown).
+- Self-test `memtrim`: 4 patterned layers, trim (3851 → 0 tiles), restore (≈23k tiles/s), md5 of pixels unchanged,
+  paint after, second round. Krita's tiles3 + datamanager + paint device tests pass.

@@ -10,6 +10,7 @@
 #include "tiles3/swap/kis_tile_data_swapper.h"
 #include "tiles3/swap/kis_tile_data_swapper_p.h"
 #include "tiles3/kis_tile_data.h"
+#include "tiles3/swap/GigaTileMemoryTrim.h"
 #include "tiles3/kis_tile_data_store.h"
 #include "tiles3/kis_tile_data_store_iterators.h"
 #include "kis_debug.h"
@@ -130,6 +131,19 @@ void KisTileDataSwapper::doJob()
             DEBUG_VALUE(memoryMetric);
         }
     }
+
+    /**
+     * Giga Sketch: the app sits in the background, swap out every tile we
+     * can (GigaTileMemoryTrim). Small steps, so the iteration lock is
+     * released often and cancel() is noticed quickly when the user comes back.
+     */
+    if (GigaTileMemoryTrim::swapOutRequested()) {
+        const qint64 step = MiB_TO_METRIC(qint64(16));
+        while (GigaTileMemoryTrim::swapOutRequested() && m_d->store->numTilesInMemory() > 0) {
+            if (pass<AggressiveSwapStrategy>(step) <= 0) break;
+        }
+        GigaTileMemoryTrim::markSwapOutFinished();
+    }
 }
 
 
@@ -194,6 +208,7 @@ qint64 KisTileDataSwapper::pass(qint64 needToFreeMetric)
 
     while (iter->hasNext()) {
         item = iter->next();
+        if (!item) break; // Giga Sketch: empty map (everything swapped out)
 
         if (freedMetric >= needToFreeMetric) break;
 
