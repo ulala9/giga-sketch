@@ -751,7 +751,7 @@ KisMainWindow::KisMainWindow(QUuid uuid)
     // Giga Sketch: listen for the "Send to GigaSketch" Blender add-on.
     GigaBlenderBridge::ensureStarted(this);
     // Giga Sketch: give memory back while the app sits in the background.
-    GigaBackgroundMemoryTrimmer::instance();
+    GigaBackgroundMemoryTrimmer::instance()->watchWindow(this);
     GigaSelfTest::maybeRun(this); // dev only: does nothing unless GIGA_SELFTEST is set
     static bool gigaFloatHandlerSet = false;
     if (!gigaFloatHandlerSet) {

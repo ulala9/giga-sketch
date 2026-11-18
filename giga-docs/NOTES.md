@@ -933,5 +933,15 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   Guarded there and in `pass()` (`if (!item) break`).
 - Board image search: on `sigTrimmed`, a browser that is not visible gets `LifecycleState::Discarded` (Qt reloads it
   when shown).
+- Coming back (user: "choppy for a split second"): the first stroke recomposes *every* layer under it, so those tiles
+  were loaded synchronously while the prewarm was elsewhere. Now (a) prewarm starts on `QEvent::Enter` of a main
+  window while the app is still inactive (`watchWindow()`, event filter on each KisMainWindow; Wayland delivers it
+  unfocused), and if the user does not click in, `prewarmFinished()` schedules the next trim; (b) jobs are
+  `GigaTileMemoryTrim::PrewarmJob{device, rect}`: first each view's `widgetRectInImagePixels()` + 256 px for every
+  device (active layer, projection, all nodes), then whole devices. Big sketch: 40k tiles back in 1.8 s (swap-in is
+  serialized by the store's iteration lock, so more threads would not help).
+- Measuring with a copy of the user's gigasketchrc: **drop `ResourceDirectory`**, it points at the real resource
+  folder (the test run then blocks on the sqlite lock of the user's running app, or writes their real database).
+- `selftest.sh` deletes the `KRITA_SWAP_FILE_*` the run left behind (tests end with `_Exit`).
 - Self-test `memtrim`: 4 patterned layers, trim (3851 → 0 tiles), restore (≈23k tiles/s), md5 of pixels unchanged,
-  paint after, second round. Krita's tiles3 + datamanager + paint device tests pass.
+  paint after, second round, hover prewarm. Krita's tiles3 + datamanager + paint device tests pass.

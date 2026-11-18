@@ -6,13 +6,19 @@
 #include "GigaBackgroundMemoryTrimmer.h"
 
 #include <QCoreApplication>
+#include <QEvent>
+#include <QWidget>
 #include <QGuiApplication>
 #include <QPointer>
+#include <QHash>
 #include <QSet>
 
 #include "KisDocument.h"
 #include "KisMainWindow.h"
 #include "KisPart.h"
+#include "KisView.h"
+#include "canvas/kis_canvas2.h"
+#include "canvas/kis_coordinates_converter.h"
 #include "KisViewManager.h"
 #include "kis_config.h"
 #include "kis_config_notifier.h"
@@ -163,6 +169,31 @@ void GigaBackgroundMemoryTrimmer::restoreNow()
     comeBack();
 }
 
+void GigaBackgroundMemoryTrimmer::watchWindow(QWidget *window)
+{
+    if (window) window->installEventFilter(this);
+}
+
+bool GigaBackgroundMemoryTrimmer::eventFilter(QObject *watched, QEvent *event)
+{
+    // The pointer came into a Giga Sketch window. Even unfocused, the window
+    // gets this (Wayland too), usually a few hundred ms before the click that
+    // focuses it: a head start for loading the image back.
+    if (event->type() == QEvent::Enter && qGuiApp->applicationState() != Qt::ApplicationActive) {
+        pointerEnteredNow();
+    }
+    return QObject::eventFilter(watched, event);
+}
+
+void GigaBackgroundMemoryTrimmer::pointerEnteredNow()
+{
+    if (m_phase != Phase::SwappingOut && m_phase != Phase::Trimmed) return;
+    if (m_trace) gigaTrace("GIGA_MEMTRIM pointer entered: loading back");
+    // Same as coming back; if the user does not click in after all,
+    // prewarmFinished() schedules the next trim.
+    comeBack();
+}
+
 bool GigaBackgroundMemoryTrimmer::documentsBusy() const
 {
     if (m_prewarmPool.activeThreadCount() > 0) return true;
@@ -260,55 +291,104 @@ void GigaBackgroundMemoryTrimmer::comeBack()
 
 void GigaBackgroundMemoryTrimmer::startPrewarm()
 {
-    // Collect the devices on the GUI thread, most useful first: the layer the
-    // user is working on, then what the canvas shows, then everything else.
-    QList<KisPaintDeviceSP> devices;
-    QSet<KisPaintDevice*> seen;
-    auto add = [&](KisPaintDeviceSP dev) {
-        if (dev && !seen.contains(dev.data())) {
-            seen.insert(dev.data());
-            devices << dev;
-        }
+    using GigaTileMemoryTrim::PrewarmJob;
+
+    // Collected on the GUI thread. First the area each view shows (a little
+    // more, for a short pan), for every layer: the first stroke recomposes
+    // all layers under it, not only the one it paints on. Then everything.
+    QHash<const KisImage*, QRect> visible;
+    QList<KisImageSP> images;
+
+    auto addImage = [&](KisImageSP image) {
+        if (image && !images.contains(image)) images << image;
     };
 
     KisMainWindow *window = KisPart::instance()->currentMainwindow();
+    KisNodeSP activeNode;
     if (window && window->viewManager()) {
-        KisNodeSP node = window->viewManager()->activeNode();
-        if (node) add(node->paintDevice());
+        activeNode = window->viewManager()->activeNode();
+        if (window->activeView()) addImage(window->activeView()->image().toStrongRef());
+    }
+
+    Q_FOREACH (const QPointer<KisView> &view, KisPart::instance()->views()) {
+        if (!view || !view->canvasBase()) continue;
+        KisImageSP image = view->image().toStrongRef();
+        if (!image) continue;
+        const int margin = 256;
+        const QRect r = view->canvasBase()->coordinatesConverter()->widgetRectInImagePixels().toAlignedRect()
+                            .adjusted(-margin, -margin, margin, margin) & image->bounds();
+        visible[image.data()] |= r;
+        addImage(image);
     }
 
     Q_FOREACH (const QPointer<KisDocument> &doc, KisPart::instance()->documents()) {
-        if (!doc || !doc->image()) continue;
-        add(doc->image()->projection());
+        if (doc) addImage(doc->image());
     }
 
-    Q_FOREACH (const QPointer<KisDocument> &doc, KisPart::instance()->documents()) {
-        if (!doc || !doc->image()) continue;
-        KisLayerUtils::recursiveApplyNodes(doc->image()->root(), [&](KisNodeSP n) {
+    // per image: active layer, what the canvas shows, then every layer
+    QList<QPair<KisImageSP, QList<KisPaintDeviceSP>>> perImage;
+    for (KisImageSP image : images) {
+        QList<KisPaintDeviceSP> devices;
+        QSet<KisPaintDevice*> seen;
+        auto add = [&](KisPaintDeviceSP dev) {
+            if (dev && !seen.contains(dev.data())) {
+                seen.insert(dev.data());
+                devices << dev;
+            }
+        };
+        if (activeNode && activeNode->image().toStrongRef() == image) add(activeNode->paintDevice());
+        add(image->projection());
+        KisLayerUtils::recursiveApplyNodes(image->root(), [&](KisNodeSP n) {
             add(n->paintDevice());
             add(n->original());
             add(n->projection());
         });
+        perImage << qMakePair(image, devices);
     }
 
-    if (devices.isEmpty()) return;
+    QList<PrewarmJob> visibleJobs;
+    QList<PrewarmJob> allJobs;
+    for (const auto &entry : perImage) {
+        const QRect r = visible.value(entry.first.data());
+        for (const KisPaintDeviceSP &dev : entry.second) {
+            if (!r.isEmpty()) visibleJobs << PrewarmJob{dev, r};
+            allJobs << PrewarmJob{dev, QRect()};
+        }
+    }
+
+    if (allJobs.isEmpty()) return;
 
     m_prewarmCancel.storeRelease(0);
     const bool trace = m_trace;
 
     // The worker holds its own references to the devices, so a layer deleted
     // meanwhile stays valid until the worker is done with it.
-    m_prewarmPool.start([this, devices, trace]() {
+    m_prewarmPool.start([this, visibleJobs, allJobs, trace]() {
         QElapsedTimer clock;
         clock.start();
-        const int tiles = GigaTileMemoryTrim::prewarm(devices, m_prewarmCancel);
+        int tiles = GigaTileMemoryTrim::prewarm(visibleJobs, m_prewarmCancel);
+        const int visibleMs = int(clock.elapsed());
+        tiles += GigaTileMemoryTrim::prewarm(allJobs, m_prewarmCancel);
         const int ms = int(clock.elapsed());
         if (trace) {
-            gigaTrace("GIGA_MEMTRIM prewarm: %d tiles in %d ms%s, %d MiB resident", tiles, ms,
-                  m_prewarmCancel.loadAcquire() ? " (stopped)" : "", GigaTileMemoryTrim::residentMiB());
+            gigaTrace("GIGA_MEMTRIM prewarm: visible area in %d ms, %d tiles in %d ms%s, %d MiB resident",
+                      visibleMs, tiles, ms, m_prewarmCancel.loadAcquire() ? " (stopped)" : "",
+                      GigaTileMemoryTrim::residentMiB());
         }
-        QMetaObject::invokeMethod(this, [this, tiles, ms]() {
-            Q_EMIT sigPrewarmFinished(tiles, ms);
+        QMetaObject::invokeMethod(this, [this, tiles, ms, visibleMs]() {
+            Q_EMIT sigPrewarmFinished(tiles, ms, visibleMs);
+            prewarmFinished();
         }, Qt::QueuedConnection);
     });
+}
+
+void GigaBackgroundMemoryTrimmer::prewarmFinished()
+{
+    // Loaded back because the pointer passed over the window, but the user
+    // did not come back: trim again after the usual delay.
+    if (m_phase == Phase::Idle && qGuiApp->applicationState() != Qt::ApplicationActive
+        && enabledInConfig() && !qEnvironmentVariableIsSet("GIGA_SELFTEST")) {
+        m_phase = Phase::Waiting;
+        m_delay.start(delaySecondsInConfig() * 1000);
+    }
 }

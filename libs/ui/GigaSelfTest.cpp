@@ -3491,16 +3491,18 @@ void testMemoryTrim(KisMainWindow *w)
 
     // Back in front: the tiles come back in a worker thread.
     bool warmed = false;
-    int warmTiles = 0, warmMs = 0;
+    int warmTiles = 0, warmMs = 0, visibleMs = 0;
     QMetaObject::Connection c2 = QObject::connect(trimmer, &GigaBackgroundMemoryTrimmer::sigPrewarmFinished,
-        [&](int tiles, int ms) { warmed = true; warmTiles = tiles; warmMs = ms; });
+        [&](int tiles, int ms, int vis) { warmed = true; warmTiles = tiles; warmMs = ms; visibleMs = vis; });
     trimmer->restoreNow();
     clock.restart();
     while (!warmed && clock.elapsed() < 60000) pump(2);
     QObject::disconnect(c2);
     report(warmed && GigaTileMemoryTrim::tilesInMemory() > tilesBefore / 2, "memtrim-prewarm",
-           QStringLiteral("%1 tiles in %2 ms, now %3 in memory, %4 MiB resident")
-               .arg(warmTiles).arg(warmMs).arg(GigaTileMemoryTrim::tilesInMemory()).arg(GigaTileMemoryTrim::residentMiB()));
+           QStringLiteral("%1 tiles in %2 ms (visible area after %3 ms), now %4 in memory, %5 MiB resident")
+               .arg(warmTiles).arg(warmMs).arg(visibleMs).arg(GigaTileMemoryTrim::tilesInMemory()).arg(GigaTileMemoryTrim::residentMiB()));
+    // the view shows only part of the image, so the visible pass is the shorter one
+    report(warmed && visibleMs <= warmMs, "memtrim-visible-first", QStringLiteral("%1 <= %2 ms").arg(visibleMs).arg(warmMs));
 
     report(checksum() == before, "memtrim-pixels-intact", QString::fromLatin1(before));
 
@@ -3511,6 +3513,7 @@ void testMemoryTrim(KisMainWindow *w)
     KoColor px;
     layers[0]->paintDevice()->pixel(20, 20, &px);
     report(px.toQColor() == QColor(Qt::red), "memtrim-paint-after", px.toQColor().name());
+    const QByteArray afterPaint = checksum();
 
     // Second round, so a trim right after a prewarm also works.
     trimmed = false;
@@ -3522,7 +3525,18 @@ void testMemoryTrim(KisMainWindow *w)
     QObject::disconnect(c3);
     report(trimmed && poolsReleased, "memtrim-second-round",
            QStringLiteral("resident %1 -> %2 MiB").arg(rssBefore).arg(rssAfter));
-    trimmer->restoreNow();
+
+    // The pointer entering a window (while unfocused) starts loading back too.
+    warmed = false;
+    QMetaObject::Connection c4 = QObject::connect(trimmer, &GigaBackgroundMemoryTrimmer::sigPrewarmFinished,
+        [&](int, int, int) { warmed = true; });
+    trimmer->pointerEnteredNow();
+    clock.restart();
+    while (!warmed && clock.elapsed() < 60000) pump(2);
+    QObject::disconnect(c4);
+    report(warmed && !trimmer->isTrimmed() && GigaTileMemoryTrim::tilesInMemory() > tilesBefore / 2,
+           "memtrim-hover-prewarm", QStringLiteral("%1 tiles in memory").arg(GigaTileMemoryTrim::tilesInMemory()));
+    report(checksum() == afterPaint, "memtrim-hover-pixels", QString::fromLatin1(afterPaint));
 }
 
 /// Right-click menus for the tools that had none (feature/tool-context-menus):

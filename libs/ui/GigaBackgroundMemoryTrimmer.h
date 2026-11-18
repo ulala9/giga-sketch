@@ -12,6 +12,8 @@
 #include <QThreadPool>
 #include <QTimer>
 
+class QWidget;
+
 #include "kritaui_export.h"
 
 /**
@@ -36,10 +38,16 @@ public:
     static int delaySecondsInConfig();
     static void setDelaySecondsInConfig(int seconds);
 
+    /// Start loading back when the pointer enters @p window (before the click
+    /// that focuses it), see eventFilter().
+    void watchWindow(QWidget *window);
+
     /// Trim now, ignoring the delay and the focus (self-test).
     void trimNow();
     /// Act as if the app became active again (self-test).
     void restoreNow();
+    /// Act as if the pointer entered a window while unfocused (self-test).
+    void pointerEnteredNow();
 
     bool isTrimmed() const { return m_phase == Phase::Trimmed; }
     bool isBusy() const;
@@ -47,13 +55,17 @@ public:
 Q_SIGNALS:
     /// The memory has been handed back. Others may free their own caches.
     void sigTrimmed(bool poolsReleased, int residentBeforeMiB, int residentAfterMiB);
-    void sigPrewarmFinished(int tiles, int milliseconds);
+    /// @p visibleMs: when the visible area of every view was loaded.
+    void sigPrewarmFinished(int tiles, int milliseconds, int visibleMs);
 
 private Q_SLOTS:
     void slotApplicationStateChanged(Qt::ApplicationState state);
     void slotDelayElapsed();
     void slotPoll();
     void slotConfigChanged();
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     explicit GigaBackgroundMemoryTrimmer(QObject *parent);
@@ -66,6 +78,7 @@ private:
     void finishTrim();
     void comeBack();
     void startPrewarm();
+    void prewarmFinished();
 
     Phase m_phase {Phase::Idle};
     QTimer m_delay;

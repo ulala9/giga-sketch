@@ -7,9 +7,12 @@
 #define GIGA_TILE_MEMORY_TRIM_H
 
 #include <QAtomicInt>
+#include <QList>
+#include <QRect>
 
 #include "kritaimage_export.h"
 #include "kis_types.h"
+#include "kis_paint_device.h"
 
 /**
  * Giga Sketch: give memory back to the system while the app sits in the
@@ -48,12 +51,19 @@ KRITAIMAGE_EXPORT bool releaseMemory();
 /// Current resident memory of the process in MiB (Linux; -1 elsewhere).
 KRITAIMAGE_EXPORT int residentMiB();
 
+/// One piece of prewarm work: the tiles of @p device inside @p rect
+/// (an empty rect = the whole device).
+struct PrewarmJob {
+    KisPaintDeviceSP device;
+    QRect rect;
+};
+
 /**
- * Touch every tile of @p devices so they are loaded back from swap. Meant to
- * run in a worker thread; stops early when @p cancelFlag becomes non-zero.
- * Returns the number of tiles touched.
+ * Touch every tile of the jobs, in order, so they are loaded back from swap.
+ * Meant to run in a worker thread; stops early when @p cancelFlag becomes
+ * non-zero. Returns the number of tiles touched.
  */
-KRITAIMAGE_EXPORT int prewarm(const QList<KisPaintDeviceSP> &devices, const QAtomicInt &cancelFlag);
+KRITAIMAGE_EXPORT int prewarm(const QList<PrewarmJob> &jobs, const QAtomicInt &cancelFlag);
 
 // Used by KisTileDataSwapper only.
 bool swapOutRequested();

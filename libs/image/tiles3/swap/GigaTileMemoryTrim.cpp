@@ -90,20 +90,23 @@ int residentMiB()
     return -1;
 }
 
-int prewarm(const QList<KisPaintDeviceSP> &devices, const QAtomicInt &cancelFlag)
+int prewarm(const QList<PrewarmJob> &jobs, const QAtomicInt &cancelFlag)
 {
     const int tw = KisTileData::WIDTH;
     const int th = KisTileData::HEIGHT;
     int touched = 0;
 
-    for (const KisPaintDeviceSP &dev : devices) {
-        if (!dev) continue;
-        const QRect r = dev->extent();
+    for (const PrewarmJob &job : jobs) {
+        if (!job.device) continue;
+        QRect r = job.device->extent();
+        if (!job.rect.isEmpty()) r &= job.rect;
         if (r.isEmpty()) continue;
 
         // A read-only accessor: moving it onto a tile loads that tile from
-        // swap (if needed) and never creates new tiles.
-        KisRandomConstAccessorSP acc = dev->createRandomConstAccessorNG();
+        // swap (if needed) and never creates new tiles. A tile that is
+        // already in memory costs next to nothing, so the "whole device"
+        // jobs after the "visible area" ones are cheap where they overlap.
+        KisRandomConstAccessorSP acc = job.device->createRandomConstAccessorNG();
         const int x0 = r.left() - ((r.left() % tw) + tw) % tw;
         const int y0 = r.top() - ((r.top() % th) + th) % th;
 
