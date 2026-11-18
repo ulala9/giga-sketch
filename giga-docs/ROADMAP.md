@@ -4,12 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
+Last updated: 2026-11-17 (background memory trim, merged)
 
 ## Resume here
 - **Next up:** ask the user what to do next. Candidates: a Phase 5 blueprint (Bubble Guess, Blob Brush,
   Harmony Wheel), Phase 6 extras, or Blender bridge extras.
-- Repo state: everything merged and pushed (2026-11-17: brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
+- Repo state: everything merged and pushed (2026-11-17: background-memory-trim, brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
   transform-last-stroke, stroke-points(-proportional), refboard-image-search, refboard-delete-key; all hand-tested).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
@@ -156,6 +156,14 @@ Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
   a top-bar button right after a stroke; editing strokes other than the last one (would need a vector stroke layer —
   much bigger, out of scope so far).
 
+## Performance
+- [x] **Background memory trim** (user request 2026-11-17, `feature/background-memory-trim`, merged 2026-11-17,
+  hand-tested): after 30 s unfocused (Preferences > Performance > "In background", 5–3600 s) tiles go to the swap
+  file, the tile pools are released + `malloc_trim`, the hidden image-search browser is discarded. Reload starts when
+  the pointer enters the window, visible area first; re-trims if the user doesn't come back. User's big sketch:
+  1.37 GB → ~0.55 GB, reload 1.8 s. Upstream `releaseInternalPools()` made thread-safe (pool lock + chunk count).
+  Self-test `memtrim`.
+
 ## Known issues / watch list
 - If dragging a floating panel ever looks choppy again: run with `GIGA_PANEL_TRACE=1` and read the summary lines.
 - After a Fedora update, link errors like `undefined reference to OpenColorIO_v2_4::…` / `Imf_3_2::…` = stale
@@ -172,6 +180,9 @@ Last updated: 2026-11-17 (right-click brush popup + tool context menus, merged)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-17: Background memory trim = Krita's own swap file + pool release (not a separate "hibernate" format);
+  on by default, 30 s delay; reload starts on pointer enter (Wayland delivers Enter to unfocused windows), visible
+  area first. More reload threads don't help (swap-in is serialized by the store's iteration lock).
 - 2026-11-17: Right-click = Photoshop-style per-tool popups/menus; Krita's popup palette kept as a preference
   (default: brush popup) + "Show Popup Palette" action. Brush popup: click picks and stays open, double-click/Enter/
   Esc/click outside closes (like Photoshop's brush picker).
