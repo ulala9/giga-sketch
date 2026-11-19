@@ -1347,6 +1347,97 @@ void testReferenceBoard(KisMainWindow *w)
         }
     }
 
+    // Multi-select (feature/refboard-multi-select): left-drag on empty space
+    // draws a selection rectangle; a selected image drags the whole
+    // selection (one undo step); Delete removes them all; Esc lets go.
+    {
+        auto wait = [](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) pump(1); };
+        auto key = [boardView](Qt::Key k, Qt::KeyboardModifiers m = Qt::NoModifier) {
+            QKeyEvent over(QEvent::ShortcutOverride, k, m);
+            QCoreApplication::sendEvent(boardView, &over);
+            const bool claimed = over.isAccepted();
+            QKeyEvent press(QEvent::KeyPress, k, m);
+            QCoreApplication::sendEvent(boardView, &press);
+            QKeyEvent up(QEvent::KeyRelease, k, m);
+            QCoreApplication::sendEvent(boardView, &up);
+            pump(5);
+            return claimed;
+        };
+        auto centerOf = [boardView](int index) {
+            QPointF c;
+            QMetaObject::invokeMethod(boardView, "imageWidgetCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, c), Q_ARG(int, index));
+            return c;
+        };
+        QMetaObject::invokeMethod(boardView, "fitAll");
+        wait(450);
+        const int count = boardView->property("imageCount").toInt();
+        // Overview has a 16 px margin: the corners are empty Board.
+        const QPoint corner(3, 3);
+        const QPoint far(boardView->width() - 3, boardView->height() - 3);
+        drag(boardView, corner, boardView->mapToGlobal(far), 8);
+        report(count >= 2 && boardView->property("selectedCount").toInt() == count, "board-marquee-selects",
+               QStringLiteral("%1 of %2 selected").arg(boardView->property("selectedCount").toInt()).arg(count));
+        report(boardView->property("focusedIndex").toInt() == -1 && boardView->property("zoom").toReal() > 0, "board-marquee-no-pan", QString());
+
+        // Drag one selected image: all of them move by the same amount.
+        QVector<QPointF> before;
+        for (int i = 0; i < count; ++i) before.append(centerOf(i));
+        const QPoint start = before[0].toPoint();
+        drag(boardView, start, boardView->mapToGlobal(start + QPoint(30, 20)), 6);
+        wait(250);
+        bool allMoved = true;
+        QString moved;
+        for (int i = 0; i < count; ++i) {
+            const QPointF d = centerOf(i) - before[i];
+            moved += QStringLiteral("(%1,%2) ").arg(d.x(), 0, 'f', 1).arg(d.y(), 0, 'f', 1);
+            allMoved &= QLineF(d, QPointF(30, 20)).length() < 1.5;
+        }
+        report(allMoved, "board-move-selection", moved);
+        doc->undoStack()->undo(); // one step puts all of them back
+        pump(5);
+        wait(250);
+        bool allBack = true;
+        for (int i = 0; i < count; ++i) allBack &= QLineF(centerOf(i), before[i]).length() < 1.5;
+        report(allBack, "board-move-selection-undo", QString());
+
+        // Esc clears the selection (and keeps the overview).
+        report(key(Qt::Key_Escape) && boardView->property("selectedCount").toInt() == 0, "board-esc-clears-selection",
+               QString::number(boardView->property("selectedCount").toInt()));
+
+        // Shift+click adds to the selection, Shift+click again takes it out.
+        auto shiftClick = [boardView](const QPointF &c) {
+            const QPoint p = c.toPoint();
+            QMouseEvent press(QEvent::MouseButtonPress, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::ShiftModifier);
+            QCoreApplication::sendEvent(boardView, &press);
+            QMouseEvent release(QEvent::MouseButtonRelease, p, boardView->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::ShiftModifier);
+            QCoreApplication::sendEvent(boardView, &release);
+            pump(3);
+        };
+        shiftClick(centerOf(0));
+        shiftClick(centerOf(1));
+        const int afterTwo = boardView->property("selectedCount").toInt();
+        shiftClick(centerOf(0));
+        bool only1 = false;
+        QMetaObject::invokeMethod(boardView, "isImageSelected", Qt::DirectConnection, Q_RETURN_ARG(bool, only1), Q_ARG(int, 1));
+        report(afterTwo == 2 && boardView->property("selectedCount").toInt() == 1 && only1 && boardView->property("focusedIndex").toInt() == -1,
+               "board-shift-click-toggles", QStringLiteral("%1 then %2").arg(afterTwo).arg(boardView->property("selectedCount").toInt()));
+
+        // Ctrl+A selects all; Delete removes all of them in one undo step.
+        const bool claimedAll = key(Qt::Key_A, Qt::ControlModifier);
+        report(claimedAll && boardView->property("selectedCount").toInt() == count, "board-ctrl-a", QString());
+        key(Qt::Key_Delete);
+        report(boardView->property("imageCount").toInt() == 0, "board-delete-selection",
+               QString::number(boardView->property("imageCount").toInt()));
+        doc->undoStack()->undo();
+        pump(5);
+        wait(100);
+        report(boardView->property("imageCount").toInt() == count && refs[1]->isOnBoard(), "board-delete-selection-undo",
+               QStringLiteral("%1, layer has %2, on board %3 %4, undo text %5").arg(boardView->property("imageCount").toInt())
+                   .arg(layer->shapeCount()).arg(refs[1]->isOnBoard()).arg(refs[2]->isOnBoard()).arg(doc->undoStack()->redoText()));
+        key(Qt::Key_Escape);
+        wait(400);
+    }
+
     // Send back to the canvas: exact same transform as before.
     canvas->addCommand(sendToCanvas({refs[1]}));
     pump(5);

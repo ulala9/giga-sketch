@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QPointer>
 #include <QUrl>
+#include <QPolygonF>
 #include <QRectF>
 #include <QSet>
 #include <QWidget>
@@ -48,6 +49,7 @@ class GigaReferenceBoardView : public QWidget
     Q_PROPERTY(qreal rotation READ rotation)
     Q_PROPERTY(qreal zoom READ zoom)
     Q_PROPERTY(bool mirrored READ isMirrored)
+    Q_PROPERTY(int selectedCount READ selectedCount)
 public:
     explicit GigaReferenceBoardView(QWidget *parent = nullptr);
     ~GigaReferenceBoardView() override;
@@ -66,6 +68,8 @@ public:
     bool isMirroredVertically() const { return m_settings.flipWithCanvas && m_canvasMirrorY; }
     /// Widget position of the center of image @p index (z order).
     Q_INVOKABLE QPointF imageWidgetCenter(int index) const;
+    int selectedCount() const { return m_selected.size(); }
+    Q_INVOKABLE bool isImageSelected(int index) const; ///< in z order
 
 public Q_SLOTS:
     void fitAll(); ///< overview of the whole Board (Home / Esc)
@@ -77,7 +81,10 @@ public Q_SLOTS:
     void focusImage(KisReferenceImage *image);
     /// Delete the focused image, else the outlined one (Delete / Backspace /
     /// the "clear" action's shortcut over the Board). Undoable.
-    void deleteCurrent();
+    void deleteCurrent(); ///< the focused image, else every selected one
+    void selectAll();
+    void clearSelection();
+    void arrangeSelected();
     void focusStep(int direction); ///< -1 previous, +1 next (arrangement order)
     void resetRotation(); ///< back to upright, animated (F1 / the canvas reset key)
     /**
@@ -142,6 +149,13 @@ private:
     bool matchesActionShortcut(QKeyEvent *event, const QString &name) const;
     bool isDeleteKey(QKeyEvent *event) const; ///< Delete, Backspace, or the "clear" shortcut
     void deleteImage(KisReferenceImage *image);
+    void deleteImages(const QVector<KisReferenceImage *> &images);
+    void setSelection(const QVector<KisReferenceImage *> &images);
+    /// The images an action on `image` applies to: the whole selection if
+    /// it is part of it, else just that image.
+    QVector<KisReferenceImage *> targetsFor(KisReferenceImage *image) const;
+    QPolygonF widgetPolygon(KisReferenceImage *image) const; ///< its outline on screen (turned/flipped)
+    void updateMarquee(const QPointF &pos);
 
     Camera cameraFitting(const QRectF &boardRect, qreal margin) const;
     void animateCamera(const Camera &target, int durationMs);
@@ -196,16 +210,20 @@ private:
     qreal m_rectT = 1.0;
 
     KisReferenceImage *m_focused {nullptr};
-    KisReferenceImage *m_current {nullptr}; // last clicked, for highlight
+    KisReferenceImage *m_current {nullptr}; // last clicked (match-to for Normalize, start for ←/→)
+    QVector<KisReferenceImage *> m_selected; // outlined, what Delete / drags / the menu act on
 
-    enum class Drag { None, Pending, Pan, MoveImage, Touch, Zoom, Rotate };
+    enum class Drag { None, Pending, Pan, MoveImage, Touch, Zoom, Rotate, Marquee };
     Drag m_drag = Drag::None;
     QPointF m_pressPos;
     QPointF m_lastPos;
     KisReferenceImage *m_pressImage {nullptr};
+    Qt::KeyboardModifiers m_pressModifiers;
+    QVector<KisReferenceImage *> m_moving; // MoveImage: the images being dragged (the selection, or the pressed one)
     QPointF m_dragOffset; // board units, for MoveImage
-    KisReferenceImage *m_dropImage {nullptr}; // just dropped by hand: drawn at m_dropRect until its move lands
-    QRectF m_dropRect;
+    QVector<KisReferenceImage *> m_marqueeBase; // Shift+marquee: selection before the drag (added to)
+    // Just dropped by hand: drawn at these rects until their move lands.
+    QHash<KisReferenceImage *, QRectF> m_dropRects;
     bool m_spaceHeld = false;
     QSet<int> m_heldKeys; // non-modifier keys held (Space...), for the canvas bindings
 
