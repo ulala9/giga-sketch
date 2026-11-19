@@ -4,12 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-17 (background memory trim, merged)
+Last updated: 2026-11-18 (brush size rounding, merged)
 
 ## Resume here
 - **Next up:** ask the user what to do next. Candidates: a Phase 5 blueprint (Bubble Guess, Blob Brush,
   Harmony Wheel), Phase 6 extras, or Blender bridge extras.
-- Repo state: everything merged and pushed (2026-11-17: background-memory-trim, brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
+- Repo state: everything merged and pushed (2026-11-18: brush-size-rounding; 2026-11-17: background-memory-trim, brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
   transform-last-stroke, stroke-points(-proportional), refboard-image-search, refboard-delete-key; all hand-tested).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
@@ -72,7 +72,10 @@ Last updated: 2026-11-17 (background memory trim, merged)
     size/source + copy hex, selection menu + Fill/Stroke (`feature/tool-context-menus`). Self-test `rightclick`.
   - Not done (ask first): Gradient tool gradient picker on right-click; Fill/Gradient/shape tools still get the brush
     popup (they are paint tools in Krita).
-- [x] Colour panel, menus wording, New Document dialog (`feature/ui-color-panel`, `feature/ui-menus-wording`, …)
+- [x] Whole-pixel brush sizes: "90.90 px" → "91 px" (≥ 10 px whole, below one decimal), slider/popup/Shift+drag;
+  Preferences > General > Tools > "Brush size" switches back to Krita's 2 decimals (`feature/brush-size-rounding`,
+  merged 2026-11-18, user OK'd). Self-test `brushpopup` (brushsize-* checks).
+- [x] Color panel, menus wording, New Document dialog (`feature/ui-color-panel`, `feature/ui-menus-wording`, …)
 - [x] Space-saving mode, panel flyouts (`feature/ui-space-saving`)
 - [x] Interface modes Studio / Photoshop / Procreate, F9 (`feature/interface-modes`, `feature/procreate-*`, `feature/studio-*`)
 - [x] Panels float inside the window: tear-off by tab/title/strip, drag back to dock, per-mode memory (`feature/in-window-panels`)
@@ -180,6 +183,8 @@ Last updated: 2026-11-17 (background memory trim, merged)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-18: Brush size rounding is a preference (default on), not a replacement; rounds only when the size is
+  changed (presets keep their stored value until then); 1 decimal below 10 px.
 - 2026-11-17: Background memory trim = Krita's own swap file + pool release (not a separate "hibernate" format);
   on by default, 30 s delay; reload starts on pointer enter (Wayland delivers Enter to unfocused windows), visible
   area first. More reload threads don't help (swap-in is serialized by the store's iteration lock).
