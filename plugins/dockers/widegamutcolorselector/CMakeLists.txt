@@ -1,3 +1,7 @@
+if(BUILD_TESTING)
+    add_subdirectory(tests) # Giga Sketch: Harmony Wheel math
+endif()
+
 set(KRITA_WGCOLORSELECTOR_SOURCES
     WGActionManager.cpp
     WGColorPatches.cpp
@@ -8,6 +12,7 @@ set(KRITA_WGCOLORSELECTOR_SOURCES
     WGCommonColorsCalculationRunner.cpp
     WGCommonColorSet.cpp
     WGConfig.cpp
+    WGHarmonyWheel.cpp
     WGMyPaintShadeSelector.cpp
     WGQuickSettingsWidget.cpp
     WGSelectorConfigGrid.cpp

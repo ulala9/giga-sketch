@@ -21,6 +21,7 @@ namespace Ui {
 class WGSelectorConfigGrid;
 class WGShadeLineEditor;
 class QButtonGroup;
+class QCheckBox;
 class QToolButton;
 
 class WGColorSelectorSettings : public KisPreferenceSet
@@ -56,6 +57,7 @@ private:
     WGSelectorConfigGrid *m_favoriteConfigGrid;
     WGShadeLineEditor *m_shadeLineEditor;
     QButtonGroup *m_shadeLineGroup;
+    QCheckBox *m_chkGigaHarmony {nullptr}; // Giga Sketch: Show harmony wheel
     QVector<WGConfig::ShadeLine> m_shadeLineConfig;
     QVector<QToolButton*> m_shadeLineButtons;
 };

@@ -14,6 +14,7 @@
 #include "WGConfigSelectorTypes.h"
 #include "WGQuickSettingsWidget.h"
 #include "WGShadeSelector.h"
+#include "WGHarmonyWheel.h"
 #include "KisVisualColorSelector.h"
 #include "KisColorSourceToggle.h"
 
@@ -94,6 +95,12 @@ WGColorSelectorDock::WGColorSelectorDock()
     m_shadeSelector = new WGShadeSelector(m_displayConfig, model, this);
     m_selectorAreaLayout->addWidget(m_shadeSelector);
     connect(m_shadeSelector, SIGNAL(sigColorInteraction(bool)), SLOT(slotColorInteraction(bool)));
+
+    // Giga Sketch: Harmony Wheel under the selector (Preferences: "Show harmony wheel")
+    m_harmonyWheel = new WGHarmonyWheel(m_displayConfig, model, this);
+    m_selectorAreaLayout->addWidget(m_harmonyWheel);
+    connect(m_harmonyWheel, SIGNAL(sigColorInteraction(bool)), SLOT(slotColorInteraction(bool)));
+    connect(m_harmonyWheel, SIGNAL(sigBackgroundColorPicked(KoColor)), SLOT(slotGigaHarmonyBackground(KoColor)));
 
     // eventually it should made be a global history, not specific to any plugin
     m_colorHistory = new KisUniqueColorSet(this);
@@ -270,6 +277,8 @@ void WGColorSelectorDock::updateLayout()
         m_commonColors->hide();
     }
 
+    m_harmonyWheel->setVisible(cfg.get(WGConfig::gigaHarmonyWheelEnabled));
+
     bool shadeSelectorEnabled = cfg.get(WGConfig::minimalShadeSelectorEnabled);
     if (shadeSelectorEnabled) {
         m_shadeSelector->show();
@@ -295,6 +304,7 @@ void WGColorSelectorDock::slotConfigurationChanged()
     m_selector->setProofColors(proofColors);
     m_displayConfig->setPreviewInPaintingCS(proofColors);
     m_shadeSelector->updateSettings();
+    m_harmonyWheel->updateSettings();
     m_history->updateSettings();
     m_commonColors->updateSettings();
     m_commonColorSet->setAutoUpdate(cfg.get(WGConfig::commonColorsAutoUpdate));
@@ -398,6 +408,7 @@ void WGColorSelectorDock::slotColorSourceToggled(bool selectingBg)
         }
         m_selector->setSelectorModel(m_colorModelBG);
         m_shadeSelector->setModel(m_colorModelBG);
+        m_harmonyWheel->setModel(m_colorModelBG);
     }
     else {
         if (m_colorModelBG->isHSXModel()) {
@@ -405,6 +416,7 @@ void WGColorSelectorDock::slotColorSourceToggled(bool selectingBg)
         }
         m_selector->setSelectorModel(m_colorModelFG);
         m_shadeSelector->setModel(m_colorModelFG);
+        m_harmonyWheel->setModel(m_colorModelFG);
     }
     // currently, only the color space of the active model is updated, so it may be outdated
     if (m_canvas) {
@@ -466,6 +478,13 @@ void WGColorSelectorDock::slotCanvasResourceChanged(int key, const QVariant &val
     default:
         break;
     }
+}
+
+void WGColorSelectorDock::slotGigaHarmonyBackground(const KoColor &color)
+{
+    // Giga Sketch: Shift+click on a harmony swatch = background color
+    if (!m_canvas) return;
+    m_canvas->resourceManager()->setBackgroundColor(color);
 }
 
 void WGColorSelectorDock::slotOpenSettings()
