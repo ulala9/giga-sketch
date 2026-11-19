@@ -4,12 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-18 (brush size rounding, merged)
+Last updated: 2026-11-19 (Harmony Wheel, Board multi-select + scale, American spelling, merged)
 
 ## Resume here
-- **Next up:** ask the user what to do next. Candidates: a Phase 5 blueprint (Bubble Guess, Blob Brush,
-  Harmony Wheel), Phase 6 extras, or Blender bridge extras.
-- Repo state: everything merged and pushed (2026-11-18: brush-size-rounding; 2026-11-17: background-memory-trim, brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
+- **Next up:** ask the user what to do next. Candidates: a Phase 5 blueprint (Bubble Guess, Blob Brush), Phase 6 extras, or Blender bridge extras.
+- Repo state: everything merged and pushed (2026-11-19: harmony-wheel, refboard-multi-select,
+  refboard-scale, american-spelling; 2026-11-18: brush-size-rounding; 2026-11-17: background-memory-trim, brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
   transform-last-stroke, stroke-points(-proportional), refboard-image-search, refboard-delete-key; all hand-tested).
   Text tools are "okish"; don't push more text work.
 - Workflow that works: propose approach + files → wait for OK → branch → build/run → self-test where possible →
@@ -19,8 +19,7 @@ Last updated: 2026-11-18 (brush size rounding, merged)
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/giga-tool-icons` (batch 2, unreviewed, extreme low priority),
-  `feature/refboard-multi-select`, `feature/refboard-scale` (not yet reported on by the user).
+  Pending in `giga-test` now: only `feature/giga-tool-icons` (batch 2, unreviewed, extreme low priority).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -115,7 +114,15 @@ Last updated: 2026-11-18 (brush size rounding, merged)
   collapse, Keep readable, 4 styles (Sticky, Card, Speech Bubble, Outline); Board + .kra/.krf. Self-test `notes`.
   2026-11-16: user reported a freeze on Edit > Add Note → fixed (no undoStack()->undo() from the editor; outside-click
   watcher starts after the opening click); re-tested OK.
-- [ ] Bubble Guess, Blob Brush, Harmony Wheel: blueprinted only.
+- [x] **Harmony Wheel** in the Color panel (`feature/harmony-wheel`, merged 2026-11-19, user OK'd): complementary,
+  split, analogous, triadic, square, monochrome; swatches (Shift+click = background), drag dots to change base/spread.
+  Color panel settings "Show harmony wheel". Self-test `harmony`, unit test `TestWGHarmony`.
+- [x] Board multi-select (`feature/refboard-multi-select`, merged 2026-11-19): left-drag on empty space = selection
+  rectangle (pan = middle-drag/Space+drag), Shift adds/removes, Ctrl+A, move/delete/Send to Canvas/Resample/
+  Arrange Selected act on the selection.
+- [x] Board scale (`feature/refboard-scale`, merged 2026-11-19): corner handles scale the selection around the
+  opposite corner (Alt: center), one undo step; notes keep their size.
+- [ ] Bubble Guess, Blob Brush: blueprinted only.
 - [x] **Blender Viewport Layer** (`feature/blender-bridge`, merged 2026-11-16, hand-tested). Self-test `blender`;
   add-on `giga-tools/blender/giga_viewport_send.py`.
   A basic capture of Blender's viewport onto a GigaSketch layer, instead of importing models.
@@ -183,6 +190,8 @@ Last updated: 2026-11-18 (brush size rounding, merged)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-19: American spelling in all Giga Sketch text (`fix/american-spelling`, merged); the font picker's
+  config key "favourites" stays so saved favorites keep working.
 - 2026-11-18: Brush size rounding is a preference (default on), not a replacement; rounds only when the size is
   changed (presets keep their stored value until then); 1 decimal below 10 px.
 - 2026-11-17: Background memory trim = Krita's own swap file + pool release (not a separate "hibernate" format);

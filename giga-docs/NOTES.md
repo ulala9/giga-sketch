@@ -956,3 +956,14 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   setting KoCanvasResource::Size), Shift+drag in `KisToolFreehand` and `KisToolBasicBrushBase` (drag keeps counting
   from the exact size so slow drags still move). `[`/`]` already use whole standard sizes. Preset values are untouched
   until changed. Pref: General > Tools > "Brush size". Self-test: `brushpopup` (brushsize-* checks).
+
+## Harmony Wheel (feature/harmony-wheel, 2026-11-17, merged 2026-11-19)
+- Lives in Krita's wide-gamut color selector docker: `plugins/dockers/widegamutcolorselector/WGHarmonyWheel.{h,cpp}`
+  (widget under the selector, added in `WGColorSelectorDock`), math in `WGHarmony.h` (header-only, unit test
+  `tests/TestWGHarmony.cpp`). Works on the selector's own HSX channel values, so wide-gamut colors survive.
+- Setting "Show harmony wheel" in `WGColorSelectorSettings`; mode + spread remembered in the config. Self-test `harmony`.
+
+## Board multi-select + scale (feature/refboard-multi-select, feature/refboard-scale, merged 2026-11-19)
+- `plugins/dockers/gigareferenceboard/GigaReferenceBoardView.{h,cpp}`: rubber-band selection on empty space, selection
+  set kept in the view; group move/scale each one undo command (helpers in `libs/ui/GigaReferenceBoard.{h,cpp}`).
+- Scale handles: four corners of the selection frame; anchor = opposite corner (Alt = center); GigaNote items only move.
