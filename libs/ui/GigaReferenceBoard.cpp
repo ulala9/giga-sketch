@@ -486,6 +486,15 @@ GeometryCommand *moveOnBoard(const QVector<KisReferenceImage *> &images, const Q
     return makeCommand(kundo2_i18n("Move on Reference Board"), images, before, after);
 }
 
+GeometryCommand *scaleOnBoard(const QVector<KisReferenceImage *> &images, const QVector<QRectF> &newRects)
+{
+    if (images.isEmpty() || images.size() != newRects.size()) return nullptr;
+    const QVector<ImageState> before = statesOf(images);
+    QVector<ImageState> after = before;
+    for (int i = 0; i < images.size(); ++i) after[i].boardRect = newRects[i];
+    return makeCommand(kundo2_i18n("Scale on Reference Board"), images, before, after);
+}
+
 // ---- Canvas animation -------------------------------------------------------
 
 void animateOnCanvas(GeometryCommand *command)

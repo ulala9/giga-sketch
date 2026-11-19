@@ -61,6 +61,9 @@ constexpr qreal MAX_ZOOM = 64.0;
 constexpr qreal FIT_MARGIN = 16.0;   // widget pixels around the overview
 constexpr qreal FOCUS_MARGIN = 8.0;  // around a focused image
 constexpr qreal DRAG_THRESHOLD = 4.0;
+constexpr qreal HANDLE_SIZE = 8.0;    // scale handles, widget pixels
+constexpr qreal HANDLE_GRAB = 9.0;    // grab distance from a handle's center
+constexpr qreal MIN_SCALED_SIDE = 6.0; // widget pixels: scaling never shrinks a picture below this
 constexpr qreal ROTATE_STEP = 15.0;        // stepped rotate, same as the canvas
 constexpr qreal ZOOM_DRAG_SMOOTH = 100.0;  // zoom drag: pixels per doubling (canvas value)
 constexpr qreal ZOOM_DRAG_STEP = 50.0;     // stepped zoom drag: pixels per step (canvas value)
@@ -260,6 +263,100 @@ bool GigaReferenceBoardView::isImageSelected(int index) const
     return index >= 0 && index < images.size() && m_selected.contains(images[index]);
 }
 
+QSizeF GigaReferenceBoardView::imageBoardSize(int index) const
+{
+    const QVector<KisReferenceImage *> images = liveImages();
+    if (index < 0 || index >= images.size()) return QSizeF();
+    return displayRect(images[index]).size();
+}
+
+bool GigaReferenceBoardView::showsScaleHandles() const
+{
+    // Not while zoomed in on one image (no outlines then), nor mid-drag of
+    // another kind.
+    return !m_selected.isEmpty() && !m_focused
+        && (m_drag == Drag::None || m_drag == Drag::Pending || m_drag == Drag::Scale);
+}
+
+QRectF GigaReferenceBoardView::selectionBounds() const
+{
+    QRectF bounds;
+    for (KisReferenceImage *image : m_selected) bounds |= displayRect(image);
+    return bounds;
+}
+
+QPointF GigaReferenceBoardView::boardCorner(const QRectF &r, int corner) const
+{
+    switch (corner) {
+    case 0: return r.topLeft();
+    case 1: return r.topRight();
+    case 2: return r.bottomRight();
+    default: return r.bottomLeft();
+    }
+}
+
+QPointF GigaReferenceBoardView::scaleHandleCenter(int corner) const
+{
+    if (!showsScaleHandles() || corner < 0 || corner > 3) return QPointF(-1, -1);
+    const QRectF bounds = selectionBounds();
+    if (bounds.isEmpty()) return QPointF(-1, -1);
+    return rotationTransform().map(cameraTransform().map(boardCorner(bounds, corner)));
+}
+
+int GigaReferenceBoardView::scaleHandleAt(const QPointF &widgetPos) const
+{
+    if (!showsScaleHandles()) return -1;
+    int best = -1;
+    qreal bestDistance = HANDLE_GRAB;
+    for (int corner = 0; corner < 4; ++corner) {
+        const qreal d = QLineF(scaleHandleCenter(corner), widgetPos).length();
+        if (d <= bestDistance) {
+            best = corner;
+            bestDistance = d;
+        }
+    }
+    return best;
+}
+
+QRectF GigaReferenceBoardView::scaledRect(KisReferenceImage *image, const QRectF &start) const
+{
+    // Everything grows away from the fixed point by the same factor, so the
+    // layout of the selection keeps its shape. Notes keep their own size
+    // (their width is the user's, the height follows the text): only their
+    // place moves along.
+    const QPointF a = m_scaleAnchor;
+    if (image->isNote()) {
+        QRectF r = start;
+        r.moveCenter(a + (start.center() - a) * m_scale);
+        return r;
+    }
+    return QRectF(a + (start.topLeft() - a) * m_scale, start.size() * m_scale);
+}
+
+void GigaReferenceBoardView::updateScale(const QPointF &pos, Qt::KeyboardModifiers modifiers)
+{
+    // Alt scales around the center, else around the opposite corner.
+    const QPointF corner = boardCorner(m_scaleBounds, m_scaleCorner);
+    m_scaleAnchor = (modifiers & Qt::AltModifier) ? m_scaleBounds.center()
+                                                  : boardCorner(m_scaleBounds, (m_scaleCorner + 2) % 4);
+    // Keep the proportions: how far along the anchor -> corner diagonal the
+    // pointer is (also right on a turned or flipped Board: board units).
+    const QPointF diagonal = corner - m_scaleAnchor;
+    const qreal length2 = QPointF::dotProduct(diagonal, diagonal);
+    if (length2 <= 0.0) return;
+    qreal factor = QPointF::dotProduct(toBoard(pos) - m_scaleAnchor, diagonal) / length2;
+    // Never smaller than a few screen pixels (and never flipped inside out).
+    qreal smallest = 0.0;
+    for (auto it = m_scaleStart.constBegin(); it != m_scaleStart.constEnd(); ++it) {
+        if (it.key()->isNote()) continue;
+        const qreal side = qMin(it.value().width(), it.value().height()) * m_camera.zoom;
+        if (side > 0.0 && (smallest == 0.0 || side < smallest)) smallest = side;
+    }
+    const qreal minFactor = smallest > 0.0 ? qMin(1.0, MIN_SCALED_SIDE / smallest) : 0.05;
+    m_scale = qBound(minFactor, factor, 100.0);
+    update();
+}
+
 QPolygonF GigaReferenceBoardView::widgetPolygon(KisReferenceImage *image) const
 {
     // Board -> view (camera), then view -> widget (flip + turn). Qt applies
@@ -316,7 +413,8 @@ void GigaReferenceBoardView::refresh()
         // Something being dragged was deleted (undo...): drop the drag.
         m_pressImage = nullptr;
         m_moving.clear();
-        if (m_drag == Drag::MoveImage || m_drag == Drag::Pending) m_drag = Drag::None;
+        m_scaleStart.clear();
+        if (m_drag == Drag::MoveImage || m_drag == Drag::Pending || m_drag == Drag::Scale) m_drag = Drag::None;
     }
 
     if (contentMoved) {
@@ -539,6 +637,10 @@ QRectF GigaReferenceBoardView::displayRect(KisReferenceImage *image) const
     const auto it = m_animFrom.constFind(image);
     if (it != m_animFrom.constEnd() && m_rectT < 1.0) r = lerpRect(it.value(), r, m_rectT);
     if (m_drag == Drag::MoveImage && m_moving.contains(image)) r.translate(m_dragOffset);
+    if (m_drag == Drag::Scale) {
+        const auto start = m_scaleStart.constFind(image);
+        if (start != m_scaleStart.constEnd()) r = scaledRect(image, start.value());
+    }
     return r;
 }
 
@@ -767,6 +869,27 @@ void GigaReferenceBoardView::paintEvent(QPaintEvent *)
         }
     }
 
+    if (showsScaleHandles()) {
+        // Scale handles at the selection's corners (turned with the Board),
+        // plus a thin frame around a group.
+        const QRectF bounds = camera.mapRect(selectionBounds());
+        const QColor accent = palette().color(QPalette::Highlight);
+        if (m_selected.size() > 1) {
+            QPen frame(accent, 1.0, Qt::DashLine);
+            frame.setCosmetic(true);
+            p.setPen(frame);
+            p.setBrush(Qt::NoBrush);
+            p.drawRect(bounds.adjusted(-3, -3, 3, 3));
+        }
+        p.setPen(QPen(accent, 1.5));
+        p.setBrush(QColor(255, 255, 255));
+        for (int corner = 0; corner < 4; ++corner) {
+            QRectF handle(0, 0, HANDLE_SIZE, HANDLE_SIZE);
+            handle.moveCenter(boardCorner(bounds, corner));
+            p.drawRect(handle);
+        }
+    }
+
     if (m_drag == Drag::Marquee) {
         // The selection rectangle, upright on screen like on the canvas.
         p.resetTransform();
@@ -830,6 +953,21 @@ void GigaReferenceBoardView::pressAt(const QPointF &pos, Qt::MouseButton button,
         return;
     }
     if (button != Qt::LeftButton) return;
+
+    const int handle = scaleHandleAt(pos);
+    if (handle >= 0) {
+        stopCameraAnimation();
+        m_drag = Drag::Scale;
+        m_scaleCorner = handle;
+        m_scaleBounds = selectionBounds();
+        m_scale = 1.0;
+        m_scaleAnchor = boardCorner(m_scaleBounds, (handle + 2) % 4);
+        m_moving = targetsFor(m_selected.first());
+        m_scaleStart.clear();
+        for (KisReferenceImage *image : std::as_const(m_moving)) m_scaleStart.insert(image, displayRect(image));
+        m_pressModifiers = modifiers;
+        return;
+    }
 
     KisReferenceImage *image = imageAt(pos);
     if (image && (modifiers & Qt::ControlModifier)) {
@@ -906,6 +1044,9 @@ void GigaReferenceBoardView::moveAt(const QPointF &pos)
     case Drag::Marquee:
         updateMarquee(pos);
         break;
+    case Drag::Scale:
+        updateScale(pos, QApplication::keyboardModifiers());
+        break;
     case Drag::Zoom: {
         // Same feel as the canvas: up = in, 100 px doubles (stepped: one
         // step per 50 px), measured from where the drag started.
@@ -981,6 +1122,30 @@ void GigaReferenceBoardView::releaseAt(const QPointF &pos)
                 update();
             });
         }
+    } else if (drag == Drag::Scale && !moving.isEmpty()) {
+        // Same as a move: one undo step, drawn exactly where it was let go.
+        const QVector<KisReferenceImage *> live = liveImages();
+        QVector<KisReferenceImage *> images;
+        QVector<QRectF> rects;
+        for (KisReferenceImage *i : moving) {
+            const auto start = m_scaleStart.constFind(i);
+            if (!live.contains(i) || start == m_scaleStart.constEnd()) continue;
+            images.append(i);
+            rects.append(scaledRect(i, start.value()));
+        }
+        m_scaleStart.clear();
+        m_scaleCorner = -1;
+        for (int k = 0; k < images.size(); ++k) m_dropRects.insert(images[k], rects[k]);
+        pushCommand(GigaReferenceBoard::scaleOnBoard(images, rects));
+        for (int k = 0; k < images.size(); ++k) {
+            if (images[k]->boardRect() == rects[k]) m_dropRects.remove(images[k]); // landed
+        }
+        if (!m_dropRects.isEmpty()) {
+            QTimer::singleShot(1000, this, [this, images]() {
+                for (KisReferenceImage *i : images) m_dropRects.remove(i);
+                update();
+            });
+        }
     } else if (drag == Drag::Marquee) {
         m_marqueeBase.clear();
         if (!m_selected.isEmpty()) m_current = m_selected.last();
@@ -1014,8 +1179,13 @@ void GigaReferenceBoardView::releaseAt(const QPointF &pos)
 
 void GigaReferenceBoardView::updateCursor(const QPointF &pos)
 {
+    const int handle = m_spaceHeld ? -1 : scaleHandleAt(pos);
     if (m_spaceHeld) {
         setCursor(Qt::OpenHandCursor);
+    } else if (handle >= 0) {
+        // Diagonal arrow pointing the way the corner sits on screen.
+        const QPointF d = scaleHandleCenter(handle) - scaleHandleCenter((handle + 2) % 4);
+        setCursor(d.x() * d.y() > 0 ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor);
     } else if (imageAt(pos)) {
         setCursor(Qt::PointingHandCursor);
     } else {
@@ -1106,6 +1276,7 @@ bool GigaReferenceBoardView::event(QEvent *event)
             m_drag = Drag::None;
             m_pressImage = nullptr;
             m_moving.clear();
+            m_scaleStart.clear();
             if (!m_marqueeBase.isEmpty()) m_selected = m_marqueeBase;
             m_marqueeBase.clear();
             update();
@@ -1120,6 +1291,7 @@ bool GigaReferenceBoardView::event(QEvent *event)
                 m_drag = Drag::Touch;
                 m_pressImage = nullptr;
                 m_moving.clear();
+                m_scaleStart.clear();
                 m_marqueeBase.clear();
                 stopCameraAnimation();
             } else if (m_touchDistance > 1.0) {
@@ -1631,6 +1803,7 @@ void GigaReferenceBoardView::contextMenuEvent(QContextMenuEvent *event)
 {
     m_drag = Drag::None;
     m_moving.clear();
+    m_scaleStart.clear();
     KisReferenceImage *image = imageAt(event->pos());
     QMenu menu(this);
     if (image) {

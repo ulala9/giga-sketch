@@ -1422,6 +1422,55 @@ void testReferenceBoard(KisMainWindow *w)
         report(afterTwo == 2 && boardView->property("selectedCount").toInt() == 1 && only1 && boardView->property("focusedIndex").toInt() == -1,
                "board-shift-click-toggles", QStringLiteral("%1 then %2").arg(afterTwo).arg(boardView->property("selectedCount").toInt()));
 
+        // Scale handles (feature/refboard-scale): dragging the bottom-right
+        // handle of a two-image selection scales both by the same factor,
+        // around the top-left corner; one undo step puts them back.
+        {
+            key(Qt::Key_A, Qt::ControlModifier);
+            pump(5);
+            QVector<QSizeF> sizes;
+            QSizeF size;
+            for (int i = 0; i < count; ++i) {
+                QMetaObject::invokeMethod(boardView, "imageBoardSize", Qt::DirectConnection, Q_RETURN_ARG(QSizeF, size), Q_ARG(int, i));
+                sizes.append(size);
+            }
+            QPointF tl, br;
+            QMetaObject::invokeMethod(boardView, "scaleHandleCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, tl), Q_ARG(int, 0));
+            QMetaObject::invokeMethod(boardView, "scaleHandleCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, br), Q_ARG(int, 2));
+            // Pull the corner a quarter of the way back toward the opposite one: x0.75.
+            const QPoint from = br.toPoint();
+            const QPointF target = br + (tl - br) * 0.25;
+            drag(boardView, from, boardView->mapToGlobal(target.toPoint()), 6);
+            wait(250);
+            QPointF tlAfter;
+            QMetaObject::invokeMethod(boardView, "scaleHandleCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, tlAfter), Q_ARG(int, 0));
+            bool sameFactor = true;
+            QString ratios;
+            qreal first = -1.0;
+            for (int i = 0; i < count; ++i) {
+                QMetaObject::invokeMethod(boardView, "imageBoardSize", Qt::DirectConnection, Q_RETURN_ARG(QSizeF, size), Q_ARG(int, i));
+                const qreal rw = size.width() / sizes[i].width(), rh = size.height() / sizes[i].height();
+                ratios += QStringLiteral("%1/%2 ").arg(rw, 0, 'f', 3).arg(rh, 0, 'f', 3);
+                if (first < 0) first = rw;
+                sameFactor &= qAbs(rw - first) < 0.01 && qAbs(rh - first) < 0.01;
+            }
+            report(sameFactor && qAbs(first - 0.75) < 0.03 && QLineF(tl, tlAfter).length() < 1.5, "board-scale-selection",
+                   ratios + QStringLiteral("anchor moved %1 px").arg(QLineF(tl, tlAfter).length(), 0, 'f', 1));
+            doc->undoStack()->undo();
+            pump(5);
+            wait(250);
+            bool back = true;
+            for (int i = 0; i < count; ++i) {
+                QMetaObject::invokeMethod(boardView, "imageBoardSize", Qt::DirectConnection, Q_RETURN_ARG(QSizeF, size), Q_ARG(int, i));
+                back &= qAbs(size.width() - sizes[i].width()) < 0.01;
+            }
+            report(back, "board-scale-undo", QString());
+            QPointF none;
+            key(Qt::Key_Escape);
+            QMetaObject::invokeMethod(boardView, "scaleHandleCenter", Qt::DirectConnection, Q_RETURN_ARG(QPointF, none), Q_ARG(int, 0));
+            report(none == QPointF(-1, -1), "board-no-handles-without-selection", QString());
+        }
+
         // Ctrl+A selects all; Delete removes all of them in one undo step.
         const bool claimedAll = key(Qt::Key_A, Qt::ControlModifier);
         report(claimedAll && boardView->property("selectedCount").toInt() == count, "board-ctrl-a", QString());
