@@ -80,6 +80,7 @@
 #include "KisResourceLoaderRegistry.h"
 #include "kis_acyclic_signal_connector.h"
 #include "KisMainWindow.h"
+#include "GigaBrushSize.h"
 
 
 KisPaintopBox::KisPaintopBox(KisViewManager *viewManager, QWidget *parent, const char *name)
@@ -258,7 +259,7 @@ KisPaintopBox::KisPaintopBox(KisViewManager *viewManager, QWidget *parent, const
         if (sliderLabels) {
             slOpacity     = m_sliderChooser[i]->addWidget<KisDoubleSliderSpinBox>("opacity");
             slFlow        = m_sliderChooser[i]->addWidget<KisDoubleSliderSpinBox>("flow");
-            slSize        = m_sliderChooser[i]->addWidget<KisDoubleSliderSpinBox>("size");
+            slSize        = m_sliderChooser[i]->addWidget<GigaBrushSizeSpinBox>("size"); // Giga Sketch: whole-pixel display option
             slRotation    = m_sliderChooser[i]->addWidget<KisAngleSelector>("rotation");
             slPatternSize = m_sliderChooser[i]->addWidget<KisMultipliersDoubleSliderSpinBox>("patternsize");
 
@@ -273,7 +274,7 @@ KisPaintopBox::KisPaintopBox(KisViewManager *viewManager, QWidget *parent, const
         else {
             slOpacity     = m_sliderChooser[i]->addWidget<KisDoubleSliderSpinBox>("opacity", i18n("Opacity:"));
             slFlow        = m_sliderChooser[i]->addWidget<KisDoubleSliderSpinBox>("flow", i18n("Flow:"));
-            slSize        = m_sliderChooser[i]->addWidget<KisDoubleSliderSpinBox>("size", i18n("Size:"));
+            slSize        = m_sliderChooser[i]->addWidget<GigaBrushSizeSpinBox>("size", i18n("Size:")); // Giga Sketch: whole-pixel display option
             slRotation    = m_sliderChooser[i]->addWidget<KisAngleSelector>("rotation", i18n("Rotation:"));
             slPatternSize = m_sliderChooser[i]->addWidget<KisMultipliersDoubleSliderSpinBox>("patternsize", i18n("Pattern Scale:"));
 

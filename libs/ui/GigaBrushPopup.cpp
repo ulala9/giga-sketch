@@ -4,6 +4,7 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "GigaBrushPopup.h"
+#include "GigaBrushSize.h"
 
 #include <QAbstractItemView>
 #include <QApplication>
@@ -145,7 +146,7 @@ GigaBrushPopup::GigaBrushPopup(KisCanvas2 *canvas, QWidget *parent)
     sliders->setVerticalSpacing(6);
 
     QLabel *sizeLabel = new QLabel(i18nc("brush size", "Size:"), this);
-    m_size = new KisDoubleSliderSpinBox(this);
+    m_size = new GigaBrushSizeSpinBox(this);
     m_size->setObjectName(QStringLiteral("GigaBrushPopupSize"));
     m_size->setRange(0.01, KisImageConfig(true).maxBrushSize(), 2);
     m_size->setSingleStep(1);

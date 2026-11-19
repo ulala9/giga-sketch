@@ -124,6 +124,9 @@ public:
     // Giga Sketch: what right-click opens for paint tools (brush popup / popup palette), added in code
     QComboBox *m_cmbGigaRightClick {nullptr};
 
+    // Giga Sketch: round brush sizes to whole pixels (GigaBrushSize), added in code
+    QCheckBox *m_chkGigaRoundBrushSize {nullptr};
+
     static void setColorSamplerPreviewStyleItems(QComboBox *cmb);
     static void setColorSamplerPreviewStyleIndexByValue(QComboBox *cmb, KisConfig::ColorSamplerPreviewStyle style);
     static KisConfig::ColorSamplerPreviewStyle getColorSamplerPreviewStyleValue(const QComboBox *cmb);

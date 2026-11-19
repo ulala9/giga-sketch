@@ -7,6 +7,7 @@
 #include <kis_paint_layer.h>
 #include "kis_tool_utils.h"
 #include "GigaBrushPopup.h"
+#include "GigaBrushSize.h"
 #include "kis_popup_palette.h"
 #include "kis_paintop_box.h"
 #include "KisResourceServerProvider.h"
@@ -3347,6 +3348,31 @@ void testBrushPopup(KisMainWindow *w)
     pump(5);
     report(qAbs(popup->sizeSlider()->value() - 17.0) < 0.02, "brushpopup-size-follows-brush",
            QString::number(popup->sizeSlider()->value()));
+
+    // Giga Sketch: "Round brush size to whole pixels" (GigaBrushSize).
+    {
+        const bool wasRounding = GigaBrushSize::roundingEnabled();
+        auto brushSize = [res]() { return res->resource(KoCanvasResource::Size).toDouble(); };
+        GigaBrushSize::setRoundingEnabled(true);
+        res->setResource(KoCanvasResource::Size, 90.9);
+        pump(5);
+        report(qAbs(brushSize() - 91.0) < 1e-6, "brushsize-round-whole", QString::number(brushSize()));
+        report(popup->sizeSlider()->text() == QStringLiteral("91 px"), "brushsize-round-text", popup->sizeSlider()->text());
+        res->setResource(KoCanvasResource::Size, 2.47);
+        pump(5);
+        report(qAbs(brushSize() - 2.5) < 1e-6, "brushsize-round-small", QString::number(brushSize()));
+        report(popup->sizeSlider()->text() == QLocale().toString(2.5, 'f', 1) + QStringLiteral(" px"),
+               "brushsize-round-small-text", popup->sizeSlider()->text());
+        GigaBrushSize::setRoundingEnabled(false);
+        res->setResource(KoCanvasResource::Size, 90.9);
+        pump(5);
+        report(qAbs(brushSize() - 90.9) < 1e-6, "brushsize-off-keeps", QString::number(brushSize()));
+        report(popup->sizeSlider()->text() == QLocale().toString(90.9, 'f', 2) + QStringLiteral(" px"),
+               "brushsize-off-text", popup->sizeSlider()->text());
+        GigaBrushSize::setRoundingEnabled(wasRounding);
+        res->setResource(KoCanvasResource::Size, 17.0);
+        pump(5);
+    }
 
     info(QStringLiteral("preset %1, hardness enabled %2").arg(
         res->resource(KoCanvasResource::CurrentPaintOpPreset).value<KisPaintOpPresetSP>()

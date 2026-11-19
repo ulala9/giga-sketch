@@ -10,6 +10,7 @@
 #include "kis_dlg_preferences.h"
 #include "GigaBackgroundMemoryTrimmer.h"
 #include "GigaBrushPopup.h"
+#include "GigaBrushSize.h"
 #include <GigaBranding.h>
 #include "GigaAccent.h"
 #include <QColorDialog>
@@ -538,6 +539,19 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
         toolsForm->getWidgetPosition(m_chkSwitchSelectionCtrlAlt, &row, &role);
         toolsForm->insertRow(row + 1, i18n("Right-click on canvas:"), m_cmbGigaRightClick);
     }
+
+    // Giga Sketch: whole-pixel brush sizes (90.90 px -> 91 px).
+    m_chkGigaRoundBrushSize = new QCheckBox(i18n("Round brush size to whole pixels"), this);
+    m_chkGigaRoundBrushSize->setObjectName(QStringLiteral("GigaRoundBrushSize"));
+    m_chkGigaRoundBrushSize->setToolTip(i18n("Brush sizes of 10 px and up become whole numbers (91 px instead of 90.90 px); "
+                                             "smaller brushes keep one decimal. Turn off for Krita's two decimals."));
+    m_chkGigaRoundBrushSize->setChecked(GigaBrushSize::roundingEnabled());
+    if (QFormLayout *toolsForm = qobject_cast<QFormLayout*>(m_cmbGigaRightClick->parentWidget()->layout())) {
+        int row = -1;
+        QFormLayout::ItemRole role;
+        toolsForm->getWidgetPosition(m_cmbGigaRightClick, &row, &role);
+        toolsForm->insertRow(row + 1, i18n("Brush size:"), m_chkGigaRoundBrushSize);
+    }
     cmbTouchPainting->addItem(
         KoPointerEvent::tabletInputReceived() ? i18nc("touch painting", "Auto (Disabled)")
                                               : i18nc("touch painting", "Auto (Enabled)"));
@@ -1009,6 +1023,7 @@ void GeneralTab::setDefault()
     intZoomMarginSize->setValue(cfg.zoomMarginSize(true));
     m_chkSwitchSelectionCtrlAlt->setChecked(cfg.switchSelectionCtrlAlt(true));
     if (m_cmbGigaRightClick) m_cmbGigaRightClick->setCurrentIndex(0); // Giga Sketch: brush popup
+    if (m_chkGigaRoundBrushSize) m_chkGigaRoundBrushSize->setChecked(true); // Giga Sketch: round sizes
     cmbTouchPainting->setCurrentIndex(int(cfg.touchPainting(true)));
     chkTouchPressureSensitivity->setChecked(true);
     chkEnableTransformToolAfterPaste->setChecked(cfg.activateTransformToolAfterPaste(true));
@@ -3190,6 +3205,9 @@ bool KisDlgPreferences::editPreferences(std::optional<PageDesc>page)
         cfg.setSwitchSelectionCtrlAlt(m_general->switchSelectionCtrlAlt());
         if (m_general->m_cmbGigaRightClick) {
             GigaBrushPopup::setRightClickMode(GigaBrushPopup::RightClickMode(m_general->m_cmbGigaRightClick->currentData().toInt()));
+        }
+        if (m_general->m_chkGigaRoundBrushSize) {
+            GigaBrushSize::setRoundingEnabled(m_general->m_chkGigaRoundBrushSize->isChecked());
         }
         cfg.setTouchPainting(KisConfig::TouchPainting(m_general->cmbTouchPainting->currentIndex()));
         cfg.writeEntry("useTouchPressureSensitivity", m_general->chkTouchPressureSensitivity->isChecked());

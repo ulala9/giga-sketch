@@ -52,6 +52,7 @@
 #include <KisDocument.h>
 #include <KisView.h>
 #include <kundo2stack.h>
+#include <GigaBrushSize.h>
 
 using namespace std::placeholders; // For _1 placeholder
 
@@ -497,7 +498,9 @@ void KisToolFreehand::continueAlternateAction(KoPointerEvent *event, AlternateAc
 
         newSize = qBound(0.01, newSize, maxBrushSize);
 
-        settings->setPaintOpSize(newSize);
+        // Giga Sketch: optional rounding. Only the brush gets the rounded size; the drag keeps
+        // counting from the exact one (m_lastPaintOpSize), so slow drags still move.
+        settings->setPaintOpSize(GigaBrushSize::rounded(newSize));
 
         requestUpdateOutline(
             m_initialGestureDocPoint,
