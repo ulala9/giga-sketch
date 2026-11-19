@@ -127,7 +127,7 @@ void GigaTextPanelsTest::testCapsExcludeEachOther()
     QVERIFY(smallCaps->isChecked());
 }
 
-void GigaTextPanelsTest::testJustifyLastCentred()
+void GigaTextPanelsTest::testJustifyLastCentered()
 {
     Fixture f;
     GigaParagraphPanel panel(&f.access);

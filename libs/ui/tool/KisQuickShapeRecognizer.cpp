@@ -21,7 +21,7 @@ constexpr qreal CLOSED_GAP = 0.2;             // end-to-start gap, of bbox size
 constexpr qreal SIMPLIFY_EPSILON = 0.06;      // corner detection, of bbox diagonal
 constexpr qreal POLYGON_MAX_ERROR = 0.07;     // of bbox diagonal
 constexpr qreal SHARP_TURN_DEGREES = 50.0;    // a "corner" turns at least this much
-constexpr qreal ELLIPSE_MAX_ERROR = 0.09;     // RMS of normalised radius error
+constexpr qreal ELLIPSE_MAX_ERROR = 0.09;     // RMS of normalized radius error
 constexpr qreal ARC_MAX_ERROR = 0.05;         // RMS radial error, of radius
 constexpr int RESAMPLE_COUNT = 96;
 
@@ -208,7 +208,7 @@ KisQuickShapeRecognizer::Result KisQuickShapeRecognizer::recognize(const QVector
 
     if (closed) {
         // 2a. Polygon / rectangle: a few sharp corners.
-        // Start from the point farthest from the centre (a likely corner),
+        // Start from the point farthest from the center (a likely corner),
         // so the seam where the stroke closes doesn't hide one.
         const QPointF c = centroid(pts);
         int far = 0;
@@ -311,13 +311,13 @@ KisQuickShapeRecognizer::Result KisQuickShapeRecognizer::recognize(const QVector
             const qreal bu = 0.5 * (suuu + suvv), bv = 0.5 * (svvv + svuu);
             const qreal uc = (bu * svv - bv * suv) / det;
             const qreal vc = (bv * suu - bu * suv) / det;
-            const QPointF centre = c0 + QPointF(uc, vc);
+            const QPointF center = c0 + QPointF(uc, vc);
             qreal radius = 0;
-            for (const QPointF &p : pts) radius += length(p - centre);
+            for (const QPointF &p : pts) radius += length(p - center);
             radius /= pts.size();
             qreal err = 0;
             for (const QPointF &p : pts) {
-                const qreal e = length(p - centre) - radius;
+                const qreal e = length(p - center) - radius;
                 err += e * e;
             }
             err = std::sqrt(err / pts.size()) / qMax(radius, 1e-6);
@@ -325,16 +325,16 @@ KisQuickShapeRecognizer::Result KisQuickShapeRecognizer::recognize(const QVector
             // Sweep: sum of signed angle steps along the stroke.
             qreal sweep = 0;
             for (int i = 1; i < pts.size(); i++) {
-                const QPointF a = pts[i - 1] - centre, b = pts[i] - centre;
+                const QPointF a = pts[i - 1] - center, b = pts[i] - center;
                 sweep += std::atan2(a.x() * b.y() - a.y() * b.x(), a.x() * b.x() + a.y() * b.y());
             }
             const qreal sweepDeg = qRadiansToDegrees(sweep);
             if (err < ARC_MAX_ERROR && qAbs(sweepDeg) > 20 && qAbs(sweepDeg) < 340 && radius < 4 * diag) {
-                const QPointF s = start - centre;
+                const QPointF s = start - center;
                 const qreal startDeg = -qRadiansToDegrees(std::atan2(s.y(), s.x())); // Qt: counter-clockwise, y up
                 QPainterPath arc;
-                arc.arcMoveTo(QRectF(centre - QPointF(radius, radius), QSizeF(2 * radius, 2 * radius)), startDeg);
-                arc.arcTo(QRectF(centre - QPointF(radius, radius), QSizeF(2 * radius, 2 * radius)), startDeg, -sweepDeg);
+                arc.arcMoveTo(QRectF(center - QPointF(radius, radius), QSizeF(2 * radius, 2 * radius)), startDeg);
+                arc.arcTo(QRectF(center - QPointF(radius, radius), QSizeF(2 * radius, 2 * radius)), startDeg, -sweepDeg);
                 result.type = Arc;
                 result.path = arc;
                 return result;

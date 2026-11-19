@@ -54,7 +54,7 @@ struct KisReferenceImage::Private : public QSharedData
     // Giga Sketch: Reference Board placement (see KisReferenceImage.h).
     bool onBoard{false};
     QRectF boardRect;
-    QColor averageColor; // cache for "sort by colour"; invalid = not computed yet
+    QColor averageColor; // cache for "sort by color"; invalid = not computed yet
 
     bool loadFromFile() {
         KIS_SAFE_ASSERT_RECOVER_RETURN_VALUE(!externalFilename.isEmpty(), false);
@@ -536,7 +536,7 @@ QColor KisReferenceImage::pixelAtNormalized(const QPointF &uv)
 QColor KisReferenceImage::averageColor() const
 {
     if (!d->averageColor.isValid() && !d->image.isNull()) {
-        // Nearest-neighbour shrink of a huge image is cheap (16x16 samples).
+        // Nearest-neighbor shrink of a huge image is cheap (16x16 samples).
         const QImage small = d->image.scaled(16, 16, Qt::IgnoreAspectRatio, Qt::FastTransformation)
                                  .convertToFormat(QImage::Format_ARGB32);
         qreal r = 0, g = 0, b = 0, a = 0;

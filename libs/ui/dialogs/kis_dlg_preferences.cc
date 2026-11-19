@@ -281,9 +281,9 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
 
     // Giga Sketch: outline look options. Two-tone goes right under the outline
     // shape combo; the fade sits in the "While painting..." box next to "Show outline".
-    m_chkGigaTwoToneCursor = new QCheckBox(i18n("Two-tone outline (readable on any colour)"), this);
+    m_chkGigaTwoToneCursor = new QCheckBox(i18n("Two-tone outline (readable on any color)"), this);
     m_chkGigaTwoToneCursor->setToolTip(i18n("Draw the brush outline as a thin light line over a soft dark one. "
-                                            "Off: Krita's inverting outline in the cursor colour."));
+                                            "Off: Krita's inverting outline in the cursor color."));
     m_chkGigaTwoToneCursor->setChecked(cfg.gigaTwoToneCursor());
     verticalLayout_8->insertWidget(verticalLayout_8->indexOf(m_cmbOutlineShape) + 1, m_chkGigaTwoToneCursor);
     m_chkGigaSizeReadout = new QCheckBox(i18n("Show size while resizing the brush"), this);
@@ -447,8 +447,8 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
         panelsForm->insertRow(row + 1, QString(), m_chkGigaInWindowPanels);
     }
 
-    // Giga Sketch: accent colour. A combo of colour swatches; the last entry
-    // ("Custom...") opens a colour dialog. Applied when Preferences is closed with OK.
+    // Giga Sketch: accent color. A combo of color swatches; the last entry
+    // ("Custom...") opens a color dialog. Applied when Preferences is closed with OK.
     {
         m_cmbGigaAccent = new QComboBox(this);
         auto swatch = [](const QColor &c) {
@@ -473,15 +473,15 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
         const QString current = cfg.readEntry<QString>(GigaAccent::configKey(), QString());
         int index = m_cmbGigaAccent->findData(current);
         m_gigaCustomAccent = (index < 0 && QColor(current).isValid()) ? QColor(current) : QColor(52, 120, 200);
-        m_cmbGigaAccent->addItem(swatch(m_gigaCustomAccent), i18nc("accent colour", "Custom..."), m_gigaCustomAccent.name());
+        m_cmbGigaAccent->addItem(swatch(m_gigaCustomAccent), i18nc("accent color", "Custom..."), m_gigaCustomAccent.name());
         const int customIndex = m_cmbGigaAccent->count() - 1;
         if (index < 0) index = QColor(current).isValid() ? customIndex : 0;
         m_cmbGigaAccent->setCurrentIndex(index);
-        m_cmbGigaAccent->setToolTip(i18n("Colour of highlighted items, slider fills, checked buttons and focus. "
-                                         "\"Theme default\" uses the colour from the theme."));
+        m_cmbGigaAccent->setToolTip(i18n("Color of highlighted items, slider fills, checked buttons and focus. "
+                                         "\"Theme default\" uses the color from the theme."));
         connect(m_cmbGigaAccent, QOverload<int>::of(&QComboBox::activated), this, [this, swatch, customIndex](int i) {
             if (i != customIndex) return;
-            const QColor c = QColorDialog::getColor(m_gigaCustomAccent, this, i18n("Accent Colour"));
+            const QColor c = QColorDialog::getColor(m_gigaCustomAccent, this, i18n("Accent Color"));
             if (!c.isValid()) return;
             m_gigaCustomAccent = c;
             m_cmbGigaAccent->setItemData(customIndex, c.name());
@@ -491,7 +491,7 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
             int row = -1;
             QFormLayout::ItemRole role;
             form->getWidgetPosition(m_chkGigaInWindowPanels, &row, &role);
-            form->insertRow(row + 1, i18n("Accent colour:"), m_cmbGigaAccent);
+            form->insertRow(row + 1, i18n("Accent color:"), m_cmbGigaAccent);
         }
     }
 

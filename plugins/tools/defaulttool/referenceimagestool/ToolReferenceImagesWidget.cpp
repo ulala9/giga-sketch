@@ -206,7 +206,7 @@ void ToolReferenceImagesWidget::gigaSetupBoardSection()
     form->setSpacing(4);
     d->order = new QComboBox(optionsBox);
     d->order->addItem(i18n("Current"));
-    d->order->addItem(i18n("Colour"));
+    d->order->addItem(i18n("Color"));
     d->order->addItem(i18n("Shape"));
     d->order->addItem(i18n("Date added"));
     form->addRow(i18n("Order:"), d->order);
@@ -242,7 +242,7 @@ void ToolReferenceImagesWidget::gigaSetupBoardSection()
 
     QLabel *hint = new QLabel(i18n("These act on the selected images, or on all of them if none are selected."), this);
     hint->setWordWrap(true);
-    hint->setEnabled(false); // greyed: just a hint
+    hint->setEnabled(false); // grayed: just a hint
     d->ui->verticalLayout->addWidget(hint);
 
     connect(normalize, SIGNAL(clicked()), d->tool, SLOT(gigaNormalize()));
@@ -264,7 +264,7 @@ void ToolReferenceImagesWidget::gigaSetupBoardSection()
 
 void ToolReferenceImagesWidget::gigaSetupNotesSection()
 {
-    // Giga Sketch: sticky notes. "Add Note" is always there; the colour and
+    // Giga Sketch: sticky notes. "Add Note" is always there; the color and
     // text size rows show when notes are selected.
     QFrame *line = new QFrame(this);
     line->setFrameShape(QFrame::HLine);
@@ -300,7 +300,7 @@ void ToolReferenceImagesWidget::gigaSetupNotesSection()
     auto applyColor = [this](const QColor &color) {
         auto *canvas = dynamic_cast<KisCanvas2*>(d->tool->canvas());
         GigaNoteActions::changeNotes(canvas, GigaNoteActions::selectedNotes(d->tool->koSelection()),
-                                     kundo2_i18n("Change Note Colour"),
+                                     kundo2_i18n("Change Note Color"),
                                      [color](GigaNote::State &s) { s.color = color; });
     };
     for (int i = 0; i < colors.size(); ++i) {
@@ -317,7 +317,7 @@ void ToolReferenceImagesWidget::gigaSetupNotesSection()
     QToolButton *custom = new QToolButton(swatches);
     custom->setText(QStringLiteral("…"));
     custom->setFixedHeight(20);
-    custom->setToolTip(i18n("Custom colour"));
+    custom->setToolTip(i18n("Custom color"));
     connect(custom, &QToolButton::clicked, this, [this, applyColor]() {
         const QVector<GigaNote*> notes = GigaNoteActions::selectedNotes(d->tool->koSelection());
         if (notes.isEmpty()) return;
@@ -326,7 +326,7 @@ void ToolReferenceImagesWidget::gigaSetupNotesSection()
     });
     row->addWidget(custom);
     row->addStretch(1);
-    form->addRow(i18n("Note colour:"), swatches);
+    form->addRow(i18n("Note color:"), swatches);
 
     d->noteSize = new QComboBox(d->noteOptions);
     d->noteSize->addItem(i18nc("note text size", "Small"));

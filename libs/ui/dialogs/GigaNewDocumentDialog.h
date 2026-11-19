@@ -21,7 +21,7 @@ class KisDocument;
  *
  * Presets in groups on the left (Paper, Screen, Social, Illustration),
  * document details on the right (name, size with units, orientation,
- * resolution, colour mode, background). "More Options..." opens Krita's
+ * resolution, color mode, background). "More Options..." opens Krita's
  * full dialog, so templates and advanced settings stay available.
  */
 class KRITAUI_EXPORT GigaNewDocumentDialog : public QDialog

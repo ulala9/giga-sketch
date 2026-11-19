@@ -28,7 +28,7 @@ class KoCanvasResourceProvider;
  *
  * A horizontal toolbar along the top of the window with the most-used text
  * settings: orientation, font family, font style, size, anti-aliasing,
- * alignment, colour, a button to open the Character/Paragraph panels, and a
+ * alignment, color, a button to open the Character/Paragraph panels, and a
  * button to finish editing.
  *
  * How it talks to the text: exactly like the Text Properties docker. Krita

@@ -184,7 +184,7 @@ void GigaTextBoxResizeStrategy::handleMouseMove(const QPointF &mouseLocation, Qt
     qreal left = m_startRect.left(), right = m_startRect.right();
     qreal top = m_startRect.top(), bottom = m_startRect.bottom();
 
-    // Alt: grow/shrink around the centre. Otherwise the opposite side stays put.
+    // Alt: grow/shrink around the center. Otherwise the opposite side stays put.
     if (movesLeft || movesRight) {
         if (fromCenter) {
             const qreal half = qMax(m_minSize / 2, movesRight ? p.x() - c.x() : c.x() - p.x());

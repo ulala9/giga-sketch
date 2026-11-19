@@ -74,7 +74,7 @@ public:
 
     void paint(QPainter &gc, const KoViewConverter &converter) override;
 
-    /// Giga Sketch: right-click menu: sample size, sample source, copy colour as hex.
+    /// Giga Sketch: right-click menu: sample size, sample source, copy color as hex.
     QMenu *popupActionsMenu() override;
 
 protected:

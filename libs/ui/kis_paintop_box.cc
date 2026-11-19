@@ -1383,7 +1383,7 @@ void KisPaintopBox::gigaUpdateBarForTool(bool paintTool)
     if (m_presetSelectorPopupButton) m_presetSelectorPopupButton->setVisible(paintTool);
 
     // Toolbar entries that only make sense for brushes. Hiding the action
-    // hides its widget in the toolbar. Colours, gradient/pattern pickers,
+    // hides its widget in the toolbar. Colors, gradient/pattern pickers,
     // the Tool Settings button and the workspace chooser stay visible.
     static const char *const paintOnlyActions[] = {
         "composite_actions", "brushslider1", "brushslider2", "brushslider3",

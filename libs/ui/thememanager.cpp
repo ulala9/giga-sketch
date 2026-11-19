@@ -88,7 +88,7 @@ ThemeManager::ThemeManager(const QString &theme, QObject *parent)
     d->currentThemeName = theme;
     populateThemeMap();
 
-    // Giga Sketch: rebuild the palette when the accent colour is changed in
+    // Giga Sketch: rebuild the palette when the accent color is changed in
     // Preferences (configChanged fires for every preference, so compare first).
     connect(KisConfigNotifier::instance(), &KisConfigNotifier::configChanged, this, [this]() {
         const QString accent = KisConfig(true).readEntry<QString>(GigaAccent::configKey(), QString());
@@ -200,7 +200,7 @@ void ThemeManager::slotChangePalette()
         palette.setBrush(state, QPalette::LinkVisited,     schemeView.foreground(KColorScheme::VisitedText));
     }
 
-    // Giga Sketch: user accent colour replaces the theme's selection colour.
+    // Giga Sketch: user accent color replaces the theme's selection color.
     // Everything that draws with the palette's Highlight (selected rows, slider
     // fills, checked buttons, focus) follows it.
     const QString accentName = KisConfig(true).readEntry<QString>(GigaAccent::configKey(), QString());
@@ -212,7 +212,7 @@ void ThemeManager::slotChangePalette()
             palette.setColor(state, QPalette::HighlightedText, GigaAccent::textOn(accent));
             palette.setColor(state, QPalette::Link, GigaAccent::mix(accent, Qt::white, 0.35));
         }
-        // Disabled: a muted accent, halfway to the window colour.
+        // Disabled: a muted accent, halfway to the window color.
         const QColor muted = GigaAccent::mix(accent, palette.color(QPalette::Disabled, QPalette::Window), 0.55);
         palette.setColor(QPalette::Disabled, QPalette::Highlight, muted);
         palette.setColor(QPalette::Disabled, QPalette::HighlightedText, GigaAccent::textOn(muted));

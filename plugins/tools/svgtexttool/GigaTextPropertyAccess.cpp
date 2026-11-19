@@ -34,7 +34,7 @@ void GigaTextPropertyAccess::setProviders(KisCanvasResourceProvider *provider, K
         m_connections.addConnection(m_provider, SIGNAL(sigCharacterPropertiesChanged()), this, SIGNAL(changed()));
     }
     if (m_canvasResources) {
-        // Foreground colour = colour of new text.
+        // Foreground color = color of new text.
         m_connections.addConnection(m_canvasResources, SIGNAL(canvasResourceChanged(int,QVariant)), this, SIGNAL(changed()));
     }
     Q_EMIT changed();

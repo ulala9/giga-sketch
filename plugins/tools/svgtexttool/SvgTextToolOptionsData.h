@@ -18,7 +18,7 @@ struct SvgTextToolOptionsData
     bool pasteRichtTextByDefault = false;
 
     /// Giga Sketch: put every new text on its own layer, named after the
-    /// text (Photoshop-style). Off = Krita's behaviour (texts share the
+    /// text (Photoshop-style). Off = Krita's behavior (texts share the
     /// active vector layer).
     bool newLayerPerText = true;
     bool boxText = true; ///< Giga Sketch: a drag makes a fixed-size text box

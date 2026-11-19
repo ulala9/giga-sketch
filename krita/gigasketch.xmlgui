@@ -4,7 +4,7 @@
   SPDX-License-Identifier: GPL-3.0-or-later
   Giga Sketch menu layout (Photoshop-like order), generated from krita5.xmlgui.
   Bump GIGA_XMLGUI_VERSION in krita/CMakeLists.txt after editing, or users
-  with a customised local copy won't see the change.
+  with a customized local copy won't see the change.
 -->
 <kpartgui xmlns="http://www.kde.org/standards/kxmlgui/1.0"
 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

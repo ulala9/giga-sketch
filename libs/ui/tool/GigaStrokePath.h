@@ -33,7 +33,7 @@
  *     with an offset (how far you moved it).
  *  4. Bends the path: every point at distance s moves by offsetAt(s), a
  *     smooth curve through the vertices' offsets (a monotone cubic, so it
- *     never overshoots: moving one dot never pushes its neighbours the other
+ *     never overshoots: moving one dot never pushes its neighbors the other
  *     way).
  *  5. Gives back the bent painting calls, to be repainted with the stroke's
  *     own brush, pressure and random numbers.
@@ -58,8 +58,8 @@ public:
 
     /**
      * A proportional move: the line within @c radius (measured *along* the
-     * line) of the nearest centre moves by @c delta times the falloff
-     * weight (1 at a centre, 0 at the radius). Added on top of the dots'
+     * line) of the nearest center moves by @c delta times the falloff
+     * weight (1 at a center, 0 at the radius). Added on top of the dots'
      * own bend, so the whole line inside the radius follows smoothly, not
      * just the dots.
      */

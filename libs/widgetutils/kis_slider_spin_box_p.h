@@ -629,9 +629,9 @@ public:
 
     /**
      * Giga Sketch look: a softer fill (the accent mixed toward the field
-     * colour), 3 px rounded corners, a thin bright edge where the value is, and
-     * the number in one colour throughout. Krita's look fills with the full
-     * accent colour and switches the text colour where the fill ends.
+     * color), 3 px rounded corners, a thin bright edge where the value is, and
+     * the number in one color throughout. Krita's look fills with the full
+     * accent color and switches the text color where the fill ends.
      */
     void gigaPaintSlider(QPainter &painter, const QString &text, double slider01Width, double slider02Width)
     {

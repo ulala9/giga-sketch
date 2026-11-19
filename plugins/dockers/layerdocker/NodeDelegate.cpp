@@ -483,7 +483,7 @@ QList<OptionalProperty> NodeDelegate::Private::rightmostProperties(const KisBase
 
     // Giga Sketch: clean, Photoshop-like rows. Show only properties that are
     // switched on (a lock, inherit alpha, layer style...) and warnings, not a
-    // row of greyed-out toggles on every layer. Turn off with the config key
+    // row of grayed-out toggles on every layer. Turn off with the config key
     // gigaCleanLayerRows=false to get Krita's full icon row back.
     static const bool cleanRows = KisConfig(true).readEntry<bool>("gigaCleanLayerRows", true);
     if (cleanRows) {

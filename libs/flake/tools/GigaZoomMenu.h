@@ -15,7 +15,7 @@
  * Giga Sketch: the right-click menu of the Hand and Zoom tools (Photoshop-style):
  * Fit on Screen, Fit Width/Height, 100%, Zoom In/Out. It only lists Krita's own
  * view actions (found by name in the canvas's action collection), so their
- * names, shortcuts and behaviour stay Krita's. Header-only so both the flake
+ * names, shortcuts and behavior stay Krita's. Header-only so both the flake
  * Zoom tool and the Hand tool plugin can use it.
  */
 inline QMenu *gigaFillZoomMenu(QMenu *menu, const KoToolBase *tool)

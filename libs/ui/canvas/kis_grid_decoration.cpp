@@ -179,7 +179,7 @@ void KisGridDecoration::drawDecoration(QPainter& gc, const QRectF& updateArea, c
     const QRect imageRectInImagePixels = converter->imageRectInImagePixels();
 
     // Giga Sketch: "Grid over background" lets the grid continue past the
-    // image edges over the area around the canvas. Off = Krita's behaviour.
+    // image edges over the area around the canvas. Off = Krita's behavior.
     const bool gigaOverBackground = gigaCfg.gigaGridArea() == KisConfig::GigaGridCanvasAndBackground;
     const QRectF updateRectInImagePixels = gigaOverBackground
         ? converter->documentToImage(updateArea)

@@ -35,9 +35,9 @@ Q_SIGNALS:
  * Giga Sketch: Photoshop-style font menu.
  *
  * A popup with a search field and a list of font families. Each row shows
- * a star (favourite), the family name and a preview of the font (Krita's
+ * a star (favorite), the family name and a preview of the font (Krita's
  * own preview image for that font resource). With no search text the list
- * is grouped into Favourites, Recent and All Fonts.
+ * is grouped into Favorites, Recent and All Fonts.
  *
  * Moving over a font (mouse or arrow keys) emits previewRequested() so the
  * text can show it live; picking one emits chosen(); closing without a pick
@@ -75,7 +75,7 @@ private:
     QLineEdit *m_search {nullptr};
     QListWidget *m_list {nullptr};
     QStringList m_families;
-    QStringList m_favourites;
+    QStringList m_favorites;
     QString m_current;
     QString m_lastPreview;
     bool m_chosen {false};

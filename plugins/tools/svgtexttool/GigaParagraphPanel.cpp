@@ -42,7 +42,7 @@ QIcon alignIcon(int align, const QColor &color)
         int lineAlign = align;
         if (justified) {
             if (!last || align == GigaParagraphPanel::JustifyAll) { len = full; x = left; p.drawLine(x, y, x + len, y); continue; }
-            lineAlign = align - GigaParagraphPanel::JustifyLeft; // last line: left/centre/right
+            lineAlign = align - GigaParagraphPanel::JustifyLeft; // last line: left/center/right
         } else if (i % 2 == 1) {
             len = shortLen + 2;
         }
@@ -100,10 +100,10 @@ GigaParagraphPanel::GigaParagraphPanel(GigaTextPropertyAccess *access, QWidget *
     m_align->setExclusive(true);
     const QString tips[AlignCount] = {
         i18nc("@info:tooltip", "Align left"),
-        i18nc("@info:tooltip", "Align centre"),
+        i18nc("@info:tooltip", "Align center"),
         i18nc("@info:tooltip", "Align right"),
         i18nc("@info:tooltip", "Justify, last line left"),
-        i18nc("@info:tooltip", "Justify, last line centred"),
+        i18nc("@info:tooltip", "Justify, last line centered"),
         i18nc("@info:tooltip", "Justify, last line right"),
         i18nc("@info:tooltip", "Justify all lines"),
     };

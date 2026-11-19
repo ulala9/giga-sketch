@@ -30,9 +30,9 @@ class QVariantAnimation;
  *
  * Board coordinates are document points (the image's boardRect()). The
  * camera maps them to "view" pixels: view = board * zoom + pan. The view
- * is then flipped and turned around the widget centre, in the same order
+ * is then flipped and turned around the widget center, in the same order
  * as the canvas (flip first, then rotate on screen):
- * widget = centre + rotate(mirror(view - centre)). With no flip/rotation,
+ * widget = center + rotate(mirror(view - center)). With no flip/rotation,
  * view and widget pixels are the same. The angle = the canvas rotation
  * (when following it) + the Board's own turn (m_rotation).
  *
@@ -64,7 +64,7 @@ public:
     /// Drawn flipped left-right right now (canvas mirrored + "Flip With Canvas").
     bool isMirrored() const { return m_settings.flipWithCanvas && m_canvasMirrorX; }
     bool isMirroredVertically() const { return m_settings.flipWithCanvas && m_canvasMirrorY; }
-    /// Widget position of the centre of image @p index (z order).
+    /// Widget position of the center of image @p index (z order).
     Q_INVOKABLE QPointF imageWidgetCenter(int index) const;
 
 public Q_SLOTS:

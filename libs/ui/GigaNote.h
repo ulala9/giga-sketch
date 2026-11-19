@@ -25,7 +25,7 @@ class KisReferenceImagesLayer;
  *
  * A note is a special kind of reference image: it lives in the same hidden
  * reference layer, so moving, selecting, stacking, undo, sitting outside the
- * canvas and the Reference Board all work the same way. It draws a coloured
+ * canvas and the Reference Board all work the same way. It draws a colored
  * box with rich text instead of a picture, and saves itself as a
  * <giga-note> element, which stock Krita skips.
  *
@@ -42,7 +42,7 @@ class KRITAUI_EXPORT GigaNote : public KisReferenceImage
 {
 public:
     enum TextSize { Small = 0, Medium = 1, Large = 2 };
-    /// Overall look; the note's colour applies in every style.
+    /// Overall look; the note's color applies in every style.
     enum Style { Sticky = 0, Card = 1, Bubble = 2, Outline = 3 };
 
     /// Everything about a note that the property commands change.
@@ -61,7 +61,7 @@ public:
         }
     };
 
-    /// One undo step for content/colour/size/collapse/width changes of one
+    /// One undo step for content/color/size/collapse/width changes of one
     /// or more notes.
     class KRITAUI_EXPORT StateCommand : public KUndo2Command
     {
@@ -102,7 +102,7 @@ public:
 
     QColor color() const;
     void setColor(const QColor &color);
-    /// Readable text colour on fillColor() (Outline: the note colour, lightened if dark).
+    /// Readable text color on fillColor() (Outline: the note color, lightened if dark).
     QColor textColor() const;
     /// What the box is filled with in this style (Outline: see-through dark).
     QColor fillColor() const;
@@ -135,7 +135,7 @@ public:
     void setEditing(bool editing);
     bool isEditing() const;
 
-    /// The width is honoured (at least a minimum); the height follows the text.
+    /// The width is honored (at least a minimum); the height follows the text.
     void setSize(const QSizeF &size) override;
 
     // --- geometry helpers (shape coordinates, i.e. document points before

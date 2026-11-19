@@ -34,7 +34,7 @@ enum class Kind {
 
 struct Binding {
     Kind kind;
-    bool towardPointer = false;   ///< zoom: around the press point, not the centre
+    bool towardPointer = false;   ///< zoom: around the press point, not the center
     QList<Qt::Key> keys;          ///< all keys held, modifiers included (Qt::Key_Control...)
     Qt::MouseButtons buttons;     ///< drag kinds only
 };

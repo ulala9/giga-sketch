@@ -412,13 +412,13 @@ void KisOpenGLCanvasRenderer::paintToolOutline(const KisOptimizedBrushOutline &p
  * Giga Sketch: two-tone brush outline.
  *
  * Krita draws the outline with a "subtract" blend so it inverts what is under it.
- * That vanishes over mid-grey. Here we draw two normal (alpha-blended) passes
+ * That vanishes over mid-gray. Here we draw two normal (alpha-blended) passes
  * instead: a 3 px soft dark line, then a thin light line on top. One of the two
  * always contrasts with the paint under it.
  *
  * Each polygon of the outline is turned into a triangle strip: for every point we
  * push two vertices, one on each side of the line, along the "miter" direction
- * (the average of the two neighbouring segment normals). That gives clean joins
+ * (the average of the two neighboring segment normals). That gives clean joins
  * without overlapping triangles, which matters because overlaps would show as
  * darker dots in a semi-transparent line.
  */
@@ -1236,8 +1236,8 @@ void KisOpenGLCanvasRenderer::updateCursorColor()
     d->cursorColor = (!useSeparateEraserCursor) ? cfg.getCursorMainColor() : cfg.getEraserCursorMainColor();
 
     // Giga Sketch: the two-tone outline draws its light line in white for the
-    // brush. Krita's default cursor colour (magenta) only makes sense for its
-    // inverting blend, so it is ignored here; the eraser keeps its own colour so
+    // brush. Krita's default cursor color (magenta) only makes sense for its
+    // inverting blend, so it is ignored here; the eraser keeps its own color so
     // a separate eraser cursor still looks different.
     d->gigaTwoToneCursor = cfg.gigaTwoToneCursor();
     d->gigaCursorLightColor = useSeparateEraserCursor ? cfg.getEraserCursorMainColor() : QColor(Qt::white);

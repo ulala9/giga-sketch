@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 The Giga Sketch contributors
 # SPDX-License-Identifier: CC0-1.0
-# Giga Sketch default theme: neutral greys, one blue accent.
+# Giga Sketch default theme: neutral grays, one blue accent.
 # Derived from the structure of Krita's KritaDarker.colors.
 [ColorEffects:Disabled]
 Color=20,20,20

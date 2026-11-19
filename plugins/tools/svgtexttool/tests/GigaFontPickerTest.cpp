@@ -29,7 +29,7 @@ int fontRows(QListWidget *list)
 
 void GigaFontPickerTest::initTestCase()
 {
-    QStandardPaths::setTestModeEnabled(true); // keep recent/favourites out of real settings
+    QStandardPaths::setTestModeEnabled(true); // keep recent/favorites out of real settings
 }
 
 void GigaFontPickerTest::testSearchFilters()

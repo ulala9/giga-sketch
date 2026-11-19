@@ -22,7 +22,7 @@ class GigaProcreateMode;
  * Giga Sketch: three interface modes, cycled with F9 or picked from
  * View > Interface Mode.
  *  - Studio: classic Krita look: Krita's own menus and toolbars (with the
- *    user's customisations), Krita wording, its own theme and layout.
+ *    user's customizations), Krita wording, its own theme and layout.
  *  - Photoshop: Photoshop-style panels (tabs on top, panel headers with
  *    collapse and a panel menu, whole tab groups drag together).
  *  - Procreate: the minimal Procreate-style layout (GigaProcreateMode).

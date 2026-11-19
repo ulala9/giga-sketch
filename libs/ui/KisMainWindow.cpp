@@ -643,7 +643,7 @@ KisMainWindow::KisMainWindow(QUuid uuid)
 
     // If we have customized the toolbars, load that first
     // Giga Sketch: Studio mode uses Krita's own menus (krita5.xmlgui, with
-    // the user's customised copy if there is one); the other modes use the
+    // the user's customized copy if there is one); the other modes use the
     // Photoshop-like menu layout (krita/gigasketch.xmlgui).
     d->gigaClassic = GigaInterfaceModes::savedMode() == GigaInterfaceModes::Studio;
     d->gigaMenuFile = d->gigaClassic ? QStringLiteral("krita5.xmlgui") : QStringLiteral("gigasketch.xmlgui");
@@ -860,7 +860,7 @@ struct GigaPanelEntry {
     const char *dockId;
     const char *icon;
 };
-// Order matches the Giga layout: colour, brushes/tools, layers.
+// Order matches the Giga layout: color, brushes/tools, layers.
 const GigaPanelEntry GIGA_PANELS[] = {
     {"WideGamutColorSelector", "extended_color_selector"},
     {"PaletteDocker", "config-popup-palette"},
@@ -1316,7 +1316,7 @@ void KisMainWindow::gigaDetachActiveView()
 
 void KisMainWindow::gigaApplyWording()
 {
-    // Only the visible label changes; the actions, their behaviour and their
+    // Only the visible label changes; the actions, their behavior and their
     // shortcuts stay Krita's, so nothing else is affected.
     const QList<QPair<const char *, QString>> wording = {
         {"imagesize",            i18nc("@action:inmenu", "Image Size...")},
@@ -1465,7 +1465,7 @@ void KisMainWindow::applyGigaLayout()
     // Each inner list becomes one tabbed group, stacked top to bottom on the
     // right. The first docker of a group is the tab shown in front.
     const QList<QStringList> rightGroups = {
-        // Colour square + hue (Wide Gamut selector), colour sliders/hex, swatches.
+        // Color square + hue (Wide Gamut selector), color sliders/hex, swatches.
         {QStringLiteral("WideGamutColorSelector"), QStringLiteral("SpecificColorSelector"), QStringLiteral("PaletteDocker")},
         {QStringLiteral("sharedtooldocker"), QStringLiteral("PresetDocker"), QStringLiteral("GigaCharacter"),
          QStringLiteral("GigaParagraph"), QStringLiteral("TextProperties")},

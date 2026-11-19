@@ -143,8 +143,8 @@ struct KisToolFreehandHelper::Private
     KisDefaultBoundsBaseSP quickShapeBounds;
     bool quickShapeNeedsModifier {true}; // only snap while Ctrl is held
     // Editing after the snap: drag to rotate/scale before lifting.
-    QPainterPath quickShapePath;        // the shape as recognised
-    QPointF quickShapeAnchor;           // fixed point (start, or centre if closed)
+    QPainterPath quickShapePath;        // the shape as recognized
+    QPointF quickShapeAnchor;           // fixed point (start, or center if closed)
     QPointF quickShapeGrab;             // pen position when it snapped
     QPointF quickShapePen;              // latest pen position
     bool quickShapeIsLine {false};
@@ -1254,7 +1254,7 @@ void KisToolFreehandHelper::quickShapeRepaintTimeout()
 
     // Similarity transform about the anchor that carries the grab point to
     // the pen: the end of a line follows the pen; closed shapes scale and
-    // rotate around their centre.
+    // rotate around their center.
     const QPointF from = m_d->quickShapeGrab - m_d->quickShapeAnchor;
     QPointF to = m_d->quickShapePen - m_d->quickShapeAnchor;
     const qreal fromLength = std::hypot(from.x(), from.y());

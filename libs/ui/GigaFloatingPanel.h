@@ -24,7 +24,7 @@ class QVBoxLayout;
  * be placed anywhere over the canvas, on any platform.
  *
  * The whole QDockWidget lives inside the frame (not just its content), so the
- * panel keeps its title bar, buttons and "am I visible?" behaviour. The
+ * panel keeps its title bar, buttons and "am I visible?" behavior. The
  * panel's own title bar is used to drag the frame; the frame's thin border is
  * used to resize it.
  *

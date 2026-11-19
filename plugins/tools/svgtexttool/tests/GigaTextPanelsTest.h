@@ -19,7 +19,7 @@ private Q_SLOTS:
     void testLeadingField();
     void testStyleToggles();
     void testCapsExcludeEachOther();
-    void testJustifyLastCentred();
+    void testJustifyLastCentered();
     void testFirstLineIndent();
 };
 

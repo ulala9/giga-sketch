@@ -137,21 +137,21 @@ void applyStyle(KisCanvas2 *canvas, const QVector<GigaNote *> &notes, int style)
 
 QColor askColor(const QColor &start)
 {
-    return QColorDialog::getColor(start, nullptr, i18n("Note Colour"));
+    return QColorDialog::getColor(start, nullptr, i18n("Note Color"));
 }
 
 void addNoteMenuItems(QMenu *menu, KisCanvas2 *canvas, const QVector<GigaNote *> &notes)
 {
     if (!menu || !canvas || notes.isEmpty()) return;
     // The menu is rebuilt every time it opens, so the actions live in it.
-    QMenu *colorMenu = menu->addMenu(i18n("Note Colour"));
+    QMenu *colorMenu = menu->addMenu(i18n("Note Color"));
     const QVector<QColor> colors = GigaNote::presetColors();
     const QStringList names = GigaNote::presetColorNames();
     for (int i = 0; i < colors.size(); ++i) {
         const QColor color = colors[i];
         QAction *action = colorMenu->addAction(swatchIcon(color), names.value(i));
         QObject::connect(action, &QAction::triggered, canvas, [canvas, notes, color]() {
-            changeNotes(canvas, notes, kundo2_i18n("Change Note Colour"),
+            changeNotes(canvas, notes, kundo2_i18n("Change Note Color"),
                         [color](GigaNote::State &s) { s.color = color; });
         });
     }
@@ -160,7 +160,7 @@ void addNoteMenuItems(QMenu *menu, KisCanvas2 *canvas, const QVector<GigaNote *>
     QObject::connect(custom, &QAction::triggered, canvas, [canvas, notes]() {
         const QColor color = askColor(notes.first()->color());
         if (!color.isValid()) return;
-        changeNotes(canvas, notes, kundo2_i18n("Change Note Colour"),
+        changeNotes(canvas, notes, kundo2_i18n("Change Note Color"),
                     [color](GigaNote::State &s) { s.color = color; });
     });
 

@@ -94,7 +94,7 @@ ICONS = {
         p('M8.6 1.6c3.2 0 5.8 1.7 5.8 4.5 0 2.8-2.8 4.7-6.1 4.7-1.1 0-2.1-.2-3-.6C3.3 9.5 1.6 8 1.6 6.1 1.6 3.5 4.9 1.6 8.6 1.6z'),
         p('M5.3 10.2c-.5.9-.4 1.8.4 2.2.9.4 1.5-.3 1.1-1-.4-.6-1.6-.3-2 .6-.4.9-.2 1.9.4 2.6'),
     ],
-    # Colourize mask (lazy brush): two tinted regions with scribbles
+    # Colorize mask (lazy brush): two tinted regions with scribbles
     'krita_tool_lazybrush': [
         '<circle style="%s" cx="5.4" cy="10.6" r="3.6"/>' % T,
         '<circle style="%s" cx="5.4" cy="10.6" r="3.6"/>' % S,

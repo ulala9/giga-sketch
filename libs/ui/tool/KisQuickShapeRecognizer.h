@@ -13,7 +13,7 @@
 #include <kritaui_export.h>
 
 /**
- * Giga Sketch "QuickShape": recognises what a hand-drawn stroke was meant
+ * Giga Sketch "QuickShape": recognizes what a hand-drawn stroke was meant
  * to be (line, arc, ellipse, rectangle, polygon, polyline), like holding
  * the pen at the end of a stroke in Procreate.
  *
@@ -39,7 +39,7 @@ public:
 
     struct Result {
         Type type {None};
-        /// The recognised shape, ready to be painted (lines and cubic curves).
+        /// The recognized shape, ready to be painted (lines and cubic curves).
         QPainterPath path;
 
         bool isValid() const { return type != None; }

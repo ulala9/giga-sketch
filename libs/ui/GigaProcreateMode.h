@@ -20,7 +20,7 @@ class KisMainWindow;
 /**
  * Layout: a top bar with Gallery/Actions/Adjustments/Selection/Transform on
  * the left, and a vertical bar on the right edge with Paint/Smudge/Erase/
- * Layers/colour.
+ * Layers/color.
  *
  * Giga Sketch: a Procreate-style mode for the main window, switched with
  * View > Procreate Mode (F9).
@@ -28,9 +28,9 @@ class KisMainWindow;
  * Entering it saves the current ("Studio") window layout and hides all
  * panels, toolbars, the menu bar and the status bar. In their place:
  *  - a slim top bar: Gallery, Actions, Adjustments, Selection, Transform on
- *    the left; Brush, Smudge, Eraser, Layers and a colour dot on the right.
+ *    the left; Brush, Smudge, Eraser, Layers and a color dot on the right.
  *    Brush/Layers/Color open as popovers (the panel flyouts).
- *  - a side bar on the left edge: brush size slider, colour picker,
+ *  - a side bar on the left edge: brush size slider, color picker,
  *    opacity slider, undo and redo.
  * Leaving it restores the Studio layout exactly. The mode is remembered
  * across restarts.

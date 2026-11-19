@@ -156,7 +156,7 @@ GigaCharacterPanel::GigaCharacterPanel(GigaTextPropertyAccess *access, QWidget *
     m_baseline->setKeyboardTracking(false);
     m_color = new QToolButton(this);
     m_color->setAutoRaise(true);
-    m_color->setToolTip(i18nc("@info:tooltip", "Text colour"));
+    m_color->setToolTip(i18nc("@info:tooltip", "Text color"));
 
     grid->addWidget(smallLabel(i18nc("character panel", "Size"), i18nc("@info:tooltip", "Font size"), this), 0, 0);
     grid->addWidget(m_size, 0, 1);
@@ -168,7 +168,7 @@ GigaCharacterPanel::GigaCharacterPanel(GigaTextPropertyAccess *access, QWidget *
     grid->addWidget(m_tracking, 1, 3);
     grid->addWidget(smallLabel(i18nc("character panel", "Baseline"), i18nc("@info:tooltip", "Baseline shift: move characters up or down"), this), 2, 0);
     grid->addWidget(m_baseline, 2, 1);
-    grid->addWidget(smallLabel(i18nc("character panel", "Colour"), i18nc("@info:tooltip", "Text colour"), this), 2, 2);
+    grid->addWidget(smallLabel(i18nc("character panel", "Color"), i18nc("@info:tooltip", "Text color"), this), 2, 2);
     grid->addWidget(m_color, 2, 3, Qt::AlignLeft);
     grid->setColumnStretch(1, 1);
     grid->setColumnStretch(3, 1);

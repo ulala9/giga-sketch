@@ -93,7 +93,7 @@
       <item row="4" column="1">
        <widget class="QCheckBox" name="chkDoChromaticAdaptation">
         <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enables chromatic adaptation for absolute rendering intent. Effectively this will show how the colors would look if the image was printed on a paper and viewed with the monitor as the only light source. This is standard behaviour for a ICC v4 workflow.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enables chromatic adaptation for absolute rendering intent. Effectively this will show how the colors would look if the image was printed on a paper and viewed with the monitor as the only light source. This is standard behavior for a ICC v4 workflow.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="text">
          <string>Absolute Intent Chromatic Adaptation</string>

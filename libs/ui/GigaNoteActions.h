@@ -54,7 +54,7 @@ KRITAUI_EXPORT void changeNotes(KisCanvas2 *canvas, const QVector<GigaNote *> &n
 /// Sets the style of the notes (one undo step) and makes it the style for new notes.
 KRITAUI_EXPORT void applyStyle(KisCanvas2 *canvas, const QVector<GigaNote *> &notes, int style);
 
-/// Style, Colour, Text Size and Collapse items for notes (used by the tool's
+/// Style, Color, Text Size and Collapse items for notes (used by the tool's
 /// right-click menu).
 KRITAUI_EXPORT void addNoteMenuItems(QMenu *menu, KisCanvas2 *canvas, const QVector<GigaNote *> &notes);
 
@@ -75,7 +75,7 @@ KRITAUI_EXPORT void followZoom(KisCanvas2 *canvas);
 /// View > Show Annotations: shows/hides every note and updates the menu check.
 KRITAUI_EXPORT void setNotesShown(KisViewManager *viewManager, bool shown);
 
-/// Asks for a custom colour (QColorDialog). Returns an invalid colour on cancel.
+/// Asks for a custom color (QColorDialog). Returns an invalid color on cancel.
 KRITAUI_EXPORT QColor askColor(const QColor &start);
 }
 
