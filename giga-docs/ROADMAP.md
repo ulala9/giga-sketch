@@ -4,10 +4,12 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-19 (Harmony Wheel, Board multi-select + scale, American spelling, merged)
+Last updated: 2026-11-19 (Blob layer built, waiting for the user's hand test)
 
 ## Resume here
-- **Next up:** ask the user what to do next. Candidates: a Phase 5 blueprint (Bubble Guess, Blob Brush), Phase 6 extras, or Blender bridge extras.
+- **Next up:** the user's hand test of the Blob layer (`feature/blob-brush`, in giga-test). Feel test: fast flicks,
+  slow curves, tight corners, Merge distance 0 vs 30, lag with big brushes. Then merge. After that ask what's next
+  (Bubble Guess, Phase 6 extras, Blender bridge extras).
 - Repo state: everything merged and pushed (2026-11-19: harmony-wheel, refboard-multi-select,
   refboard-scale, american-spelling; 2026-11-18: brush-size-rounding; 2026-11-17: background-memory-trim, brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
   transform-last-stroke, stroke-points(-proportional), refboard-image-search, refboard-delete-key; all hand-tested).
@@ -19,7 +21,8 @@ Last updated: 2026-11-19 (Harmony Wheel, Board multi-select + scale, American sp
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: only `feature/giga-tool-icons` (batch 2, unreviewed, extreme low priority).
+  Pending in `giga-test` now: `feature/blob-brush` (waiting for hand test) and `feature/giga-tool-icons` (batch 2,
+  unreviewed, extreme low priority).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -122,7 +125,13 @@ Last updated: 2026-11-19 (Harmony Wheel, Board multi-select + scale, American sp
   Arrange Selected act on the selection.
 - [x] Board scale (`feature/refboard-scale`, merged 2026-11-19): corner handles scale the selection around the
   opposite corner (Alt: center), one undo step; notes keep their size.
-- [ ] Bubble Guess, Blob Brush: blueprinted only.
+- [ ] **Blob layer / Blob Brush** (`feature/blob-brush`, built 2026-11-19, **waiting for the user's hand test**):
+  Layer > New > Blob Layer; strokes on it merge (closing by Merge distance, even tone, colors blend at joints);
+  Layer > Blob Settings... (Merge distance, Edge softness, Blob amount, Color blend; live, one undo step);
+  presets Blob Clean / Gooey / Textured add a Blob layer on the first stroke; .kra = finished picture + raw
+  `.gigablob`. Self-test `blob`, unit test `TestGigaBlobRenderer`. Later if wanted: half-resolution influence
+  (speed), Lasso Fill / Enclose and Fill reading the merged shape, animation.
+- [ ] Bubble Guess: blueprinted only.
 - [x] **Blender Viewport Layer** (`feature/blender-bridge`, merged 2026-11-16, hand-tested). Self-test `blender`;
   add-on `giga-tools/blender/giga_viewport_send.py`.
   A basic capture of Blender's viewport onto a GigaSketch layer, instead of importing models.
@@ -190,6 +199,10 @@ Last updated: 2026-11-19 (Harmony Wheel, Board multi-select + scale, American sp
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-19: Blob Brush = its own layer type (user chose it over a brush-only "merge on lift"), so settings stay
+  editable and erasing pinches. Joins use a morphological closing (distance transforms), not blur + threshold:
+  metaballs thin small dabs until they never join. Brush and layer share one paint device; only the projection is
+  computed (the blueprint's "fallback" shape, safer for tools).
 - 2026-11-19: American spelling in all Giga Sketch text (`fix/american-spelling`, merged); the font picker's
   config key "favourites" stays so saved favorites keep working.
 - 2026-11-18: Brush size rounding is a preference (default on), not a replacement; rounds only when the size is
