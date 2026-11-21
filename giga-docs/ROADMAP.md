@@ -4,12 +4,13 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-21 (Brush popup Stabilizer section merged)
+Last updated: 2026-11-21 (Blob layer dropped → Blob Brush)
 
 ## Resume here
-- **Next up:** the user's hand test of the Blob layer (`feature/blob-brush`, in giga-test). Feel test: fast flicks,
-  slow curves, tight corners, Merge distance 0 vs 30, lag with big brushes. Then merge. After that ask what's next
-  (Bubble Guess, Phase 6 extras, Blender bridge extras).
+- **Next up:** the user's hand test of the **Blob Brush** (`feature/blob-brush`, in giga-test): right-click brush
+  popup → Blob on (or presets Blob Clean/Gooey/Textured), strokes near other paint fuse on pen lift. Check: gaps
+  below/above Merge distance, colors at joints, opacity < 100%, selection, lag on lift with big brushes. Then merge.
+  After that ask what's next (Bubble Guess, Phase 6 extras, Blender bridge extras).
 - Repo state: everything merged and pushed (2026-11-21: brush-popup-stabilizer; 2026-11-19: harmony-wheel, refboard-multi-select,
   refboard-scale, american-spelling; 2026-11-18: brush-size-rounding; 2026-11-17: background-memory-trim, brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
   transform-last-stroke, stroke-points(-proportional), refboard-image-search, refboard-delete-key; all hand-tested).
@@ -21,8 +22,8 @@ Last updated: 2026-11-21 (Brush popup Stabilizer section merged)
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/blob-brush` (waiting for hand test) and `feature/giga-tool-icons` (batch 2,
-  unreviewed, extreme low priority).
+  Pending in `giga-test` now: `feature/blob-brush` (Blob *Brush*, waiting for hand test) and `feature/giga-tool-icons`
+  (batch 2, unreviewed, extreme low priority). The old Blob *layer* is kept only as branch `archive/blob-layer`.
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
   switches in the build checkout (they touch file times → long rebuilds).
@@ -128,12 +129,13 @@ Last updated: 2026-11-21 (Brush popup Stabilizer section merged)
   Arrange Selected act on the selection.
 - [x] Board scale (`feature/refboard-scale`, merged 2026-11-19): corner handles scale the selection around the
   opposite corner (Alt: center), one undo step; notes keep their size.
-- [ ] **Blob layer / Blob Brush** (`feature/blob-brush`, built 2026-11-19, **waiting for the user's hand test**):
-  Layer > New > Blob Layer; strokes on it merge (closing by Merge distance, even tone, colors blend at joints);
-  Layer > Blob Settings... (Merge distance, Edge softness, Blob amount, Color blend; live, one undo step);
-  presets Blob Clean / Gooey / Textured add a Blob layer on the first stroke; .kra = finished picture + raw
-  `.gigablob`. Self-test `blob`, unit test `TestGigaBlobRenderer`. Later if wanted: half-resolution influence
-  (speed), Lasso Fill / Enclose and Fill reading the merged shape, animation.
+- [ ] **Blob Brush** (`feature/blob-brush`, rebuilt 2026-11-21 as a brush option, **waiting for the user's hand
+  test**): on pen lift the stroke becomes one even-toned shape and fuses with nearby paint on the same layer
+  (Merge distance, Edge softness, Blob amount, Color blend). Brush popup (right-click) "Blob" section; presets
+  Blob Clean / Gooey / Textured; stored in the preset. Self-test `blobbrush`, unit test `TestGigaBlobRenderer`.
+  Later if wanted: live blob preview while the pen is down.
+  - Dropped (user, 2026-11-21): the Blob *layer* (Layer > New > Blob Layer) — it looked like "a layer without
+    alpha" at its default Merge distance 0. Code kept on branch `archive/blob-layer`.
 - [ ] Bubble Guess: blueprinted only.
 - [x] **Blender Viewport Layer** (`feature/blender-bridge`, merged 2026-11-16, hand-tested). Self-test `blender`;
   add-on `giga-tools/blender/giga_viewport_send.py`.
@@ -202,6 +204,9 @@ Last updated: 2026-11-21 (Brush popup Stabilizer section merged)
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-21: Blob = a brush option, not a layer type (user: "remove this blob layer thing and just make a blob
+  brush"). Reshapes only the new stroke on pen lift (old paint never changes), inside the stroke's undo step, through
+  Krita's normal indirect merge. Replaces the 2026-11-19 decision below.
 - 2026-11-21: Brush popup Stabilizer section = mode dropdown + only the current mode's settings (user asked for both);
   edits the tool's own smoothing options, Tool Options refreshed from it; only for KisToolBrush tools.
 - 2026-11-19: Blob Brush = its own layer type (user chose it over a brush-only "merge on lift"), so settings stay
