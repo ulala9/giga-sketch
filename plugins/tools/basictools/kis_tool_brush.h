@@ -106,6 +106,15 @@ public Q_SLOTS:
 
     void updateSettingsViews() override;
 
+    /// Giga Sketch: the right-click brush popup changed the smoothing options
+    /// directly; bring every smoothing widget in Tool Options (Krita's and the
+    /// Smooth Curve ones) up to date. Found by name (QMetaObject), so the popup
+    /// in libs/ui needs no link to this plugin. Safe before the options exist.
+    void gigaSyncSmoothingWidgets();
+    /// Giga Sketch: this tool's smoothing options, for the brush popup (the
+    /// accessor in KisToolFreehand is protected). Called by name, see above.
+    QObject *gigaSmoothingOptions() const;
+
 Q_SIGNALS:
     void smoothnessQualityChanged();
     void smoothnessFactorChanged();

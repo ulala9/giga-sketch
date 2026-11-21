@@ -442,6 +442,29 @@ bool KisToolBrush::stabilizeSensors() const
     return smoothingOptions()->stabilizeSensors();
 }
 
+QObject *KisToolBrush::gigaSmoothingOptions() const
+{
+    return smoothingOptions().data();
+}
+
+void KisToolBrush::gigaSyncSmoothingWidgets()
+{
+    // Tool Options not made yet: they read the options when they are made.
+    if (!m_cmbSmoothingType || !m_sliderCurveAmount) return;
+
+    // Krita's widgets (mode combo, distances, delay, stroke ending, ...). Setting
+    // a widget fires its change signal, which writes the same value back: harmless.
+    updateSettingsViews();
+
+    // The Smooth Curve widgets, which updateSettingsViews() doesn't cover.
+    m_sliderCurveAmount->setValue(qRound(smoothingOptions()->curveAmount() * 100));
+    m_sliderCurveSpeedInfluence->setValue(qRound(smoothingOptions()->curveSpeedInfluence() * 100));
+    m_sliderCurvePressureInfluence->setValue(qRound(smoothingOptions()->curvePressureInfluence() * 100));
+    m_chkCurveCatchUp->setChecked(smoothingOptions()->curveCatchUp());
+    m_sliderCurveCatchUpTime->setValue(smoothingOptions()->curveCatchUpTime());
+    m_chkCurveShowLagLine->setChecked(smoothingOptions()->curveShowLagLine());
+}
+
 void KisToolBrush::updateSettingsViews()
 {
     m_cmbSmoothingType->setCurrentIndex(smoothingOptions()->smoothingType());
