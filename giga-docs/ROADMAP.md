@@ -4,15 +4,13 @@ Loaded at the start of every session (imported from CLAUDE.md). **Keep it curren
 branches, and move things between sections as part of every merge. How the code works lives in
 `NOTES.md`; this file is only *what's done, what's next, and what's been decided*.
 
-Last updated: 2026-11-21 (Brush popup Stabilizer section built, waiting for hand test)
+Last updated: 2026-11-21 (Brush popup Stabilizer section merged)
 
 ## Resume here
-- **Next up:** the user's hand test of the brush popup Stabilizer section (`feature/brush-popup-stabilizer`, in
-  giga-test): right-click with the brush → Stabilizer dropdown + that mode's sliders, synced with Tool Options.
-  Also still pending: the user's hand test of the Blob layer (`feature/blob-brush`, in giga-test). Feel test: fast flicks,
+- **Next up:** the user's hand test of the Blob layer (`feature/blob-brush`, in giga-test). Feel test: fast flicks,
   slow curves, tight corners, Merge distance 0 vs 30, lag with big brushes. Then merge. After that ask what's next
   (Bubble Guess, Phase 6 extras, Blender bridge extras).
-- Repo state: everything merged and pushed (2026-11-19: harmony-wheel, refboard-multi-select,
+- Repo state: everything merged and pushed (2026-11-21: brush-popup-stabilizer; 2026-11-19: harmony-wheel, refboard-multi-select,
   refboard-scale, american-spelling; 2026-11-18: brush-size-rounding; 2026-11-17: background-memory-trim, brush-popup, tool-context-menus, layers-delete-right; 2026-11-16: annotations, blender-layer-transform, plus earlier
   transform-last-stroke, stroke-points(-proportional), refboard-image-search, refboard-delete-key; all hand-tested).
   Text tools are "okish"; don't push more text work.
@@ -23,7 +21,7 @@ Last updated: 2026-11-21 (Brush popup Stabilizer section built, waiting for hand
   feature branch: `git switch giga-test && git merge --no-ff <branch>` → `ninja install`, so the user always tests
   everything at once. After a feature merges into `giga-main`: merge `giga-main` into `giga-test`. If `giga-test`
   gets messy, recreate it: `git branch -D giga-test`, start from `giga-main`, re-merge the pending branches.
-  Pending in `giga-test` now: `feature/brush-popup-stabilizer` (waiting for hand test), `feature/blob-brush` (waiting for hand test) and `feature/giga-tool-icons` (batch 2,
+  Pending in `giga-test` now: `feature/blob-brush` (waiting for hand test) and `feature/giga-tool-icons` (batch 2,
   unreviewed, extreme low priority).
   To avoid full rebuilds, merges into `giga-test` can be recorded without touching files (see NOTES.md "giga-test without rebuilds").
 - Edit ROADMAP/NOTES on `giga-main` in a side worktree (`git worktree add <scratch> giga-main`) to avoid branch
@@ -74,8 +72,8 @@ Last updated: 2026-11-21 (Brush popup Stabilizer section built, waiting for hand
     the palette; action "Show Popup Palette" (no default key) opens it anyway. Self-test `brushpopup`.
   - Move = layer picker (layers with paint under the pointer), Hand/Zoom = fit/100%/zoom, Color Sampler = sample
     size/source + copy hex, selection menu + Fill/Stroke (`feature/tool-context-menus`). Self-test `rightclick`.
-  - [ ] Stabilizer section in the brush popup (user request 2026-11-21, `feature/brush-popup-stabilizer`, built,
-    **waiting for hand test**): mode dropdown + only that mode's settings; Freehand Brush/Multibrush only.
+  - [x] Stabilizer section in the brush popup (`feature/brush-popup-stabilizer`, merged 2026-11-21, user OK'd):
+    mode dropdown + only that mode's settings; Freehand Brush/Multibrush only.
     Self-test `brushpopup` (brushpopup-stab-*).
   - Not done (ask first): Gradient tool gradient picker on right-click; Fill/Gradient/shape tools still get the brush
     popup (they are paint tools in Krita).
@@ -204,6 +202,8 @@ Last updated: 2026-11-21 (Brush popup Stabilizer section built, waiting for hand
 - (empty — add user ideas here with the date)
 
 ## Decisions log
+- 2026-11-21: Brush popup Stabilizer section = mode dropdown + only the current mode's settings (user asked for both);
+  edits the tool's own smoothing options, Tool Options refreshed from it; only for KisToolBrush tools.
 - 2026-11-19: Blob Brush = its own layer type (user chose it over a brush-only "merge on lift"), so settings stay
   editable and erasing pinches. Joins use a morphological closing (distance transforms), not blur + threshold:
   metaballs thin small dabs until they never join. Brush and layer share one paint device; only the projection is
