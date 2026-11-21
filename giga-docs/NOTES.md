@@ -901,6 +901,15 @@ Judge text work by "no new failures": `ctest -R "[Tt]ext|[Ff]ont|[Ss]vg"`.
   event filter closes it on presses elsewhere in the window (not on the canvas, not in other windows/menus).
   `GigaBrushPopup::showPopupPalette()` = action `giga_show_popup_palette`. Preferences combo added in code after
   `m_chkSwitchSelectionCtrlAlt` (Tools tab).
+- **Brush popup Stabilizer section** (feature/brush-popup-stabilizer, 2026-11-21): mode combo (index == SmoothingType)
+  + rows per mode (Smooth Curve: amount/speed/pressure/catch-up time; Stabilizer: samples slow/fast + delay; Weighted:
+  distance slow/fast + stroke ending). `KisToolPaint::popupWidget()` calls `popup->setTool(this)`. The popup edits the
+  tool's KisSmoothingOptions via slot `KisToolBrush::gigaSmoothingOptions()` (KisToolFreehand::smoothingOptions() is
+  protected, header too widely included to change) and refreshes Tool Options via `gigaSyncSmoothingWidgets()`
+  (= updateSettingsViews() + the Smooth Curve widgets). Both found by QMetaObject name, so no link to the plugin; tools
+  without them get no section. "Slow" = smoothnessDistanceMax ("at min speed"). When the Tool Options chain button
+  locks the two distances, the popup keeps their ratio (else KisAspectRatioLocker would undo it on refresh).
+  Popup height = 470 + section sizeHint, re-fit on mode switch.
 - **Tool menus**: `KisToolMove::popupActionsMenu()` uses `KisToolUtils::findNodes(root, m_lastCursorPos)` (bottom→top,
   reversed for the menu), picks via `nodeManager()->slotNonUiActivatedNode` after `requestStrokeEnd()`.
   Hand (`KisToolPan`) and Zoom (`KoZoomTool`, flake) share header-only `libs/flake/tools/GigaZoomMenu.h` (actions by
