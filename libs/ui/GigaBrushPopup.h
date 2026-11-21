@@ -18,6 +18,11 @@ class KisCanvas2;
 class KisViewManager;
 class KisDoubleSliderSpinBox;
 class KisPaintOpPresetsChooserPopup;
+class KisSliderSpinBox;
+class KisTool;
+class KisSmoothingOptions;
+class QCheckBox;
+class QComboBox;
 class QHBoxLayout;
 class QLabel;
 
@@ -25,8 +30,9 @@ class QLabel;
  * Giga Sketch: the brush popup that right-click opens for paint tools
  * (instead of Krita's round popup palette, which stays available as an option).
  *
- * A small panel at the pointer with Size, Hardness, the recently used brushes and
- * Krita's brush preset list (tags + search). Click a brush to pick it and keep the
+ * A small panel at the pointer with Size, Hardness, the Stabilizer section (smoothing
+ * mode + that mode's settings, only for tools that smooth), the recently used brushes
+ * and Krita's brush preset list (tags + search). Click a brush to pick it and keep the
  * popup open; double-click, Enter, Esc or a click outside closes it.
  *
  * It is a child widget of the canvas widget, like the popup palette, and is found
@@ -57,6 +63,10 @@ public:
     explicit GigaBrushPopup(KisCanvas2 *canvas, QWidget *parent);
     ~GigaBrushPopup() override;
 
+    /// The tool that is opening the popup (set by KisToolPaint::popupWidget before
+    /// popup()). The Stabilizer section edits its smoothing options.
+    void setTool(KisTool *tool);
+
     // KisPopupWidgetInterface
     void popup(const QPoint &position) override;
     void dismiss() override;
@@ -65,6 +75,10 @@ public:
     /// For tests: the widgets inside.
     KisDoubleSliderSpinBox *sizeSlider() const { return m_size; }
     KisDoubleSliderSpinBox *hardnessSlider() const { return m_hardness; }
+    QWidget *smoothingSection() const { return m_smoothingSection; }
+    QComboBox *smoothingModeCombo() const { return m_smoothingMode; }
+    KisSliderSpinBox *curveAmountSlider() const { return m_curveAmount; }
+    KisDoubleSliderSpinBox *distanceSlowSlider() const { return m_distanceSlow; }
 
 Q_SIGNALS:
     void finished() override;
@@ -88,6 +102,15 @@ private:
     void placeAt(const QPoint &position);
     void choosePreset(KoResourceSP resource);
 
+    // Stabilizer section
+    void buildSmoothingSection(QLayout *layout);
+    KisSmoothingOptions *smoothing() const;
+    void syncSmoothing();
+    void updateSmoothingRows();
+    void pushSmoothingToTool();
+    void setDistance(bool slow, qreal value);
+    void fitHeight();
+
     QPointer<KisCanvas2> m_canvas;
     KisDoubleSliderSpinBox *m_size {nullptr};
     KisDoubleSliderSpinBox *m_hardness {nullptr};
@@ -95,6 +118,31 @@ private:
     QWidget *m_recentRow {nullptr};
     QHBoxLayout *m_recentLayout {nullptr};
     KisPaintOpPresetsChooserPopup *m_presets {nullptr};
+
+    QPointer<KisTool> m_tool;
+    QWidget *m_smoothingSection {nullptr};
+    QComboBox *m_smoothingMode {nullptr};
+    // Each setting sits in its own row widget (label + slider) so rows can be
+    // shown per mode.
+    QWidget *m_curveAmountRow {nullptr};
+    QWidget *m_curveSpeedRow {nullptr};
+    QWidget *m_curvePressureRow {nullptr};
+    QWidget *m_curveCatchUpRow {nullptr};
+    QWidget *m_distanceSlowRow {nullptr};
+    QWidget *m_distanceFastRow {nullptr};
+    QWidget *m_delayRow {nullptr};
+    QWidget *m_tailRow {nullptr};
+    QLabel *m_distanceSlowLabel {nullptr};
+    QLabel *m_distanceFastLabel {nullptr};
+    KisSliderSpinBox *m_curveAmount {nullptr};
+    KisSliderSpinBox *m_curveSpeed {nullptr};
+    KisSliderSpinBox *m_curvePressure {nullptr};
+    KisSliderSpinBox *m_curveCatchUp {nullptr};
+    KisDoubleSliderSpinBox *m_distanceSlow {nullptr};
+    KisDoubleSliderSpinBox *m_distanceFast {nullptr};
+    QCheckBox *m_delayOn {nullptr};
+    KisDoubleSliderSpinBox *m_delay {nullptr};
+    KisDoubleSliderSpinBox *m_tail {nullptr};
     bool m_syncing {false};
     bool m_watchingApp {false};
 };

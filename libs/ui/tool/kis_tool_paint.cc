@@ -464,6 +464,7 @@ KisPopupWidgetInterface *KisToolPaint::popupWidget()
     // unless Preferences > General > Tools says to use Krita's popup palette.
     if (GigaBrushPopup::rightClickMode() == GigaBrushPopup::BrushPopup) {
         if (GigaBrushPopup *gigaPopup = GigaBrushPopup::forCanvas(kisCanvas)) {
+            gigaPopup->setTool(this); // its Stabilizer section edits this tool
             return gigaPopup;
         }
     }

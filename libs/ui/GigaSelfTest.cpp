@@ -13,6 +13,8 @@
 #include "KisResourceServerProvider.h"
 #include "widgets/kis_paintop_presets_chooser_popup.h"
 #include "kis_slider_spin_box.h"
+#include "tool/kis_smoothing_options.h"
+#include <QComboBox>
 #include "input/kis_input_manager.h"
 #include <QKeyEvent>
 #include <QToolButton>
@@ -3613,6 +3615,107 @@ void testBrushPopup(KisMainWindow *w)
         pump(5);
     } else {
         info(QStringLiteral("no second bundled brush found; pick test skipped"));
+    }
+
+    // Stabilizer section (feature/brush-popup-stabilizer): mode dropdown + that
+    // mode's settings, edits the brush tool's smoothing options and keeps Tool
+    // Options in sync. The user's settings are put back afterwards.
+    {
+        QObject *optObj = nullptr;
+        QMetaObject::invokeMethod(brush, "gigaSmoothingOptions", Qt::DirectConnection, Q_RETURN_ARG(QObject *, optObj));
+        KisSmoothingOptions *opts = qobject_cast<KisSmoothingOptions *>(optObj);
+        report(opts != nullptr, "brushpopup-stab-options", QString());
+        if (opts) {
+            const KisSmoothingOptions::SmoothingType oldType = opts->smoothingType();
+            const qreal oldAmount = opts->curveAmount();
+            const qreal oldMin = opts->smoothnessDistanceMin();
+            const qreal oldMax = opts->smoothnessDistanceMax();
+
+            // The Tool Options mode combo (the one with a "Smooth Curve" item).
+            QComboBox *toolCombo = nullptr;
+            for (const QPointer<QWidget> &ow : brush->optionWidgets()) {
+                if (!ow) continue;
+                for (QComboBox *c : ow->findChildren<QComboBox *>()) {
+                    if (c->count() == 6 && c->itemText(5) == i18nc("@item:inlistbox Brush Smoothing", "Smooth Curve")) toolCombo = c;
+                }
+            }
+            if (!toolCombo) info(QStringLiteral("Tool Options not built in this run; widget sync not checked"));
+
+            popup->setTool(dynamic_cast<KisTool *>(brush));
+            popup->popup(at);
+            pump(5);
+            report(popup->smoothingSection()->isVisible(), "brushpopup-stab-shown-for-brush", QString());
+            report(popup->smoothingModeCombo()->currentIndex() == int(oldType), "brushpopup-stab-mode-synced",
+                   QString::number(popup->smoothingModeCombo()->currentIndex()));
+
+            const int heightBefore = popup->height();
+            popup->smoothingModeCombo()->setCurrentIndex(KisSmoothingOptions::CURVE_SMOOTHING);
+            pump(5);
+            report(opts->smoothingType() == KisSmoothingOptions::CURVE_SMOOTHING, "brushpopup-stab-mode-sets-tool", QString());
+            if (toolCombo) report(toolCombo->currentIndex() == KisSmoothingOptions::CURVE_SMOOTHING, "brushpopup-stab-mode-tooloptions",
+                                  QString::number(toolCombo->currentIndex()));
+            report(popup->curveAmountSlider()->isVisible() && !popup->distanceSlowSlider()->isVisible(),
+                   "brushpopup-stab-curve-rows", QString());
+            popup->curveAmountSlider()->setValue(73);
+            pump(5);
+            report(qAbs(opts->curveAmount() - 0.73) < 1e-6, "brushpopup-stab-curve-amount", QString::number(opts->curveAmount()));
+            if (toolCombo) {
+                bool found = false;
+                for (KisSliderSpinBox *sl : toolCombo->parentWidget()->findChildren<KisSliderSpinBox *>()) {
+                    if (sl->suffix() == i18n("%") && sl->value() == 73) found = true;
+                }
+                report(found, "brushpopup-stab-curve-tooloptions", QString());
+            }
+
+            popup->smoothingModeCombo()->setCurrentIndex(KisSmoothingOptions::STABILIZER);
+            pump(5);
+            report(!popup->curveAmountSlider()->isVisible() && popup->distanceSlowSlider()->isVisible(),
+                   "brushpopup-stab-stabilizer-rows", QString());
+            const bool locked = opts->smoothnessDistanceKeepAspectRatio();
+            const qreal ratio = opts->smoothnessDistanceMin() / qMax(1.0, opts->smoothnessDistanceMax());
+            popup->distanceSlowSlider()->setValue(60);
+            pump(5);
+            report(qAbs(opts->smoothnessDistanceMax() - 60) < 0.5, "brushpopup-stab-samples",
+                   QString::number(opts->smoothnessDistanceMax()));
+            if (locked) {
+                report(qAbs(opts->smoothnessDistanceMin() - qBound(3.0, 60 * ratio, 1000.0)) < 1.0, "brushpopup-stab-samples-locked",
+                       QStringLiteral("fast %1, expected %2").arg(opts->smoothnessDistanceMin()).arg(60 * ratio));
+            }
+            report(popup->geometry().bottom() <= canvas->canvasWidget()->rect().bottom(), "brushpopup-stab-fits",
+                   QStringLiteral("height %1 -> %2").arg(heightBefore).arg(popup->height()));
+
+            // Put the user's settings back (through the popup, so Tool Options follow).
+            popup->smoothingModeCombo()->setCurrentIndex(int(oldType));
+            opts->setCurveAmount(oldAmount);
+            opts->setSmoothnessDistanceMin(oldMin);
+            opts->setSmoothnessDistanceMax(oldMax);
+            QMetaObject::invokeMethod(brush, "gigaSyncSmoothingWidgets", Qt::DirectConnection);
+            pump(5);
+            report(opts->smoothingType() == oldType && qAbs(opts->smoothnessDistanceMax() - oldMax) < 0.5,
+                   "brushpopup-stab-restored", QString());
+            popup->dismiss();
+            pump(5);
+
+            // A tool without smoothing (Fill) gets no section.
+            KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaFill/KisToolFill"));
+            pump(20);
+            KoToolBase *fill = KoToolManager::instance()->toolById(canvas, QStringLiteral("KritaFill/KisToolFill"));
+            if (fill && dynamic_cast<GigaBrushPopup *>(fill->popupWidget()) == popup) {
+                popup->popup(at);
+                pump(5);
+                report(!popup->smoothingSection()->isVisible(), "brushpopup-stab-hidden-for-fill", QString());
+                popup->dismiss();
+                pump(5);
+            } else {
+                info(QStringLiteral("no Fill tool popup; hidden-for-fill not checked"));
+            }
+            KoToolManager::instance()->switchToolRequested(QStringLiteral("KritaShape/KisToolBrush"));
+            pump(20);
+            brush->popupWidget(); // hand the popup back to the brush
+            view->viewManager()->inputManager()->registerPopupWidget(popup);
+            popup->popup(at);
+            pump(5);
+        }
     }
 
     // Esc closes it.

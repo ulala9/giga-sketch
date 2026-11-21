@@ -8,6 +8,8 @@
 
 #include <QAbstractItemView>
 #include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -34,6 +36,8 @@
 #include "input/kis_input_manager.h"
 #include <QCursor>
 #include "kis_slider_spin_box.h"
+#include "tool/kis_smoothing_options.h"
+#include "tool/kis_tool.h"
 #include "widgets/kis_paintop_presets_chooser_popup.h"
 
 namespace {
@@ -41,6 +45,27 @@ const char *const kModeKey = "gigaRightClickMode";
 const char *const kRecentKey = "gigaRecentBrushes";
 const int kMaxRecent = 8;
 const char *const kObjectName = "GigaBrushPopup";
+// Height without the Stabilizer section (the preset list takes the rest).
+const int kBaseHeight = 470;
+// Krita's MAXIMUM_SMOOTHNESS_DISTANCE (kis_tool_brush.cc).
+const qreal kMaxSmoothnessDistance = 1000.0;
+// Name of the slot in KisToolBrush that refreshes its Tool Options widgets.
+const char *const kSyncSlot = "gigaSyncSmoothingWidgets()";
+const char *const kOptionsSlot = "gigaSmoothingOptions()";
+
+/// A row "Label:  [slider]" whose label has a fixed width so the sliders line up.
+QWidget *makeRow(QWidget *parent, QLabel *label, QWidget *field)
+{
+    QWidget *row = new QWidget(parent);
+    QHBoxLayout *h = new QHBoxLayout(row);
+    h->setContentsMargins(0, 0, 0, 0);
+    h->setSpacing(8);
+    label->setParent(row);
+    label->setFixedWidth(118);
+    h->addWidget(label);
+    h->addWidget(field, 1);
+    return row;
+}
 
 QStringList &recentList()
 {
@@ -167,6 +192,8 @@ GigaBrushPopup::GigaBrushPopup(KisCanvas2 *canvas, QWidget *parent)
     sliders->setColumnStretch(1, 1);
     layout->addLayout(sliders);
 
+    buildSmoothingSection(layout);
+
     // Recently used brushes: a row of small thumbnails, newest first.
     m_recentRow = new QWidget(this);
     m_recentLayout = new QHBoxLayout(m_recentRow);
@@ -179,7 +206,7 @@ GigaBrushPopup::GigaBrushPopup(KisCanvas2 *canvas, QWidget *parent)
     layout->addWidget(m_presets, 1);
 
     setFixedWidth(330);
-    resize(330, 470);
+    resize(330, kBaseHeight);
 
     connect(m_size, qOverload<double>(&KisDoubleSliderSpinBox::valueChanged), this, [this](double value) {
         if (m_syncing || !m_canvas) return;
@@ -208,9 +235,15 @@ GigaBrushPopup::~GigaBrushPopup()
     if (m_watchingApp) qApp->removeEventFilter(this);
 }
 
+void GigaBrushPopup::setTool(KisTool *tool)
+{
+    m_tool = tool;
+}
+
 void GigaBrushPopup::popup(const QPoint &position)
 {
     syncFromCanvas();
+    syncSmoothing();
     rebuildRecentRow();
     show();
     raise();
@@ -402,4 +435,304 @@ bool GigaBrushPopup::eventFilter(QObject *watched, QEvent *event)
         Q_EMIT finished();
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// Stabilizer section
+//
+// The popup edits the active tool's KisSmoothingOptions directly: that is the
+// same object the Tool Options sliders edit, and it saves itself to the config.
+// After each change, the tool's Tool Options widgets are refreshed through the
+// gigaSyncSmoothingWidgets() slot. All of this happens on the GUI thread while
+// no stroke runs (the popup closes before the next press reaches the canvas),
+// so the paint thread never sees a half-changed setting.
+// ---------------------------------------------------------------------------
+
+void GigaBrushPopup::buildSmoothingSection(QLayout *layout)
+{
+    m_smoothingSection = new QWidget(this);
+    m_smoothingSection->setObjectName(QStringLiteral("GigaBrushPopupStabilizer"));
+    QVBoxLayout *v = new QVBoxLayout(m_smoothingSection);
+    v->setContentsMargins(0, 2, 0, 0);
+    v->setSpacing(6);
+
+    QWidget *section = m_smoothingSection;
+
+    // Mode dropdown, same items and order as Tool Options (index == enum value).
+    m_smoothingMode = new QComboBox(section);
+    m_smoothingMode->setObjectName(QStringLiteral("GigaBrushPopupSmoothingMode"));
+    m_smoothingMode->addItems(QStringList()
+                              << i18nc("@item:inlistbox Brush Smoothing", "None")
+                              << i18nc("@item:inlistbox Brush Smoothing", "Basic")
+                              << i18nc("@item:inlistbox Brush Smoothing", "Weighted")
+                              << i18nc("@item:inlistbox Brush Smoothing", "Stabilizer")
+                              << i18nc("@item:inlistbox Brush Smoothing", "Pixel")
+                              << i18nc("@item:inlistbox Brush Smoothing", "Smooth Curve"));
+    m_smoothingMode->setToolTip(i18n("How the brush smooths your stroke. The same setting as Brush Smoothing in Tool Options."));
+    v->addWidget(makeRow(section, new QLabel(i18n("Stabilizer:")), m_smoothingMode));
+
+    auto percentSlider = [section](const QString &tip) {
+        KisSliderSpinBox *slider = new KisSliderSpinBox(section);
+        slider->setRange(0, 100);
+        slider->setSuffix(i18n("%"));
+        slider->setToolTip(tip);
+        return slider;
+    };
+
+    // Smooth Curve
+    m_curveAmount = percentSlider(i18nc("@info:tooltip", "How strongly the stroke path is smoothed. Higher values give smoother lines that trail further behind the pen."));
+    m_curveAmount->setObjectName(QStringLiteral("GigaBrushPopupCurveAmount"));
+    m_curveAmountRow = makeRow(section, new QLabel(i18n("Amount:")), m_curveAmount);
+    v->addWidget(m_curveAmountRow);
+
+    m_curveSpeed = percentSlider(i18nc("@info:tooltip", "How much drawing faster reduces smoothing, so quick flicks stay crisp while slow curves are smoothed."));
+    m_curveSpeedRow = makeRow(section, new QLabel(i18n("Speed Influence:")), m_curveSpeed);
+    v->addWidget(m_curveSpeedRow);
+
+    m_curvePressure = percentSlider(i18nc("@info:tooltip", "How much a light touch adds smoothing."));
+    m_curvePressureRow = makeRow(section, new QLabel(i18n("Pressure Influence:")), m_curvePressure);
+    v->addWidget(m_curvePressureRow);
+
+    m_curveCatchUp = new KisSliderSpinBox(section);
+    m_curveCatchUp->setRange(0, 400);
+    m_curveCatchUp->setSuffix(i18n(" ms"));
+    m_curveCatchUp->setToolTip(i18nc("@info:tooltip", "How long the line takes to glide into place after the pen lifts. 0 lands instantly. Off when Catch Up is off in Tool Options."));
+    m_curveCatchUpRow = makeRow(section, new QLabel(i18n("Catch-Up Time:")), m_curveCatchUp);
+    v->addWidget(m_curveCatchUpRow);
+
+    // Weighted + Stabilizer: the distance (or sample count) at slow and fast pen
+    // speed. Krita calls them "at min speed" (= smoothnessDistanceMax) and
+    // "at max speed" (= smoothnessDistanceMin).
+    m_distanceSlow = new KisDoubleSliderSpinBox(section);
+    m_distanceSlow->setObjectName(QStringLiteral("GigaBrushPopupDistanceSlow"));
+    m_distanceSlow->setExponentRatio(3.0);
+    m_distanceSlowLabel = new QLabel();
+    m_distanceSlowRow = makeRow(section, m_distanceSlowLabel, m_distanceSlow);
+    v->addWidget(m_distanceSlowRow);
+
+    m_distanceFast = new KisDoubleSliderSpinBox(section);
+    m_distanceFast->setExponentRatio(3.0);
+    m_distanceFastLabel = new QLabel();
+    m_distanceFastRow = makeRow(section, m_distanceFastLabel, m_distanceFast);
+    v->addWidget(m_distanceFastRow);
+
+    // Stabilizer: delay (a dead zone around the pen where the line waits).
+    {
+        QWidget *field = new QWidget(section);
+        QHBoxLayout *h = new QHBoxLayout(field);
+        h->setContentsMargins(0, 0, 0, 0);
+        h->setSpacing(4);
+        m_delayOn = new QCheckBox(field);
+        m_delayOn->setToolTip(i18n("Delay the brush stroke to make the line smoother"));
+        m_delay = new KisDoubleSliderSpinBox(field);
+        m_delay->setRange(0, 500);
+        m_delay->setExponentRatio(3.0);
+        m_delay->setSuffix(i18n(" px"));
+        m_delay->setToolTip(i18n("Radius where the brush is blocked"));
+        h->addWidget(m_delayOn);
+        h->addWidget(m_delay, 1);
+        m_delayRow = makeRow(section, new QLabel(i18n("Delay:")), field);
+        v->addWidget(m_delayRow);
+    }
+
+    // Weighted: stroke ending.
+    m_tail = new KisDoubleSliderSpinBox(section);
+    m_tail->setRange(0.0, 1.0, 2);
+    m_tail->setSingleStep(0.01);
+    m_tail->setToolTip(i18n("How much the end of the stroke is smoothed"));
+    m_tailRow = makeRow(section, new QLabel(i18n("Stroke Ending:")), m_tail);
+    v->addWidget(m_tailRow);
+
+    layout->addWidget(m_smoothingSection);
+
+    // --- changes from the popup go to the tool's smoothing options ---
+    connect(m_smoothingMode, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (m_syncing) return;
+        KisSmoothingOptions *o = smoothing();
+        if (!o || index < 0) return;
+        o->setSmoothingType(KisSmoothingOptions::SmoothingType(index));
+        pushSmoothingToTool();
+        syncSmoothing(); // shows this mode's rows
+    });
+    auto onPercent = [this](KisSliderSpinBox *slider, void (KisSmoothingOptions::*setter)(qreal)) {
+        connect(slider, qOverload<int>(&KisSliderSpinBox::valueChanged), this, [this, setter](int percent) {
+            if (m_syncing) return;
+            if (KisSmoothingOptions *o = smoothing()) {
+                (o->*setter)(percent / 100.0);
+                pushSmoothingToTool();
+            }
+        });
+    };
+    onPercent(m_curveAmount, &KisSmoothingOptions::setCurveAmount);
+    onPercent(m_curveSpeed, &KisSmoothingOptions::setCurveSpeedInfluence);
+    onPercent(m_curvePressure, &KisSmoothingOptions::setCurvePressureInfluence);
+    connect(m_curveCatchUp, qOverload<int>(&KisSliderSpinBox::valueChanged), this, [this](int ms) {
+        if (m_syncing) return;
+        if (KisSmoothingOptions *o = smoothing()) {
+            o->setCurveCatchUpTime(ms);
+            pushSmoothingToTool();
+        }
+    });
+    connect(m_distanceSlow, qOverload<double>(&KisDoubleSliderSpinBox::valueChanged), this, [this](double value) {
+        if (!m_syncing) setDistance(true, value);
+    });
+    connect(m_distanceFast, qOverload<double>(&KisDoubleSliderSpinBox::valueChanged), this, [this](double value) {
+        if (!m_syncing) setDistance(false, value);
+    });
+    connect(m_delayOn, &QCheckBox::toggled, this, [this](bool on) {
+        m_delay->setEnabled(on);
+        if (m_syncing) return;
+        if (KisSmoothingOptions *o = smoothing()) {
+            o->setUseDelayDistance(on);
+            pushSmoothingToTool();
+        }
+    });
+    connect(m_delay, qOverload<double>(&KisDoubleSliderSpinBox::valueChanged), this, [this](double value) {
+        if (m_syncing) return;
+        if (KisSmoothingOptions *o = smoothing()) {
+            o->setDelayDistance(value);
+            pushSmoothingToTool();
+        }
+    });
+    connect(m_tail, qOverload<double>(&KisDoubleSliderSpinBox::valueChanged), this, [this](double value) {
+        if (m_syncing) return;
+        if (KisSmoothingOptions *o = smoothing()) {
+            o->setTailAggressiveness(value);
+            pushSmoothingToTool();
+        }
+    });
+}
+
+KisSmoothingOptions *GigaBrushPopup::smoothing() const
+{
+    // Only tools with the smoothing UI in Tool Options (Freehand Brush and
+    // Multibrush, both KisToolBrush). Fill, gradient, shapes, Dynamic Brush, …
+    // don't have these slots, so they get no section.
+    KisTool *tool = m_tool.data();
+    if (!tool) return nullptr;
+    const QMetaObject *meta = tool->metaObject();
+    if (meta->indexOfSlot(kSyncSlot) < 0 || meta->indexOfSlot(kOptionsSlot) < 0) return nullptr;
+    QObject *options = nullptr;
+    QMetaObject::invokeMethod(tool, "gigaSmoothingOptions", Qt::DirectConnection, Q_RETURN_ARG(QObject *, options));
+    return qobject_cast<KisSmoothingOptions *>(options);
+}
+
+void GigaBrushPopup::syncSmoothing()
+{
+    KisSmoothingOptions *o = smoothing();
+    m_smoothingSection->setVisible(o != nullptr);
+    if (o) {
+        m_syncing = true;
+        m_smoothingMode->setCurrentIndex(int(o->smoothingType()));
+        m_curveAmount->setValue(qRound(o->curveAmount() * 100));
+        m_curveSpeed->setValue(qRound(o->curveSpeedInfluence() * 100));
+        m_curvePressure->setValue(qRound(o->curvePressureInfluence() * 100));
+        m_curveCatchUp->setValue(o->curveCatchUpTime());
+        m_curveCatchUp->setEnabled(o->curveCatchUp());
+        updateSmoothingRows(); // ranges first, then the distance values
+        m_distanceSlow->setValue(o->smoothnessDistanceMax());
+        m_distanceFast->setValue(o->smoothnessDistanceMin());
+        m_delayOn->setChecked(o->useDelayDistance());
+        m_delay->setEnabled(o->useDelayDistance());
+        m_delay->setValue(o->delayDistance());
+        m_tail->setValue(o->tailAggressiveness());
+        m_syncing = false;
+    }
+    fitHeight();
+}
+
+void GigaBrushPopup::updateSmoothingRows()
+{
+    const int type = m_smoothingMode->currentIndex();
+    const bool curve = type == KisSmoothingOptions::CURVE_SMOOTHING;
+    const bool weighted = type == KisSmoothingOptions::WEIGHTED_SMOOTHING;
+    const bool stabilizer = type == KisSmoothingOptions::STABILIZER;
+
+    m_curveAmountRow->setVisible(curve);
+    m_curveSpeedRow->setVisible(curve);
+    m_curvePressureRow->setVisible(curve);
+    m_curveCatchUpRow->setVisible(curve);
+    m_distanceSlowRow->setVisible(weighted || stabilizer);
+    m_distanceFastRow->setVisible(weighted || stabilizer);
+    m_delayRow->setVisible(stabilizer);
+    m_tailRow->setVisible(weighted);
+
+    // Same ranges/wording as Tool Options: the stabilizer counts samples (whole
+    // numbers), weighted smoothing measures a distance in pixels.
+    const bool wasSyncing = m_syncing;
+    m_syncing = true;
+    if (stabilizer) {
+        m_distanceSlowLabel->setText(i18n("Samples (slow):"));
+        m_distanceFastLabel->setText(i18n("Samples (fast):"));
+        m_distanceSlow->setRange(3.0, kMaxSmoothnessDistance, 0);
+        m_distanceFast->setRange(3.0, kMaxSmoothnessDistance, 0);
+        m_distanceSlow->setSuffix(QString());
+        m_distanceFast->setSuffix(QString());
+        m_distanceSlow->setToolTip(i18n("How many pen positions are averaged when you draw slowly. More = steadier, more lag."));
+        m_distanceFast->setToolTip(i18n("How many pen positions are averaged when you draw fast."));
+    } else {
+        m_distanceSlowLabel->setText(i18n("Distance (slow):"));
+        m_distanceFastLabel->setText(i18n("Distance (fast):"));
+        m_distanceSlow->setRange(3.0, kMaxSmoothnessDistance, 1);
+        m_distanceFast->setRange(3.0, kMaxSmoothnessDistance, 1);
+        m_distanceSlow->setSuffix(i18n(" px"));
+        m_distanceFast->setSuffix(i18n(" px"));
+        m_distanceSlow->setToolTip(i18n("How far the line is smoothed when you draw slowly."));
+        m_distanceFast->setToolTip(i18n("How far the line is smoothed when you draw fast."));
+    }
+    m_distanceSlow->setSingleStep(1);
+    m_distanceFast->setSingleStep(1);
+    m_syncing = wasSyncing;
+}
+
+void GigaBrushPopup::setDistance(bool slow, qreal value)
+{
+    KisSmoothingOptions *o = smoothing();
+    if (!o) return;
+    const qreal oldSlow = o->smoothnessDistanceMax();
+    const qreal oldFast = o->smoothnessDistanceMin();
+
+    qreal newSlow = slow ? value : oldSlow;
+    qreal newFast = slow ? oldFast : value;
+    // The chain button in Tool Options locks the two together: keep their ratio
+    // here too, or Tool Options would undo it on the next refresh.
+    if (o->smoothnessDistanceKeepAspectRatio() && oldSlow > 0 && oldFast > 0) {
+        if (slow) newFast = qBound(3.0, value * oldFast / oldSlow, kMaxSmoothnessDistance);
+        else newSlow = qBound(3.0, value * oldSlow / oldFast, kMaxSmoothnessDistance);
+    }
+    o->setSmoothnessDistanceMax(newSlow);
+    o->setSmoothnessDistanceMin(newFast);
+
+    m_syncing = true;
+    if (slow) m_distanceFast->setValue(newFast);
+    else m_distanceSlow->setValue(newSlow);
+    m_syncing = false;
+
+    pushSmoothingToTool();
+}
+
+void GigaBrushPopup::pushSmoothingToTool()
+{
+    if (smoothing()) {
+        QMetaObject::invokeMethod(m_tool.data(), "gigaSyncSmoothingWidgets", Qt::DirectConnection);
+    }
+}
+
+void GigaBrushPopup::fitHeight()
+{
+    int h = kBaseHeight;
+    if (m_smoothingSection->isVisibleTo(this)) {
+        h += m_smoothingSection->sizeHint().height() + (layout() ? layout()->spacing() : 0);
+    }
+    if (h == height()) return;
+    const QPoint topLeft = pos();
+    resize(width(), h);
+    if (isVisible() && parentWidget()) {
+        // Grew past the bottom of the canvas (mode switch): move it up.
+        const QRect fit = parentWidget()->rect().adjusted(4, 4, -4, -4);
+        QRect r(topLeft, size());
+        if (r.bottom() > fit.bottom()) r.moveBottom(fit.bottom());
+        if (r.top() < fit.top()) r.moveTop(fit.top());
+        move(r.topLeft());
+    }
 }
